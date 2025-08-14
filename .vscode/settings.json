@@ -1,0 +1,43 @@
+{
+    "search.exclude": {
+        "**/build/**": true
+    },
+    "files.associations": {
+        "xiosbase": "cpp",
+        "regex": "cpp",
+        "stacktrace": "cpp",
+        "xutility": "cpp",
+        "cmath": "cpp",
+        "xmemory": "cpp"
+    },
+    "cmake.configureSettings": {},
+    "cmake.debugConfig": {
+        "args": [
+            "../../../game.testenv/assets/application_config.cson"
+        ]
+    },
+    "todohighlight.include": [
+        "**/*.cpp",
+        "**/*.h",
+    ],
+    "todohighlight.keywords": [
+        {
+            "text": "TODO:",
+            "color": "#2aafd4",
+            "isWholeLine": true,
+            "backgroundColor": "none",
+        },
+        {
+            "text": "HACK:",
+            "color": "#ed408e",
+            "isWholeLine": true,
+            "backgroundColor": "none",
+        },
+        {
+            "text": "NOTE:",
+            "color": "#21931b",
+            "isWholeLine": true,
+            "backgroundColor": "none"
+        }
+    ],
+}

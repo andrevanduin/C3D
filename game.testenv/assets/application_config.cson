@@ -1,0 +1,38 @@
+{
+    "ApplicationName": "C3DEngine Testenv",
+    "FrameAllocatorSize": 16, # Size in MebiBytes
+    "Windows": [
+        {
+            "width": 1280,
+            "height": 720,
+            "position": "center",
+            "name": "MainWindow",
+            "title": "Testenv Main Window",
+            "fullscreen": false
+        }
+    ],
+    "SystemConfigs": [
+        {
+            "name": "Resource",
+            "config": {
+                "assetBasePath": "../../../testenv/assets"
+            }
+        },
+        {
+            "name": "Renderer",
+            "config": {
+                "backend": "C3DVulkanRenderer",
+                "Vsync": false,
+                "PowerSaving": true,
+                "ValidationLayers": true,
+                "PCF": true
+            }
+        },
+        {
+            "name": "Job",
+            "config": {
+                "threadCount": 15 # Total number of threads - 1
+            }
+        }
+    ]
+}
