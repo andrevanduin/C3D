@@ -28,6 +28,7 @@ namespace C3D
         bool Present(Window& window) override;
 
         bool OnCreateWindow(Window& window) override;
+        bool OnResizeWindow(Window& window) override;
         void OnDestroyWindow(Window& window) override;
 
     private:

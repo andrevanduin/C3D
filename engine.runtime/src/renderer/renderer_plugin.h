@@ -58,6 +58,15 @@ namespace C3D
         virtual bool OnCreateWindow(Window& window) = 0;
 
         /**
+         * @brief Method that must be called whenever the window resizes.
+         * This method updates the renderer specific internals to fit with the new window dimensions.
+         *
+         * @param window The window that was resized
+         * @return True if successful; false otherwise
+         */
+        virtual bool OnResizeWindow(Window& window) = 0;
+
+        /**
          * @brief Method that can be called to destroy the renderer specific internals for the provided window.
          *
          * @param window The window that needs to be destroyed

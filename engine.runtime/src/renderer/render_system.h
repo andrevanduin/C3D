@@ -21,8 +21,9 @@ namespace C3D
         bool Submit(Window& window) const;
         bool Present(Window& window) const;
 
-        bool OnCreateWindow(Window& window);
-        void OnDestroyWindow(Window& window);
+        bool OnCreateWindow(Window& window) const;
+        bool OnResizeWindow(Window& window) const;
+        void OnDestroyWindow(Window& window) const;
 
     private:
         /** @brief A pointer to the backend rendering plugin used to actually render things on the screen. */

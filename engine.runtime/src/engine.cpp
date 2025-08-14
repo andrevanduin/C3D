@@ -177,6 +177,12 @@ namespace C3D
 
                 state.clocks.onRender.Begin();
 
+                if (currentWindow.resizing)
+                {
+                    OnWindowResize(currentWindow);
+                    continue;
+                }
+
                 if (!Renderer.Begin(currentWindow))
                 {
                     INFO_LOG("Begin failed, skipping this frame.");
@@ -229,7 +235,8 @@ namespace C3D
         state.app->OnWindowResize(window);
         // Mark the window as done resizing
         window.resizing = false;
-        // Notify user of resize event
+        // Notify the renderer of our window resize
+        Renderer.OnResizeWindow(window);
 
         EventContext context;
         context.data.u32[0] = window.index;

@@ -290,6 +290,12 @@ namespace C3D
         return true;
     }
 
+    bool VulkanRendererPlugin::OnResizeWindow(Window& window)
+    {
+        INFO_LOG("Window resized. The size is now: {}x{}", window.width, window.height);
+        return window.rendererState->backendState->swapchain.Resize(window);
+    }
+
     void VulkanRendererPlugin::OnDestroyWindow(Window& window)
     {
         WindowRendererState* internal       = window.rendererState;

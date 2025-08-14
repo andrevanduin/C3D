@@ -81,7 +81,7 @@ namespace C3D
 
     bool RenderSystem::Present(Window& window) const { return m_backendPlugin->Present(window); }
 
-    bool RenderSystem::OnCreateWindow(Window& window)
+    bool RenderSystem::OnCreateWindow(Window& window) const
     {
         // Create the renderer state for this window
         window.rendererState = Memory.New<WindowRendererState>(MemoryType::RenderSystem);
@@ -94,7 +94,9 @@ namespace C3D
         return true;
     }
 
-    void RenderSystem::OnDestroyWindow(Window& window)
+    bool RenderSystem::OnResizeWindow(Window& window) const { return m_backendPlugin->OnResizeWindow(window); }
+
+    void RenderSystem::OnDestroyWindow(Window& window) const
     {
         m_backendPlugin->OnDestroyWindow(window);
 
