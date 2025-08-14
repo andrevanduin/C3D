@@ -238,18 +238,6 @@ namespace C3D
                     u16 width  = static_cast<u16>(r.right - r.left);
                     u16 height = static_cast<u16>(r.bottom - r.top);
 
-                    {
-                        HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-
-                        MONITORINFO monitorInfo = {};
-                        monitorInfo.cbSize      = sizeof(MONITORINFO);
-                        if (!GetMonitorInfo(monitor, &monitorInfo))
-                        {
-                            WARN_LOG("Failed to get Monitor Info.");
-                        }
-                        INFO_LOG("Monitor: {}", monitorInfo.rcMonitor.left);
-                    }
-
                     auto window = GetWindowFromHandle(hwnd);
                     if (!window)
                     {
