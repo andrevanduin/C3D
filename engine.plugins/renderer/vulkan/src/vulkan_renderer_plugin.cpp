@@ -95,18 +95,16 @@ namespace C3D
         VkImageMemoryBarrier barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
         barrier.oldLayout            = fromLayout;
         barrier.newLayout            = toLayout;
-        barrier.srcQueueFamilyIndex  = graphicsQueueIndex;
-        barrier.dstQueueFamilyIndex  = graphicsQueueIndex;
         barrier.image                = image;
         // TODO: Only works for color images
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         // Mips
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount   = 1;
-        // Transition all layers at once
-        barrier.subresourceRange.layerCount = 1;
         // Start at the first layer
         barrier.subresourceRange.baseArrayLayer = 0;
+        // Transition all layers at once
+        barrier.subresourceRange.layerCount = 1;
         // Source and destination access masks
         barrier.srcAccessMask = srcAccessMask;
         barrier.dstAccessMask = dstAccessMask;
@@ -139,23 +137,27 @@ namespace C3D
 
         VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
-        // TODO: Move this outside of the renderer
-        {
-            auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
+        auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
 
-            // Transition image from VK_IMAGE_LAYOUT_UNDEFINED to VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-            TransitionLayout(m_context, commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
-                             VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        // Transition image from VK_IMAGE_LAYOUT_UNDEFINED to VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL
+        TransitionLayout(m_context, commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
+                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-            VkClearColorValue color = { 1, 0, 1, 1 };
+        VkRenderingAttachmentInfoKHR colorAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR };
+        colorAttachmentInfo.imageView                    = backendState->swapchain.GetImageView(backendState->imageIndex);
+        colorAttachmentInfo.imageLayout                  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        colorAttachmentInfo.loadOp                       = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachmentInfo.storeOp                      = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachmentInfo.clearValue.color             = { 1, 0, 1, 1 };
 
-            VkImageSubresourceRange range = {};
-            range.aspectMask              = VK_IMAGE_ASPECT_COLOR_BIT;
-            range.levelCount              = 1;
-            range.layerCount              = 1;
+        VkRenderingInfoKHR renderInfo   = { VK_STRUCTURE_TYPE_RENDERING_INFO_KHR };
+        renderInfo.colorAttachmentCount = 1;
+        renderInfo.pColorAttachments    = &colorAttachmentInfo;
+        renderInfo.layerCount           = 1;
+        renderInfo.renderArea.offset    = { 0, 0 };
+        renderInfo.renderArea.extent    = { window.width, window.height };
 
-            vkCmdClearColorImage(commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &color, 1, &range);
-        }
+        vkCmdBeginRendering(commandBuffer, &renderInfo);
 
         return true;
     }
@@ -166,9 +168,10 @@ namespace C3D
         auto commandBuffer  = backendState->GetCommandBuffer();
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
 
-        // Transition image from VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-        TransitionLayout(m_context, commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0,
-                         VK_ACCESS_COLOR_ATTACHMENT_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        vkCmdEndRendering(commandBuffer);
+
+        TransitionLayout(m_context, commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
         VK_CHECK(vkEndCommandBuffer(commandBuffer));
         return true;
@@ -246,6 +249,8 @@ namespace C3D
         {
             VkSemaphoreCreateInfo createInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
             VK_CHECK(vkCreateSemaphore(device, &createInfo, m_context.allocator, &backend->acquireSemaphores[i]));
+
+            VK_SET_DEBUG_OBJECT_NAME(&m_context, VK_OBJECT_TYPE_SEMAPHORE, backend->acquireSemaphores[i], String::FromFormat("VULKAN_ACQUIRE_SEMAPHORE_{}", i));
         }
 
         // Get the number of swapchain images
@@ -257,6 +262,8 @@ namespace C3D
         {
             VkSemaphoreCreateInfo createInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
             VK_CHECK(vkCreateSemaphore(device, &createInfo, m_context.allocator, &backend->presentSemaphores[i]));
+
+            VK_SET_DEBUG_OBJECT_NAME(&m_context, VK_OBJECT_TYPE_SEMAPHORE, backend->presentSemaphores[i], String::FromFormat("VULKAN_PRESENT_SEMAPHORE_{}", i));
         }
 
         INFO_LOG("Creating fences.");
@@ -264,6 +271,8 @@ namespace C3D
         {
             VkFenceCreateInfo createInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
             VK_CHECK(vkCreateFence(device, &createInfo, m_context.allocator, &backend->fences[i]));
+
+            VK_SET_DEBUG_OBJECT_NAME(&m_context, VK_OBJECT_TYPE_FENCE, backend->fences[i], String::FromFormat("VULKAN_FENCE_{}", i));
         }
 
         INFO_LOG("Creating command pools and buffers");

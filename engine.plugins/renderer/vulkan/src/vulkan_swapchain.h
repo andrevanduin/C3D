@@ -38,6 +38,7 @@ namespace C3D
         VkSwapchainKHR GetHandle() const { return m_handle; }
 
         VkImage GetImage(u32 index) const { return m_images[index]; }
+        VkImageView GetImageView(u32 index) const { return m_views[index]; }
 
         u32 GetImageCount() const { return m_imageCount; }
 
