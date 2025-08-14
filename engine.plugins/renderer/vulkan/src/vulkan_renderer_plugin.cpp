@@ -283,7 +283,7 @@ namespace C3D
 
         // TODO: move the actual rendering somewhere else
         {
-            VkViewport viewport = { 0, 0, static_cast<f32>(window.width), static_cast<f32>(window.height), 0.f, 1.f };
+            VkViewport viewport = { 0, static_cast<f32>(window.height), static_cast<f32>(window.width), -static_cast<f32>(window.height), 0.f, 1.f };
             VkRect2D scissor    = { { 0, 0 }, { window.width, window.height } };
 
             vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
