@@ -7,6 +7,8 @@
 #include <metrics/metrics.h>
 #include <platform/platform.h>
 #include <platform/platform_types.h>
+#include <resources/managers/binary_manager.h>
+#include <resources/resource_system.h>
 #include <shaderc/shaderc.h>
 #include <shaderc/status.h>
 #include <systems/system_manager.h>
@@ -21,6 +23,125 @@
 
 namespace C3D
 {
+    VkShaderModule LoadShader(VulkanContext& context, const char* name)
+    {
+        BinaryResource binary;
+        if (!Resources.Read(name, binary))
+        {
+            FATAL_LOG("Failed to read '{}' source", name);
+        }
+
+        VkShaderModuleCreateInfo createInfo = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+        createInfo.codeSize                 = binary.size;
+        createInfo.pCode                    = reinterpret_cast<const u32*>(binary.data);
+
+        VkShaderModule shaderModule;
+        VK_CHECK(vkCreateShaderModule(context.device.GetLogical(), &createInfo, context.allocator, &shaderModule));
+
+        Resources.Cleanup(binary);
+
+        return shaderModule;
+    }
+
+    VkPipelineLayout CreatePipelineLayout(VulkanContext& context)
+    {
+        VkPipelineLayoutCreateInfo createInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+
+        VkPipelineLayout layout;
+        vkCreatePipelineLayout(context.device.GetLogical(), &createInfo, context.allocator, &layout);
+
+        return layout;
+    }
+
+    VkPipeline CreateGraphicsPipeline(VulkanContext& context, VkPipelineCache pipelineCache, VkShaderModule vs, VkShaderModule fs, VulkanSwapchain& swapchain,
+                                      VkPipelineLayout layout, const char* shaderName)
+    {
+        VkGraphicsPipelineCreateInfo createInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+        createInfo.layout                       = layout;
+
+        VkPipelineShaderStageCreateInfo stages[2] = {};
+
+        stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = vs;
+        stages[0].pName  = "main";
+        stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = fs;
+        stages[1].pName  = "main";
+
+        createInfo.stageCount = 2;
+        createInfo.pStages    = stages;
+
+        VkPipelineVertexInputStateCreateInfo vertexInput = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+        createInfo.pVertexInputState                     = &vertexInput;
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
+        inputAssembly.topology                               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        createInfo.pInputAssemblyState                       = &inputAssembly;
+
+        VkPipelineViewportStateCreateInfo viewportState = { VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
+        viewportState.viewportCount                     = 1;
+        viewportState.scissorCount                      = 1;
+        createInfo.pViewportState                       = &viewportState;
+
+        VkPipelineRasterizationStateCreateInfo rasterizationState = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
+        rasterizationState.lineWidth                              = 1.f;
+        createInfo.pRasterizationState                            = &rasterizationState;
+
+        VkPipelineMultisampleStateCreateInfo multiSampleState = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
+        multiSampleState.rasterizationSamples                 = VK_SAMPLE_COUNT_1_BIT;
+        createInfo.pMultisampleState                          = &multiSampleState;
+
+        VkPipelineDepthStencilStateCreateInfo depthStencilState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+        createInfo.pDepthStencilState                           = &depthStencilState;
+
+        VkPipelineColorBlendAttachmentState colorAttachmentState;
+        colorAttachmentState.blendEnable         = VK_TRUE;
+        colorAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorAttachmentState.colorBlendOp        = VK_BLEND_OP_ADD;
+        colorAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorAttachmentState.alphaBlendOp        = VK_BLEND_OP_ADD;
+        colorAttachmentState.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+        VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
+        colorBlendState.logicOpEnable                       = VK_FALSE;
+        colorBlendState.logicOp                             = VK_LOGIC_OP_COPY;
+        colorBlendState.attachmentCount                     = 1;
+        colorBlendState.pAttachments                        = &colorAttachmentState;
+        createInfo.pColorBlendState                         = &colorBlendState;
+
+        VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+
+        VkPipelineDynamicStateCreateInfo dynamicState = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+        dynamicState.dynamicStateCount                = 2;
+        dynamicState.pDynamicStates                   = dynamicStates;
+        createInfo.pDynamicState                      = &dynamicState;
+
+        // NOTE: Because we are using dynamic rendering this can be set to VK_NULL_HANDLE
+        createInfo.renderPass         = VK_NULL_HANDLE;
+        createInfo.basePipelineHandle = VK_NULL_HANDLE;
+        createInfo.basePipelineIndex  = -1;
+
+        // NOTE: Because we are using dynamic rendering we need to provide this structure to pNext of createInfo
+        VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+        pipelineRenderingCreateInfo.colorAttachmentCount          = 1;
+
+        // TODO: Quite bad since this assumes we will always have the same single format as was intially picked for the provided swapchain
+        auto format                                         = swapchain.GetImageFormat();
+        pipelineRenderingCreateInfo.pColorAttachmentFormats = &format;
+        createInfo.pNext                                    = &pipelineRenderingCreateInfo;
+
+        VkPipeline pipeline;
+        VK_CHECK(vkCreateGraphicsPipelines(context.device.GetLogical(), pipelineCache, 1, &createInfo, context.allocator, &pipeline));
+
+        VK_SET_DEBUG_OBJECT_NAME(&context, VK_OBJECT_TYPE_PIPELINE, pipeline, String::FromFormat("PIPELINE_{}", shaderName));
+
+        return pipeline;
+    }
+
     bool VulkanRendererPlugin::OnInit(const RendererPluginConfig& config)
     {
         // Our backend is implemented in Vulkan
@@ -115,6 +236,8 @@ namespace C3D
 
     bool VulkanRendererPlugin::Begin(Window& window)
     {
+        constexpr VkClearColorValue clearColor = { 30.f / 255.f, 54.f / 255.f, 42.f / 255.f, 1 };
+
         auto backendState = window.rendererState->backendState;
 
         // Acquire our next image index
@@ -139,18 +262,17 @@ namespace C3D
 
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
 
-        // Transition image from VK_IMAGE_LAYOUT_UNDEFINED to VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL
         TransitionLayout(m_context, commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-        VkRenderingAttachmentInfoKHR colorAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR };
-        colorAttachmentInfo.imageView                    = backendState->swapchain.GetImageView(backendState->imageIndex);
-        colorAttachmentInfo.imageLayout                  = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        colorAttachmentInfo.loadOp                       = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachmentInfo.storeOp                      = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachmentInfo.clearValue.color             = { 1, 0, 1, 1 };
+        VkRenderingAttachmentInfo colorAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+        colorAttachmentInfo.imageView                 = backendState->swapchain.GetImageView(backendState->imageIndex);
+        colorAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        colorAttachmentInfo.loadOp                    = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachmentInfo.storeOp                   = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachmentInfo.clearValue.color          = clearColor;
 
-        VkRenderingInfoKHR renderInfo   = { VK_STRUCTURE_TYPE_RENDERING_INFO_KHR };
+        VkRenderingInfo renderInfo      = { VK_STRUCTURE_TYPE_RENDERING_INFO };
         renderInfo.colorAttachmentCount = 1;
         renderInfo.pColorAttachments    = &colorAttachmentInfo;
         renderInfo.layerCount           = 1;
@@ -158,6 +280,18 @@ namespace C3D
         renderInfo.renderArea.extent    = { window.width, window.height };
 
         vkCmdBeginRendering(commandBuffer, &renderInfo);
+
+        // TODO: move the actual rendering somewhere else
+        {
+            VkViewport viewport = { 0, 0, static_cast<f32>(window.width), static_cast<f32>(window.height), 0.f, 1.f };
+            VkRect2D scissor    = { { 0, 0 }, { window.width, window.height } };
+
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_trianglePipeline);
+            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        }
 
         return true;
     }
@@ -213,10 +347,12 @@ namespace C3D
         auto fence  = backendState->GetFence();
 
         VK_CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX));
-
         VK_CHECK(vkResetFences(device, 1, &fence));
 
         VK_CHECK(vkDeviceWaitIdle(device));
+
+        // Increment the frame index since we have moved on to the next frame
+        backendState->frameIndex++;
 
         return result;
     }
@@ -296,6 +432,19 @@ namespace C3D
             VK_SET_DEBUG_OBJECT_NAME(&m_context, VK_OBJECT_TYPE_COMMAND_BUFFER, backend->commandBuffers[i], String::FromFormat("VULKAN_COMMAND_BUFFER_{}", i));
         }
 
+        {
+            // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
+            // Load default shader
+            m_vertexShader   = LoadShader(m_context, "triangle.vert.spv");
+            m_fragmentShader = LoadShader(m_context, "triangle.frag.spv");
+
+            VkPipelineCache cache = VK_NULL_HANDLE;
+
+            m_triangleLayout = CreatePipelineLayout(m_context);
+            m_trianglePipeline =
+                CreateGraphicsPipeline(m_context, cache, m_vertexShader, m_fragmentShader, backend->swapchain, m_triangleLayout, "TRIANGLE_SHADER");
+        }
+
         return true;
     }
 
@@ -314,6 +463,16 @@ namespace C3D
 
         if (backend)
         {
+            {
+                // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
+                vkDestroyPipeline(device, m_trianglePipeline, m_context.allocator);
+
+                vkDestroyPipelineLayout(device, m_triangleLayout, m_context.allocator);
+
+                vkDestroyShaderModule(device, m_vertexShader, m_context.allocator);
+                vkDestroyShaderModule(device, m_fragmentShader, m_context.allocator);
+            }
+
             INFO_LOG("Destoying Command Pools")
             for (auto pool : backend->commandPools)
             {

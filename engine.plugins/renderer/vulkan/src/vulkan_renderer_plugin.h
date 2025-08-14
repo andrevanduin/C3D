@@ -32,6 +32,12 @@ namespace C3D
         void OnDestroyWindow(Window& window) override;
 
     private:
+        VkShaderModule m_vertexShader;
+        VkShaderModule m_fragmentShader;
+
+        VkPipelineLayout m_triangleLayout;
+        VkPipeline m_trianglePipeline;
+
         VulkanContext m_context;
     };
 }  // namespace C3D

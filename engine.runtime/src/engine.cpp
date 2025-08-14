@@ -7,6 +7,7 @@
 #include "metrics/metrics.h"
 #include "platform/platform.h"
 #include "renderer/render_system.h"
+#include "resources/resource_system.h"
 #include "string/string.h"
 #include "systems/system_manager.h"
 #include "time/clock.h"
@@ -79,7 +80,8 @@ namespace C3D
         Platform::SetOnWindowResizedCallback(OnWindowResizeEvent);
 
         // Init before boot systems
-        SystemManager::RegisterSystem<EventSystem>(EventSystemType);  // Event System
+        SystemManager::RegisterSystem<EventSystem>(EventSystemType);                                                // Event System
+        SystemManager::RegisterSystem<ResourceSystem>(ResourceSystemType, state.config.systemConfigs["Resource"]);  // Resource System
 
         // After the Event system is up and running we register an OnQuit event
         Event.Register(EventCodeApplicationQuit, [](u16 code, void* sender, const EventContext& context) {

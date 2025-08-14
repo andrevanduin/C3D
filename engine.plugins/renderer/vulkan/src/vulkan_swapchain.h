@@ -42,6 +42,8 @@ namespace C3D
 
         u32 GetImageCount() const { return m_imageCount; }
 
+        VkFormat GetImageFormat() const { return m_surfaceFormat.format; }
+
     private:
         /**
          * @brief Internal create method. Can be called for the first creation call or for resizing.
@@ -58,6 +60,8 @@ namespace C3D
         DynamicArray<VkImage> m_images;
         /** @brief The swapchain image views. */
         DynamicArray<VkImageView> m_views;
+        /** @brief The currently used surface format. */
+        VkSurfaceFormatKHR m_surfaceFormat;
         /** @brief A handle to the Vulkan swapchain. */
         VkSwapchainKHR m_handle = nullptr;
         /** @brief A pointer to our Vulkan context. */

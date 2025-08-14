@@ -103,9 +103,9 @@ namespace C3D
         createInfo.surface                  = windowBackendState->surface;
         createInfo.minImageCount            = Max(MIN_IMAGES, capabilities.minImageCount);
 
-        auto surfaceFormat         = GetSurfaceFormat();
-        createInfo.imageFormat     = surfaceFormat.format;
-        createInfo.imageColorSpace = surfaceFormat.colorSpace;
+        m_surfaceFormat            = GetSurfaceFormat();
+        createInfo.imageFormat     = m_surfaceFormat.format;
+        createInfo.imageColorSpace = m_surfaceFormat.colorSpace;
 
         createInfo.imageExtent.width     = window.width;
         createInfo.imageExtent.height    = window.height;

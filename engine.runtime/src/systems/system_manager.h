@@ -6,12 +6,14 @@
 
 #define Event C3D::SystemManager::GetSystem<C3D::EventSystem>(C3D::SystemType::EventSystemType)
 #define Renderer C3D::SystemManager::GetSystem<C3D::RenderSystem>(C3D::SystemType::RenderSystemType)
+#define Resources C3D::SystemManager::GetSystem<C3D::ResourceSystem>(C3D::SystemType::ResourceSystemType)
 
 namespace C3D
 {
     enum SystemType
     {
         RenderSystemType = 0,
+        ResourceSystemType,
         EventSystemType,
         MaxKnownSystemType
     };
