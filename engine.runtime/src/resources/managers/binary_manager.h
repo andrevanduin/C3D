@@ -18,7 +18,7 @@ namespace C3D
     public:
         ResourceManager();
 
-        bool Read(const String& name, BinaryResource& resource) const;
+        bool Read(const String& name, BinaryResource& resource);
         void Cleanup(BinaryResource& resource) const;
     };
 }  // namespace C3D

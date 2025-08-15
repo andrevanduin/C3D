@@ -97,6 +97,20 @@ namespace C3D
         INFO_LOG("Swapchain support information obtained.");
     }
 
+    u32 VulkanDevice::SelectMemoryType(u32 memoryTypeBits, VkMemoryPropertyFlags flags) const
+    {
+        for (u32 i = 0; i < m_physical.memory.memoryTypeCount; ++i)
+        {
+            if ((memoryTypeBits & (1 << i)) != 0 && (m_physical.memory.memoryTypes[i].propertyFlags & flags) == flags)
+            {
+                return i;
+            }
+        }
+
+        FATAL_LOG("No compatible memory type found!");
+        return INVALID_ID;
+    }
+
     void VulkanDevice::Destroy()
     {
         INFO_LOG("Destroying Logical Device.");

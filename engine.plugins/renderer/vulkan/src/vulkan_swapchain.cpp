@@ -117,7 +117,7 @@ namespace C3D
         createInfo.presentMode           = GetPresentMode();
 
         createInfo.preTransform   = capabilities.currentTransform;
-        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        createInfo.compositeAlpha = GetCompositeAlpha(capabilities);
         createInfo.clipped        = VK_TRUE;
         // NOTE: This handle will be VK_NULL the first time we create the swapchain
         createInfo.oldSwapchain = m_handle;
@@ -164,6 +164,7 @@ namespace C3D
         {
             if (format.format == VK_FORMAT_B8G8R8A8_UNORM && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             {
+                // We have found our preferred format so let's return it.
                 return format;
             }
         }
@@ -198,5 +199,28 @@ namespace C3D
 
         // We use immediate mode if VSync is disabled which will render as much fps as possible
         return VK_PRESENT_MODE_IMMEDIATE_KHR;
+    }
+
+    VkCompositeAlphaFlagBitsKHR VulkanSwapchain::GetCompositeAlpha(VkSurfaceCapabilitiesKHR capabilities) const
+    {
+        if (capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        }
+        if (capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+        }
+        if (capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+        }
+        if (capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+        }
+
+        FATAL_LOG("Could not find a supported composite alpha from the surface capabilities.");
+        return VK_COMPOSITE_ALPHA_FLAG_BITS_MAX_ENUM_KHR;
     }
 }  // namespace C3D

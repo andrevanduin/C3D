@@ -1,6 +1,7 @@
 
 #pragma once
 #include "logger/logger.h"
+#include "platform/file_system.h"
 #include "resources/types.h"
 
 namespace C3D
@@ -21,6 +22,7 @@ namespace C3D
 
     protected:
         MemoryType m_memoryType;
+        File m_file;
     };
 
     template <typename T>
@@ -33,7 +35,7 @@ namespace C3D
             : IResourceManager(memoryType, type, customType, path)
         {}
 
-        bool Read(const String& name, T& resource) const;
+        bool Read(const String& name, T& resource);
         bool Write(const T& resource) const;
         void Cleanup(T& resource) const;
     };

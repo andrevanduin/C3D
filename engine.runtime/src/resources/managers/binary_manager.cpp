@@ -10,7 +10,7 @@ namespace C3D
 {
     ResourceManager<BinaryResource>::ResourceManager() : IResourceManager(MemoryType::Array, ResourceType::Binary, nullptr, "shaders") {}
 
-    bool ResourceManager<BinaryResource>::Read(const String& name, BinaryResource& resource) const
+    bool ResourceManager<BinaryResource>::Read(const String& name, BinaryResource& resource)
     {
         if (name.Empty())
         {

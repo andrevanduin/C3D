@@ -56,6 +56,18 @@ namespace C3D
         return false;
     }
 
+    bool File::Seek(u32 pos /* = 0 */)
+    {
+        if (m_file.eof())
+        {
+            // We are at the end of the file so we clear the flag in order to be able to go to our pos
+            m_file.clear();
+        }
+
+        m_file.seekg(pos);
+        return true;
+    }
+
     bool File::ReadLine(String& line, const char delimiter)
     {
         // First we empty out our provided line
@@ -71,6 +83,7 @@ namespace C3D
         {
             line.Append(c);
         }
+
         return true;
     }
 

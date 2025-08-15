@@ -6,6 +6,7 @@
 
 // Default loaders
 #include "resources/managers/binary_manager.h"
+#include "resources/managers/mesh_manager.h"
 
 namespace C3D
 {
@@ -15,6 +16,7 @@ namespace C3D
     {
         m_resourceManagerTypes[ToUnderlying(ResourceType::None)]   = "None";
         m_resourceManagerTypes[ToUnderlying(ResourceType::Binary)] = "Binary";
+        m_resourceManagerTypes[ToUnderlying(ResourceType::Mesh)]   = "Mesh";
         m_resourceManagerTypes[ToUnderlying(ResourceType::Custom)] = "Custom";
     }
 
@@ -37,9 +39,10 @@ namespace C3D
 
         m_initialized = true;
 
-        const auto binaryLoader = Memory.New<ResourceManager<BinaryResource>>(MemoryType::ResourceLoader);
+        const auto binaryManager = Memory.New<ResourceManager<BinaryResource>>(MemoryType::ResourceManager);
+        const auto meshManager   = Memory.New<ResourceManager<Mesh>>(MemoryType::ResourceManager);
 
-        IResourceManager* managers[] = { binaryLoader };
+        IResourceManager* managers[] = { binaryManager, meshManager };
 
         m_registeredManagers.Resize(16);
 

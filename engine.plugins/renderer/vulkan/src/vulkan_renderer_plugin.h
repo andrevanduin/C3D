@@ -1,7 +1,9 @@
 
 #pragma once
+#include <renderer/mesh.h>
 #include <renderer/renderer_plugin.h>
 
+#include "vulkan_buffer.h"
 #include "vulkan_context.h"
 
 namespace C3D
@@ -37,6 +39,11 @@ namespace C3D
 
         VkPipelineLayout m_triangleLayout;
         VkPipeline m_trianglePipeline;
+
+        VulkanBuffer m_vertexBuffer;
+        VulkanBuffer m_indexBuffer;
+
+        Mesh m_mesh;
 
         VulkanContext m_context;
     };

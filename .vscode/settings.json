@@ -8,7 +8,8 @@
         "stacktrace": "cpp",
         "xutility": "cpp",
         "cmath": "cpp",
-        "xmemory": "cpp"
+        "xmemory": "cpp",
+        "fstream": "cpp"
     },
     "cmake.configureSettings": {},
     "cmake.debugConfig": {

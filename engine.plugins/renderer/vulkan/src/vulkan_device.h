@@ -56,6 +56,15 @@ namespace C3D
         /** @brief Query the device to get the supported swapchain/surface capabilities  */
         void QuerySwapchainSupport(VkSurfaceKHR surface);
 
+        /**
+         * @brief Selects the approriate memory index for the provided memory type that satisfies the provided flags
+         *
+         * @param memoryTypeBits The type of memory that you want to use
+         * @param flags Flags corresponding to the properties that this memory needs to have
+         * @return The index to the memory that was requested
+         */
+        u32 SelectMemoryType(u32 memoryTypeBits, VkMemoryPropertyFlags flags) const;
+
         /** @brief Destroys the vulkan device. */
         void Destroy();
 
@@ -66,6 +75,7 @@ namespace C3D
         VkPhysicalDevice GetPhysical() const { return m_physical.handle; }
 
         u32 GetGraphicsFamilyIndex() const { return m_physical.graphicsQueueFamilyIndex; }
+        VkPhysicalDeviceMemoryProperties GetMemoryProperties() const { return m_physical.memory; }
 
         const DynamicArray<VkSurfaceFormatKHR>& GetSurfaceFormats() const { return m_physical.swapchainSupportInfo.formats; }
         const DynamicArray<VkPresentModeKHR>& GetPresentModes() const { return m_physical.swapchainSupportInfo.presentModes; }

@@ -33,6 +33,15 @@ namespace C3D
 
         bool Close();
 
+        /**
+         * @brief Seek to a specific pos in the file.
+         * If pos == 0 this resets the file to the very first character and so on.
+         *
+         * @param pos The pos to search for (default == 0)
+         * @return True if successful; False otherwise
+         */
+        bool Seek(u32 pos = 0);
+
         bool ReadLine(String& line, char delimiter = '\n');
 
         bool WriteLine(const String& line);

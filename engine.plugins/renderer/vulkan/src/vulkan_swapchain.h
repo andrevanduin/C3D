@@ -54,6 +54,14 @@ namespace C3D
         VkPresentModeKHR GetPresentMode() const;
         VkSurfaceFormatKHR GetSurfaceFormat() const;
 
+        /**
+         * @brief Returns a support composite alpha based on the surface capabilites.
+         *
+         * @param capabilities The queried capabilities of the surface
+         * @return The chosen Composite alpha flags
+         */
+        VkCompositeAlphaFlagBitsKHR GetCompositeAlpha(VkSurfaceCapabilitiesKHR capabilities) const;
+
         /** @brief The number of images in the swapchain. */
         u32 m_imageCount = 0;
         /** @brief The swapchain images. */

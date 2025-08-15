@@ -8,6 +8,7 @@
 #include <platform/platform.h>
 #include <platform/platform_types.h>
 #include <resources/managers/binary_manager.h>
+#include <resources/managers/mesh_manager.h>
 #include <resources/resource_system.h>
 #include <shaderc/shaderc.h>
 #include <shaderc/status.h>
@@ -74,7 +75,29 @@ namespace C3D
         createInfo.pStages    = stages;
 
         VkPipelineVertexInputStateCreateInfo vertexInput = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-        createInfo.pVertexInputState                     = &vertexInput;
+        // TODO: This is temporary.
+        VkVertexInputBindingDescription stream = {};
+        stream.binding                         = 0;
+        stream.stride                          = sizeof(Vertex);
+        stream.inputRate                       = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        VkVertexInputAttributeDescription attrs[3] = {};
+        attrs[0].location                          = 0;
+        attrs[0].format                            = VK_FORMAT_R32G32B32_SFLOAT;
+        attrs[0].offset                            = 0;
+        attrs[1].location                          = 1;
+        attrs[1].format                            = VK_FORMAT_R32G32B32_SFLOAT;
+        attrs[1].offset                            = 12;
+        attrs[2].location                          = 2;
+        attrs[2].format                            = VK_FORMAT_R32G32_SFLOAT;
+        attrs[2].offset                            = 24;
+
+        vertexInput.vertexBindingDescriptionCount   = 1;
+        vertexInput.pVertexBindingDescriptions      = &stream;
+        vertexInput.vertexAttributeDescriptionCount = 3;
+        vertexInput.pVertexAttributeDescriptions    = attrs;
+
+        createInfo.pVertexInputState = &vertexInput;
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
         inputAssembly.topology                               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -181,6 +204,36 @@ namespace C3D
             return false;
         }
 
+        if (!Resources.Read("kitten", m_mesh))
+        {
+            ERROR_LOG("Failed to load mesh.");
+            return false;
+        }
+
+        // Create our buffers
+        if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(128), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT))
+        {
+            ERROR_LOG("Failed to create vertex buffer.");
+            return false;
+        }
+        if (!m_indexBuffer.Create(&m_context, "INDEX", MebiBytes(128), VK_BUFFER_USAGE_INDEX_BUFFER_BIT))
+        {
+            ERROR_LOG("Failed to create index buffer.");
+            return false;
+        }
+
+        if (!m_vertexBuffer.CopyInto(m_mesh.vertices.GetData(), sizeof(Vertex) * m_mesh.vertices.Size()))
+        {
+            ERROR_LOG("Failed to load mesh into vertex buffer.");
+            return false;
+        }
+
+        if (!m_indexBuffer.CopyInto(m_mesh.indices.GetData(), sizeof(u32) * m_mesh.indices.Size()))
+        {
+            ERROR_LOG("Failed to load mesh into index buffer.");
+            return false;
+        }
+
         INFO_LOG("Initialized successfully.");
         return true;
     }
@@ -188,6 +241,12 @@ namespace C3D
     void VulkanRendererPlugin::OnShutdown()
     {
         INFO_LOG("Shutting down.");
+
+        Resources.Cleanup(m_mesh);
+
+        INFO_LOG("Destroying Vulkan buffers.");
+        m_vertexBuffer.Destroy();
+        m_indexBuffer.Destroy();
 
         m_context.device.Destroy();
 
@@ -217,15 +276,18 @@ namespace C3D
         barrier.oldLayout            = fromLayout;
         barrier.newLayout            = toLayout;
         barrier.image                = image;
+        barrier.srcQueueFamilyIndex  = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex  = VK_QUEUE_FAMILY_IGNORED;
         // TODO: Only works for color images
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         // Mips
         barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount   = 1;
+        // Transition all mip levels
+        barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
         // Start at the first layer
         barrier.subresourceRange.baseArrayLayer = 0;
         // Transition all layers at once
-        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
         // Source and destination access masks
         barrier.srcAccessMask = srcAccessMask;
         barrier.dstAccessMask = dstAccessMask;
@@ -290,7 +352,13 @@ namespace C3D
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_trianglePipeline);
-            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+            VkBuffer vertexBuffers[] = { m_vertexBuffer.GetHandle() };
+            VkDeviceSize offset      = 0;
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, &offset);
+            vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
+
+            vkCmdDrawIndexed(commandBuffer, m_mesh.indices.Size(), 1, 0, 0, 0);
         }
 
         return true;
@@ -348,8 +416,6 @@ namespace C3D
 
         VK_CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX));
         VK_CHECK(vkResetFences(device, 1, &fence));
-
-        VK_CHECK(vkDeviceWaitIdle(device));
 
         // Increment the frame index since we have moved on to the next frame
         backendState->frameIndex++;
