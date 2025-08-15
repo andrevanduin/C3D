@@ -113,8 +113,11 @@ namespace C3D
 
             Vertex vertex   = {};
             vertex.position = m_vs[vi];
-            vertex.normal   = (vni == FACE_INDEX_NOT_POPULATED) ? vec3(0.f, 0.f, 1.f) : m_vns[vni];
-            vertex.texture  = (vti == FACE_INDEX_NOT_POPULATED) ? vec2(0.f) : m_vts[vti];
+            // TODO: Fix rounding
+            vertex.nx      = (vni == FACE_INDEX_NOT_POPULATED) ? 0 : static_cast<u8>(m_vns[vni].x * 127.f + 127.f);
+            vertex.ny      = (vni == FACE_INDEX_NOT_POPULATED) ? 0 : static_cast<u8>(m_vns[vni].y * 127.f + 127.f);
+            vertex.nz      = (vni == FACE_INDEX_NOT_POPULATED) ? 0 : static_cast<u8>(m_vns[vni].z * 127.f + 127.f);
+            vertex.texture = (vti == FACE_INDEX_NOT_POPULATED) ? vec2(0.f) : m_vts[vti];
 
             resource.vertices.EmplaceBack(vertex);
         }

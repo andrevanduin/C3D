@@ -26,28 +26,35 @@ namespace C3D
         // We always require the swapchain extension
         requestedExtensions.PushBack(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         requestedExtensions.PushBack(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+        requestedExtensions.PushBack(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
 
         VkDeviceQueueCreateInfo queueInfo = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
         queueInfo.queueFamilyIndex        = m_physical.graphicsQueueFamilyIndex;
         queueInfo.queueCount              = 1;
         queueInfo.pQueuePriorities        = queuePriorities;
 
-        VkDeviceCreateInfo deviceCreateInfo      = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
-        deviceCreateInfo.queueCreateInfoCount    = 1;
-        deviceCreateInfo.pQueueCreateInfos       = &queueInfo;
-        deviceCreateInfo.enabledExtensionCount   = requestedExtensions.Size();
-        deviceCreateInfo.ppEnabledExtensionNames = requestedExtensions.GetData();
+        VkDeviceCreateInfo createInfo      = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+        createInfo.queueCreateInfoCount    = 1;
+        createInfo.pQueueCreateInfos       = &queueInfo;
+        createInfo.enabledExtensionCount   = requestedExtensions.Size();
+        createInfo.ppEnabledExtensionNames = requestedExtensions.GetData();
 
         // Fill in all the structures for our extensions
+
+        // 8-Bit storage
+        VkPhysicalDeviceVulkan12Features device12Features  = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+        device12Features.shaderInt8                        = VK_TRUE;
+        device12Features.uniformAndStorageBuffer8BitAccess = VK_TRUE;
 
         // Dynamic rendering
         VkPhysicalDeviceDynamicRenderingFeatures dynamicRendering = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES };
         dynamicRendering.dynamicRendering                         = VK_TRUE;
+        dynamicRendering.pNext                                    = &device12Features;
 
         // Finally attach to the pnext pointer
-        deviceCreateInfo.pNext = &dynamicRendering;
+        createInfo.pNext = &dynamicRendering;
 
-        auto result = vkCreateDevice(m_physical.handle, &deviceCreateInfo, m_context->allocator, &m_logical.handle);
+        auto result = vkCreateDevice(m_physical.handle, &createInfo, m_context->allocator, &m_logical.handle);
         if (!VulkanUtils::IsSuccess(result))
         {
             ERROR_LOG("Failed to create device: '{}.'", VulkanUtils::ResultString(result));

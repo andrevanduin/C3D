@@ -10,7 +10,7 @@ namespace C3D
         /** @brief The position of the vertex. */
         vec3 position;
         /** @brief The normal of the vertex. */
-        vec3 normal;
+        u8 nx, ny, nz, nw;
         /** @brief The texture coordinates (u, v) of the vertex. */
         vec2 texture;
     };

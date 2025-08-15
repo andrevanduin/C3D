@@ -1,9 +1,11 @@
 #version 450
 
+#extension GL_EXT_shader_explicit_arithmetic_types : require
+
 struct Vertex
 {
     float x, y, z;
-    float nx, ny, nz;
+    uint8_t nx, ny, nz, nw;
     float u, v;
 };
 
@@ -18,7 +20,7 @@ void main()
 {
     Vertex v = vertices[gl_VertexIndex];
     vec3 position = vec3(v.x, v.y, v.z);
-    vec3 normal = vec3(v.nx, v.ny, v.nz);
+    vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
     vec2 texCoord = vec2(v.u, v.v);
 
     gl_Position = vec4(position + vec3(0, 0, 0.5), 1.0);
