@@ -1,7 +1,7 @@
 
 #pragma once
 #include <defines.h>
-#include <vulkan/vulkan_core.h>
+#include <volk.h>
 
 namespace C3D
 {
@@ -17,6 +17,7 @@ namespace C3D
         void Destroy();
 
         VkBuffer GetHandle() const { return m_handle; }
+        u64 GetSize() const { return m_size; }
 
     private:
         /** @brief A handle to our Vulkan buffer. */

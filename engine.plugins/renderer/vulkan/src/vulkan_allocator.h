@@ -1,6 +1,6 @@
 
 #pragma once
-#include <vulkan/vulkan.h>
+#include <volk.h>
 
 namespace C3D
 {
@@ -23,15 +23,13 @@ namespace C3D
          * @brief Implementation of PFN_vkReallocationFunction
          * @link https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/PFN_vkReallocationFunction.html
          */
-        void* Reallocate(void* userData, void* original, const size_t size, const size_t alignment,
-                         const VkSystemAllocationScope allocationScope);
+        void* Reallocate(void* userData, void* original, const size_t size, const size_t alignment, const VkSystemAllocationScope allocationScope);
 
         /*
          * @brief Implementation of PFN_vkReallocationFunction
          * @link https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/PFN_vkInternalAllocationNotification.html
          */
-        void InternalAllocation(void* userData, size_t size, VkInternalAllocationType allocationType,
-                                VkSystemAllocationScope allocationScope);
+        void InternalAllocation(void* userData, size_t size, VkInternalAllocationType allocationType, VkSystemAllocationScope allocationScope);
 
         /*
          * @brief Implementation of PFN_vkReallocationFunction

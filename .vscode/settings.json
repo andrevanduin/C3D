@@ -41,4 +41,5 @@
             "backgroundColor": "none"
         }
     ],
+    "C_Cpp.default.enableConfigurationSquiggles": false,
 }

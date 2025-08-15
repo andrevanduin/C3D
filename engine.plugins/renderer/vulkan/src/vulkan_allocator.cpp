@@ -1,6 +1,7 @@
 
 #include "vulkan_allocator.h"
 
+#include <math/c3d_math.h>
 #include <memory/global_memory_system.h>
 #include <metrics/metrics.h>
 #include <platform/platform.h>
@@ -19,7 +20,7 @@ namespace C3D
 
         void* result = Memory.AllocateBlock(MemoryType::Vulkan, size, static_cast<u16>(alignment));
 #ifdef C3D_VULKAN_ALLOCATOR_TRACE
-        TRACE("{} (Size = {}B, Alignment = {}).", result, size, alignment);
+        DEBUG_LOG("{} (Size = {}B, Alignment = {}).", result, size, alignment);
 #endif
 
         return result;
@@ -34,14 +35,14 @@ namespace C3D
         if (!memory)
         {
 #ifdef C3D_VULKAN_ALLOCATOR_TRACE
-            TRACE("Block was null. Nothing to free.");
+            DEBUG_LOG("Block was null. Nothing to free.");
 #endif
             return;
         }
 
         Memory.Free(memory);
 #ifdef C3D_VULKAN_ALLOCATOR_TRACE
-        TRACE("Block at: {} was Freed.", memory);
+        DEBUG_LOG("Block at: {} was Freed.", memory);
 #endif
     }
 
@@ -80,25 +81,25 @@ namespace C3D
         }
 
 #ifdef C3D_VULKAN_ALLOCATOR_TRACE
-        TRACE("Reallocating block: {}", original);
+        DEBUG_LOG("Reallocating block: {}", original);
 #endif
 
         void* result = Allocate(userData, size, alignment, allocationScope);
         if (result)
         {
 #ifdef C3D_VULKAN_ALLOCATOR_TRACE
-            TRACE("[VULKAN_REALLOCATE] - Successfully reallocated to: {}. Copying data.", result);
+            DEBUG_LOG("[VULKAN_REALLOCATE] - Successfully reallocated to: {}. Copying data.", result);
 #endif
-            std::memcpy(result, original, allocSize);
+            std::memcpy(result, original, Min(size, allocSize));
 #ifdef C3D_VULKAN_ALLOCATOR_TRACE
-            TRACE("Freeing original block: {}.", original);
+            DEBUG_LOG("Freeing original block: {}.", original);
 #endif
             Memory.Free(original);
         }
         else
         {
 #ifdef C3D_VULKAN_ALLOCATOR_TRACE
-            TRACE("Failed to Reallocate: {}.", original);
+            DEBUG_LOG("Failed to Reallocate: {}.", original);
 #endif
         }
 
@@ -113,7 +114,7 @@ namespace C3D
     void VulkanAllocator::InternalAllocation(void* userData, size_t size, VkInternalAllocationType allocationType, VkSystemAllocationScope allocationScope)
     {
 #ifdef C3D_VULKAN_ALLOCATOR_TRACE
-        TRACE("Allocation of size {}.", size);
+        DEBUG_LOG("Allocation of size {}.", size);
 #endif
         Metrics.AllocateExternal(size);
     }
@@ -126,7 +127,7 @@ namespace C3D
     void VulkanAllocator::InternalFree(void* userData, size_t size, VkInternalAllocationType allocationType, VkSystemAllocationScope allocationScope)
     {
 #ifdef C3D_VULKAN_ALLOCATOR_TRACE
-        TRACE("Free of size {}.", size);
+        DEBUG_LOG("Free of size {}.", size);
 #endif
         Metrics.FreeExternal(size);
     }

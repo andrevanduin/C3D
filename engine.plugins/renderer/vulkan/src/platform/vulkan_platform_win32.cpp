@@ -15,8 +15,7 @@
 #include <platform/platform.h>
 #include <platform/platform_types.h>
 #include <systems/system_manager.h>
-#include <vulkan/vulkan_core.h>
-#include <vulkan/vulkan_win32.h>
+#include <volk.h>
 
 #include "vulkan_context.h"
 #include "vulkan_platform.h"

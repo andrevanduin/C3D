@@ -25,6 +25,7 @@ namespace C3D
         DynamicArray<const char*> requestedExtensions(5);
         // We always require the swapchain extension
         requestedExtensions.PushBack(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        requestedExtensions.PushBack(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
 
         VkDeviceQueueCreateInfo queueInfo = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
         queueInfo.queueFamilyIndex        = m_physical.graphicsQueueFamilyIndex;

@@ -3,7 +3,7 @@
 
 #include <defines.h>
 #include <logger/logger.h>
-#include <vulkan/vulkan_core.h>
+#include <volk.h>
 
 #include "vulkan_context.h"
 #include "vulkan_utils.h"
@@ -23,21 +23,7 @@ namespace C3D
         debugCreateInfo.messageType                        = messageType;
         debugCreateInfo.pfnUserCallback                    = VulkanUtils::VkDebugLog;
 
-        // Load the vkCreateDebugUtilsMessengerEXT func
-        auto createDebugUtilsMessengerFunc =
-            VulkanUtils::LoadExtensionFunction<PFN_vkCreateDebugUtilsMessengerEXT>(context.instance, "vkCreateDebugUtilsMessengerEXT");
-
-        VK_CHECK(createDebugUtilsMessengerFunc(context.instance, &debugCreateInfo, context.allocator, &context.debugMessenger));
-
-        // Load up our debug function pointers
-        context.pfnSetDebugUtilsObjectNameEXT =
-            VulkanUtils::LoadExtensionFunction<PFN_vkSetDebugUtilsObjectNameEXT>(context.instance, "vkSetDebugUtilsObjectNameEXT");
-        context.pfnSetDebugUtilsObjectTagEXT =
-            VulkanUtils::LoadExtensionFunction<PFN_vkSetDebugUtilsObjectTagEXT>(context.instance, "vkSetDebugUtilsObjectTagEXT");
-        context.pfnCmdBeginDebugUtilsLabelEXT =
-            VulkanUtils::LoadExtensionFunction<PFN_vkCmdBeginDebugUtilsLabelEXT>(context.instance, "vkCmdBeginDebugUtilsLabelEXT");
-        context.pfnCmdEndDebugUtilsLabelEXT =
-            VulkanUtils::LoadExtensionFunction<PFN_vkCmdEndDebugUtilsLabelEXT>(context.instance, "vkCmdEndDebugUtilsLabelEXT");
+        VK_CHECK(vkCreateDebugUtilsMessengerEXT(context.instance, &debugCreateInfo, context.allocator, &context.debugMessenger));
 
         INFO_LOG("Debugger created Successfully.");
 
@@ -50,10 +36,7 @@ namespace C3D
         {
             INFO_LOG("Destroying Vulkan Debugger.");
 
-            auto destroyDebugUtilsMessengerFunc =
-                VulkanUtils::LoadExtensionFunction<PFN_vkDestroyDebugUtilsMessengerEXT>(context.instance, "vkDestroyDebugUtilsMessengerEXT");
-
-            destroyDebugUtilsMessengerFunc(context.instance, context.debugMessenger, context.allocator);
+            vkDestroyDebugUtilsMessengerEXT(context.instance, context.debugMessenger, context.allocator);
             context.debugMessenger = nullptr;
         }
     }

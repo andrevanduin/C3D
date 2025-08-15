@@ -39,6 +39,7 @@ namespace C3D
 
         VkPipelineLayout m_triangleLayout;
         VkPipeline m_trianglePipeline;
+        VkDescriptorSetLayout m_setLayout;
 
         VulkanBuffer m_vertexBuffer;
         VulkanBuffer m_indexBuffer;

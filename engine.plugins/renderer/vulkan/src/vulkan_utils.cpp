@@ -265,10 +265,7 @@ namespace C3D
         const VkDebugUtilsObjectNameInfoEXT nameInfo = { VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, type, reinterpret_cast<uint64_t>(handle),
                                                          name.Data() };
 
-        if (context->pfnSetDebugUtilsObjectNameEXT)
-        {
-            VK_CHECK(context->pfnSetDebugUtilsObjectNameEXT(context->device.GetLogical(), &nameInfo));
-        };
+        VK_CHECK(vkSetDebugUtilsObjectNameEXT(context->device.GetLogical(), &nameInfo));
     }
 
     void VulkanUtils::SetDebugObjectTag(const VulkanContext* context, VkObjectType type, void* handle, u64 tagSize, const void* tagData)
@@ -277,10 +274,7 @@ namespace C3D
             VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT, nullptr, type, reinterpret_cast<uint64_t>(handle), 0, tagSize, tagData
         };
 
-        if (context->pfnSetDebugUtilsObjectTagEXT)
-        {
-            VK_CHECK(context->pfnSetDebugUtilsObjectTagEXT(context->device.GetLogical(), &tagInfo));
-        }
+        VK_CHECK(vkSetDebugUtilsObjectTagEXT(context->device.GetLogical(), &tagInfo));
     }
 
     void VulkanUtils::BeginCmdDebugLabel(const VulkanContext* context, VkCommandBuffer buffer, const String& label, const RGBA& color)
@@ -288,18 +282,9 @@ namespace C3D
         VkDebugUtilsLabelEXT labelInfo = { VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT, nullptr, label.Data() };
         std::memcpy(labelInfo.color, &color, sizeof(f32) * 4);
 
-        if (context->pfnCmdBeginDebugUtilsLabelEXT)
-        {
-            context->pfnCmdBeginDebugUtilsLabelEXT(buffer, &labelInfo);
-        }
+        vkCmdBeginDebugUtilsLabelEXT(buffer, &labelInfo);
     }
 
-    void VulkanUtils::EndCmdDebugLabel(const VulkanContext* context, VkCommandBuffer buffer)
-    {
-        if (context->pfnCmdEndDebugUtilsLabelEXT)
-        {
-            context->pfnCmdEndDebugUtilsLabelEXT(buffer);
-        }
-    }
+    void VulkanUtils::EndCmdDebugLabel(const VulkanContext* context, VkCommandBuffer buffer) { vkCmdEndDebugUtilsLabelEXT(buffer); }
 #endif
 }  // namespace C3D

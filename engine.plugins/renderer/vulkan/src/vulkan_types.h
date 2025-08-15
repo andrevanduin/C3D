@@ -2,7 +2,7 @@
 #pragma once
 #include <containers/dynamic_array.h>
 #include <defines.h>
-#include <vulkan/vulkan.h>
+#include <volk.h>
 
 #include "vulkan_swapchain.h"
 

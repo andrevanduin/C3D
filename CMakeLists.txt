@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 if (WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd26812")
+    set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_WIN32_KHR)
 endif()
 
 set(CMAKE_BUILD_TYPE Debug)
@@ -21,6 +22,7 @@ add_compile_definitions(C3D_MEMORY_METRICS)
 add_compile_definitions(C3D_MEMORY_METRICS_MALLOC)
 #add_compile_definitions(C3D_MEMORY_METRICS_STACKTRACE)
 add_compile_definitions(C3D_VULKAN_USE_CUSTOM_ALLOCATOR)
+#add_compile_definitions(C3D_VULKAN_ALLOCATOR_TRACE)
 
 add_compile_definitions(C3D_LOG_DEBUG C3D_LOG_ERROR C3D_LOG_WARN C3D_LOG_INFO)
 
@@ -56,6 +58,7 @@ target_include_directories(spdlog PUBLIC "${fmt_SOURCE_DIR}/include")
 add_subdirectory ("engine.core")
 add_subdirectory ("engine.runtime")
 add_subdirectory ("engine.plugins")
+
 #add_subdirectory ("engine.tests")
 #add_subdirectory ("engine.tools")
 

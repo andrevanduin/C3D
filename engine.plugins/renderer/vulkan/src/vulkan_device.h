@@ -2,7 +2,7 @@
 #pragma once
 #include <containers/dynamic_array.h>
 #include <defines.h>
-#include <vulkan/vulkan_core.h>
+#include <volk.h>
 
 namespace C3D
 {
@@ -23,6 +23,8 @@ namespace C3D
         VkPhysicalDevice handle = nullptr;
         /** @brief A struct holding the physical device's properties */
         VkPhysicalDeviceProperties properties;
+        /** @brief A struct holding the physical device's properties2 */
+        VkPhysicalDeviceProperties2 properties2;
         /** @brief A struct holding the physical device's memory properties. */
         VkPhysicalDeviceMemoryProperties memory;
         /** @brief The index of the graphics queue family. */
