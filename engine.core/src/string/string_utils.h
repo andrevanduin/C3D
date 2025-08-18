@@ -6,7 +6,8 @@
 
 namespace C3D::StringUtils
 {
-    /* @brief Builds a string from the format and the provided arguments.
+    /**
+     * @brief Builds a string from the format and the provided arguments.
      * Internally uses fmt::format to build out the string.
      */
     template <class Allocator, typename... Args>
@@ -17,7 +18,7 @@ namespace C3D::StringUtils
         return buffer;
     }
 
-    /*
+    /**
      * @brief Compares two strings case-sensitive
      *
      * @param left The string you want to compare
@@ -29,7 +30,7 @@ namespace C3D::StringUtils
      */
     C3D_API bool Equals(const char* a, const char* b, i32 length = -1);
 
-    /*
+    /**
      * @brief Compares two strings case-insensitive
      *
      * @param left The string you want to compare
@@ -41,7 +42,104 @@ namespace C3D::StringUtils
      */
     C3D_API bool IEquals(const char* a, const char* b, i32 length = -1);
 
-    /*
+    /**
+     * @brief Tries to parse an i32 from the provided string staring at start.
+     *
+     * @param s The pointer to the start of the string
+     * @param end An output pointer to remainder of the string after the parsed int
+     * @return The parsed i32
+     */
+    C3D_API i32 ParseI32(const char* s, const char** end);
+
+    /**
+     * @brief Tries to parse a f32 from the provided string staring at start.
+     *
+     * @param s The pointer to the start of the string
+     * @param end An output pointer to remainder of the string after the parsed int
+     * @return The parsed f32
+     */
+    C3D_API f32 ParseF32(const char* s, const char** end);
+
+    /**
+     * @brief Skips whitespace in string provided
+     *
+     * @param s The pointer to the start of a string
+     * @return A pointer to the first non-whitespace character (or the end of the string)
+     */
+    C3D_API const char* SkipWhitespace(const char* s);
+
+    static float parseFloat(const char* s, const char** end)
+    {
+        static const double digits[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+        static const double powers[] = { 1e0,   1e+1,  1e+2,  1e+3,  1e+4,  1e+5,  1e+6,  1e+7,  1e+8,  1e+9,  1e+10, 1e+11,
+                                         1e+12, 1e+13, 1e+14, 1e+15, 1e+16, 1e+17, 1e+18, 1e+19, 1e+20, 1e+21, 1e+22 };
+
+        // skip whitespace
+        while (*s == ' ' || *s == '\t') s++;
+
+        // read sign
+        double sign = (*s == '-') ? -1 : 1;
+        s += (*s == '-' || *s == '+');
+
+        // read integer part
+        double result = 0;
+        int power     = 0;
+
+        while (unsigned(*s - '0') < 10)
+        {
+            result = result * 10 + digits[*s - '0'];
+            s++;
+        }
+
+        // read fractional part
+        if (*s == '.')
+        {
+            s++;
+
+            while (unsigned(*s - '0') < 10)
+            {
+                result = result * 10 + digits[*s - '0'];
+                s++;
+                power--;
+            }
+        }
+
+        // read exponent part
+        if ((*s | ' ') == 'e')
+        {
+            s++;
+
+            // read exponent sign
+            int expsign = (*s == '-') ? -1 : 1;
+            s += (*s == '-' || *s == '+');
+
+            // read exponent
+            int exppower = 0;
+
+            while (unsigned(*s - '0') < 10)
+            {
+                exppower = exppower * 10 + (*s - '0');
+                s++;
+            }
+
+            // done!
+            power += expsign * exppower;
+        }
+
+        // return end-of-string
+        *end = s;
+
+        // note: this is precise if result < 9e15
+        // for longer inputs we lose a bit of precision here
+        if (unsigned(-power) < sizeof(powers) / sizeof(powers[0]))
+            return float(sign * result / powers[-power]);
+        else if (unsigned(power) < sizeof(powers) / sizeof(powers[0]))
+            return float(sign * result * powers[power]);
+        else
+            return float(sign * result * pow(10.0, power));
+    }
+
+    /**
      * @brief Splits a CString on the provided delimiter
      *
      * @param string The CString that you want to split

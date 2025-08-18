@@ -1,6 +1,4 @@
 {
-    "ApplicationName": "C3DEngine Testenv",
-    "FrameAllocatorSize": 16, # Size in MebiBytes
     "Windows": [
         {
             "width": 1280,
@@ -13,15 +11,18 @@
     ],
     "SystemConfigs": [
         {
-            "name": "Resource",
+            "name": "Config",
             "config": {
-                "assetBasePath": "../../../game.testenv/assets"
+                "ApplicationName": "C3DEngine Testenv",
+                "FrameAllocatorSize": 16, # Size in MebiBytes
+                "AssetBasePath": "../../../game.testenv/assets",
+                "TestMesh": "buddha"
             }
         },
         {
             "name": "Renderer",
             "config": {
-                "backend": "C3DVulkanRenderer",
+                "Backend": "C3DVulkanRenderer",
                 "Vsync": false,
                 "PowerSaving": true,
                 "ValidationLayers": true,
@@ -31,7 +32,7 @@
         {
             "name": "Job",
             "config": {
-                "threadCount": 15 # Total number of threads - 1
+                "ThreadCount": 15 # Total number of threads - 1
             }
         }
     ]

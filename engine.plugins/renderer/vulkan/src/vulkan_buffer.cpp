@@ -6,10 +6,26 @@
 
 namespace C3D
 {
-    bool VulkanBuffer::Create(VulkanContext* context, const char* name, u64 size, VkBufferUsageFlags usage)
+    VkBufferMemoryBarrier CreateBufferBarrier(VkBuffer buffer, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask)
     {
-        m_context = context;
-        m_size    = size;
+        VkBufferMemoryBarrier result = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+
+        result.srcAccessMask       = srcAccessMask;
+        result.dstAccessMask       = dstAccessMask;
+        result.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        result.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        result.buffer              = buffer;
+        result.offset              = 0;
+        result.size                = VK_WHOLE_SIZE;
+
+        return result;
+    }
+
+    bool VulkanBuffer::Create(VulkanContext* context, const char* name, u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryFlags)
+    {
+        m_context     = context;
+        m_size        = size;
+        m_memoryFlags = memoryFlags;
 
         VkBufferCreateInfo createInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
         createInfo.size               = size;
@@ -23,39 +39,100 @@ namespace C3D
 
         VkMemoryRequirements memoryRequirements;
         vkGetBufferMemoryRequirements(device, m_handle, &memoryRequirements);
+        m_requiredSize = memoryRequirements.size;
 
         VkMemoryAllocateInfo allocateInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
         allocateInfo.allocationSize       = memoryRequirements.size;
-        allocateInfo.memoryTypeIndex =
-            m_context->device.SelectMemoryType(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        allocateInfo.memoryTypeIndex      = m_context->device.SelectMemoryType(memoryRequirements.memoryTypeBits, memoryFlags);
 
         VK_CHECK(vkAllocateMemory(device, &allocateInfo, m_context->allocator, &m_memory));
+
+        MetricsAllocate(Memory.GetId(), MemoryType::Vulkan, size, memoryRequirements.size, m_memory);
 
         VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_BUFFER, m_handle, String::FromFormat("VULKAN_BUFFER_MEMORY_{}", name));
 
         VK_CHECK(vkBindBufferMemory(device, m_handle, m_memory, 0));
 
-        VK_CHECK(vkMapMemory(device, m_memory, 0, size, 0, &m_data));
+        if (memoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+        {
+            // If our buffer memory is visible to the CPU we memory map it to our data pointer
+            VK_CHECK(vkMapMemory(device, m_memory, 0, size, 0, &m_data));
+        }
+
+        return true;
+    }
+
+    bool VulkanBuffer::Upload(VkCommandBuffer commandBuffer, VkCommandPool commandPool, void* data, u64 size)
+    {
+        if (m_memoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+        {
+            ERROR_LOG("The memory in the '{}' buffer is accessible from the CPU so there is no need to upload. Call CopyInto() instead.");
+            return false;
+        }
+
+        // Copy the data into our staging buffer
+        m_context->stagingBuffer.CopyInto(data, size);
+
+        auto device = m_context->device.GetLogical();
+        VK_CHECK(vkResetCommandPool(device, commandPool, 0));
+
+        VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        beginInfo.flags                    = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+        // Define the region to copy
+        VkBufferCopy region = {};
+        region.srcOffset    = 0;
+        region.dstOffset    = 0;
+        region.size         = size;
+
+        // Copy the data from our staging buffer into this buffer
+        vkCmdCopyBuffer(commandBuffer, m_context->stagingBuffer.GetHandle(), m_handle, 1, &region);
+
+        // Create a barrier that will ensure the copy is done before we start reading the buffer in the shader
+        VkBufferMemoryBarrier copyBarrier = CreateBufferBarrier(m_handle, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1,
+                             &copyBarrier, 0, 0);
+
+        VK_CHECK(vkEndCommandBuffer(commandBuffer));
+
+        VkSubmitInfo submitInfo       = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers    = &commandBuffer;
+
+        auto queue = m_context->device.GetDeviceQueue();
+        VK_CHECK(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
+
+        VK_CHECK(m_context->device.WaitIdle());
 
         return true;
     }
 
     bool VulkanBuffer::CopyInto(void* source, u64 size)
     {
-        if (size >= m_size)
+        if (m_memoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
         {
-            ERROR_LOG("Provided size is >= buffer size.");
-            return false;
+            if (size >= m_size)
+            {
+                ERROR_LOG("Provided size is >= buffer size.");
+                return false;
+            }
+
+            std::memcpy(m_data, source, size);
+
+            return true;
         }
 
-        std::memcpy(m_data, source, size);
-
-        return true;
+        ERROR_LOG("The memory in the '{}' buffer is not accessible from the CPU.");
+        return false;
     }
 
     void VulkanBuffer::Destroy()
     {
         auto device = m_context->device.GetLogical();
+
+        MetricsFree(Memory.GetId(), MemoryType::Vulkan, m_size, m_requiredSize, m_memory);
 
         vkFreeMemory(device, m_memory, m_context->allocator);
         vkDestroyBuffer(device, m_handle, m_context->allocator);

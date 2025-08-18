@@ -28,6 +28,10 @@ namespace C3D
         requestedExtensions.PushBack(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
         requestedExtensions.PushBack(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
 
+#if C3D_MESH_SHADER
+        requestedExtensions.PushBack(VK_EXT_MESH_SHADER_EXTENSION_NAME);
+#endif
+
         VkDeviceQueueCreateInfo queueInfo = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
         queueInfo.queueFamilyIndex        = m_physical.graphicsQueueFamilyIndex;
         queueInfo.queueCount              = 1;
@@ -41,18 +45,35 @@ namespace C3D
 
         // Fill in all the structures for our extensions
 
-        // 8-Bit storage
+        // 16-Bit storage
+        VkPhysicalDeviceVulkan11Features device11Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+        device11Features.storageBuffer16BitAccess         = VK_TRUE;
+
+        // 8-Bit storage and shader float16
         VkPhysicalDeviceVulkan12Features device12Features  = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
         device12Features.shaderInt8                        = VK_TRUE;
+        device12Features.shaderFloat16                     = VK_TRUE;
         device12Features.uniformAndStorageBuffer8BitAccess = VK_TRUE;
+        device12Features.storageBuffer8BitAccess           = VK_TRUE;
+        device12Features.pNext                             = &device11Features;
 
         // Dynamic rendering
         VkPhysicalDeviceDynamicRenderingFeatures dynamicRendering = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES };
         dynamicRendering.dynamicRendering                         = VK_TRUE;
         dynamicRendering.pNext                                    = &device12Features;
 
+#if C3D_MESH_SHADER
+        // Mesh shaders
+        VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT };
+        meshShaderFeatures.meshShader                            = VK_TRUE;
+        meshShaderFeatures.pNext                                 = &dynamicRendering;
+
+        // Finally attach to the pnext pointer
+        createInfo.pNext = &meshShaderFeatures;
+#else
         // Finally attach to the pnext pointer
         createInfo.pNext = &dynamicRendering;
+#endif
 
         auto result = vkCreateDevice(m_physical.handle, &createInfo, m_context->allocator, &m_logical.handle);
         if (!VulkanUtils::IsSuccess(result))
@@ -222,6 +243,18 @@ namespace C3D
             if (!VulkanPlatform::GetPresentationSupport(current, m_physical.graphicsQueueFamilyIndex))
             {
                 INFO_LOG("Device does not support presentation on graphics queue family.");
+                continue;
+            }
+
+            if (!m_physical.properties.limits.timestampComputeAndGraphics)
+            {
+                INFO_LOG("Device does not support timestamps during compute and graphics.");
+                continue;
+            }
+
+            if (m_physical.properties.apiVersion < VK_API_VERSION_1_2)
+            {
+                INFO_LOG("Device does not support Vulkan 1.2");
                 continue;
             }
 

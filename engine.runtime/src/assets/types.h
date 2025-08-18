@@ -6,7 +6,7 @@
 namespace C3D
 {
     // Pre-defined resource types
-    enum class ResourceType : u8
+    enum class AssetType : u8
     {
         None,
         Text,
@@ -24,30 +24,32 @@ namespace C3D
         MaxValue
     };
 
-    /** @brief The header for our proprietary resource files. */
-    struct ResourceHeader
+    using AssetTypeFlag = u8;
+
+    /** @brief The header for our proprietary asset files. */
+    struct AssetHeader
     {
         /** @brief A magic number indicating this file is a C3D binary file. */
-        u32 magicNumber;
-        /** @brief The type of this resource, maps to our ResourceType enum. */
-        u8 resourceType;
+        u32 magicNumber = INVALID_ID;
+        /** @brief The type of this asset, maps to our AssetType enum. */
+        AssetType type = AssetType::None;
         /** @brief The format version the resource file uses. */
-        u8 version;
+        u8 version = 0;
         /** @brief Some reserved space for future header data. */
         u16 reserved;
     };
 
-    /** @brief A base-resource. All other resources derive from this. */
-    struct IResource
+    /** @brief A base-asset. All other assets derive from this. */
+    struct IAsset
     {
-        IResource(ResourceType type) : resourceType(type) {}
+        IAsset(AssetType type) : type(type) {}
 
-        ResourceType resourceType;
-        /** @brief The resource version. */
+        AssetType type;
+        /** @brief The asset version. */
         u8 version = 0;
-        /** @brief The name of the resource. */
+        /** @brief The name of the asset. */
         String name;
-        /** @brief The full path to the resource. */
-        String fullPath;
+        /** @brief The (full) path to the asset. */
+        String path;
     };
 }

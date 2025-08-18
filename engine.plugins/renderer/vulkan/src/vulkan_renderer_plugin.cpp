@@ -1,18 +1,19 @@
 
 #include "vulkan_renderer_plugin.h"
 
+#include <assets/managers/binary_manager.h>
+#include <assets/managers/mesh_manager.h>
+#include <config/config_system.h>
 #include <engine.h>
 #include <events/event_system.h>
 #include <logger/logger.h>
 #include <metrics/metrics.h>
 #include <platform/platform.h>
 #include <platform/platform_types.h>
-#include <resources/managers/binary_manager.h>
-#include <resources/managers/mesh_manager.h>
-#include <resources/resource_system.h>
+#include <renderer/utils/mesh_utils.h>
 #include <shaderc/shaderc.h>
 #include <shaderc/status.h>
-#include <systems/system_manager.h>
+#include <system/system_manager.h>
 
 #include "platform/vulkan_platform.h"
 #include "vulkan_allocator.h"
@@ -26,8 +27,10 @@ namespace C3D
 {
     VkShaderModule LoadShader(VulkanContext& context, const char* name)
     {
-        BinaryResource binary;
-        if (!Resources.Read(name, binary))
+        BinaryManager binaryManager;
+        BinaryAsset binary;
+
+        if (!binaryManager.Read(name, binary))
         {
             FATAL_LOG("Failed to read '{}' source", name);
         }
@@ -39,7 +42,7 @@ namespace C3D
         VkShaderModule shaderModule;
         VK_CHECK(vkCreateShaderModule(context.device.GetLogical(), &createInfo, context.allocator, &shaderModule));
 
-        Resources.Cleanup(binary);
+        BinaryManager::Cleanup(binary);
 
         return shaderModule;
     }
@@ -48,16 +51,31 @@ namespace C3D
     {
         auto device = context.device.GetLogical();
 
+#if C3D_MESH_SHADER
+        VkDescriptorSetLayoutBinding setBindings[2] = {};
+        setBindings[0].binding                      = 0;
+        setBindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        setBindings[0].descriptorCount              = 1;
+        setBindings[0].stageFlags                   = VK_SHADER_STAGE_MESH_BIT_EXT;
+        setBindings[1].binding                      = 1;
+        setBindings[1].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        setBindings[1].descriptorCount              = 1;
+        setBindings[1].stageFlags                   = VK_SHADER_STAGE_MESH_BIT_EXT;
+#else
         VkDescriptorSetLayoutBinding setBindings[1] = {};
         setBindings[0].binding                      = 0;
         setBindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         setBindings[0].descriptorCount              = 1;
         setBindings[0].stageFlags                   = VK_SHADER_STAGE_VERTEX_BIT;
+#endif
 
         VkDescriptorSetLayoutCreateInfo setCreateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
         setCreateInfo.flags                           = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-        setCreateInfo.bindingCount                    = 1;
-        setCreateInfo.pBindings                       = setBindings;
+
+#if !C3D_FVF
+        setCreateInfo.bindingCount = ARRAY_SIZE(setBindings);
+        setCreateInfo.pBindings    = setBindings;
+#endif
 
         VK_CHECK(vkCreateDescriptorSetLayout(device, &setCreateInfo, context.allocator, &setLayout));
 
@@ -79,10 +97,17 @@ namespace C3D
 
         VkPipelineShaderStageCreateInfo stages[2] = {};
 
-        stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+
+#if C3D_MESH_SHADER
+        stages[0].stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+#else
+        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+#endif
+
         stages[0].module = vs;
         stages[0].pName  = "main";
+
         stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
         stages[1].module = fs;
@@ -92,7 +117,29 @@ namespace C3D
         createInfo.pStages    = stages;
 
         VkPipelineVertexInputStateCreateInfo vertexInput = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-        createInfo.pVertexInputState                     = &vertexInput;
+#if C3D_FVF
+        VkVertexInputBindingDescription fvfBindings[1] = {};
+        fvfBindings[0].binding                         = 0;
+        fvfBindings[0].stride                          = sizeof(Vertex);
+        fvfBindings[0].inputRate                       = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        VkVertexInputAttributeDescription fvfAttributes[3] = {};
+        fvfAttributes[0].location                          = 0;
+        fvfAttributes[0].format                            = VK_FORMAT_R16G16B16_SFLOAT;
+        fvfAttributes[0].offset                            = offsetof(Vertex, vx);
+        fvfAttributes[1].location                          = 1;
+        fvfAttributes[1].format                            = VK_FORMAT_R8G8B8A8_UINT;
+        fvfAttributes[1].offset                            = offsetof(Vertex, nx);
+        fvfAttributes[2].location                          = 2;
+        fvfAttributes[2].format                            = VK_FORMAT_R16G16_SFLOAT;
+        fvfAttributes[2].offset                            = offsetof(Vertex, tx);
+
+        vertexInput.vertexBindingDescriptionCount   = ARRAY_SIZE(fvfBindings);
+        vertexInput.pVertexBindingDescriptions      = fvfBindings;
+        vertexInput.vertexAttributeDescriptionCount = ARRAY_SIZE(fvfAttributes);
+        vertexInput.pVertexAttributeDescriptions    = fvfAttributes;
+#endif
+        createInfo.pVertexInputState = &vertexInput;
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
         inputAssembly.topology                               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -105,6 +152,8 @@ namespace C3D
 
         VkPipelineRasterizationStateCreateInfo rasterizationState = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
         rasterizationState.lineWidth                              = 1.f;
+        rasterizationState.frontFace                              = VK_FRONT_FACE_CLOCKWISE;
+        rasterizationState.cullMode                               = VK_CULL_MODE_BACK_BIT;
         createInfo.pRasterizationState                            = &rasterizationState;
 
         VkPipelineMultisampleStateCreateInfo multiSampleState = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
@@ -114,15 +163,8 @@ namespace C3D
         VkPipelineDepthStencilStateCreateInfo depthStencilState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
         createInfo.pDepthStencilState                           = &depthStencilState;
 
-        VkPipelineColorBlendAttachmentState colorAttachmentState;
-        colorAttachmentState.blendEnable         = VK_TRUE;
-        colorAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        colorAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        colorAttachmentState.colorBlendOp        = VK_BLEND_OP_ADD;
-        colorAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        colorAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        colorAttachmentState.alphaBlendOp        = VK_BLEND_OP_ADD;
-        colorAttachmentState.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendAttachmentState colorAttachmentState = {};
+        colorAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
         VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
         colorBlendState.logicOpEnable                       = VK_FALSE;
@@ -158,6 +200,18 @@ namespace C3D
         VK_SET_DEBUG_OBJECT_NAME(&context, VK_OBJECT_TYPE_PIPELINE, pipeline, String::FromFormat("PIPELINE_{}", shaderName));
 
         return pipeline;
+    }
+
+    VkQueryPool CreateQueryPool(VulkanContext& context, u32 queryCount)
+    {
+        VkQueryPoolCreateInfo createInfo = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
+        createInfo.queryType             = VK_QUERY_TYPE_TIMESTAMP;
+        createInfo.queryCount            = queryCount;
+
+        VkQueryPool queryPool = 0;
+        VK_CHECK(vkCreateQueryPool(context.device.GetLogical(), &createInfo, context.allocator, &queryPool));
+
+        return queryPool;
     }
 
     bool VulkanRendererPlugin::OnInit(const RendererPluginConfig& config)
@@ -205,35 +259,66 @@ namespace C3D
 
         volkLoadDevice(m_context.device.GetLogical());
 
-        if (!Resources.Read("kitten", m_mesh))
+        // Create our query pool
+        m_queryPool = CreateQueryPool(m_context, 128);
+
+        MeshManager meshManager;
+        String meshName;
+        if (!Config.GetProperty("TestMesh", meshName))
+        {
+            ERROR_LOG("Failed to get the name of the test mesh.");
+            return false;
+        }
+
+        if (!meshManager.Read(meshName, m_mesh))
         {
             ERROR_LOG("Failed to load mesh.");
             return false;
         }
 
+#if C3D_MESH_SHADER
+        MeshUtils::BuildMeshlets(m_mesh);
+#endif
+
         // Create our buffers
-        if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(128), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT))
+        if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(128), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
         {
             ERROR_LOG("Failed to create vertex buffer.");
             return false;
         }
-        if (!m_indexBuffer.Create(&m_context, "INDEX", MebiBytes(128), VK_BUFFER_USAGE_INDEX_BUFFER_BIT))
+
+#if C3D_FVF
+        if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(128), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        {
+            ERROR_LOG("Failed to create vertex buffer.");
+            return false;
+        }
+#else
+        if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(128), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        {
+            ERROR_LOG("Failed to create vertex buffer.");
+            return false;
+        }
+#endif
+
+        if (!m_indexBuffer.Create(&m_context, "INDEX", MebiBytes(128), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create index buffer.");
             return false;
         }
 
-        if (!m_vertexBuffer.CopyInto(m_mesh.vertices.GetData(), sizeof(Vertex) * m_mesh.vertices.Size()))
+#if C3D_MESH_SHADER
+        if (!m_meshBuffer.Create(&m_context, "MESH", MebiBytes(128), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
-            ERROR_LOG("Failed to load mesh into vertex buffer.");
+            ERROR_LOG("Failed to create mesh buffer.");
             return false;
         }
-
-        if (!m_indexBuffer.CopyInto(m_mesh.indices.GetData(), sizeof(u32) * m_mesh.indices.Size()))
-        {
-            ERROR_LOG("Failed to load mesh into index buffer.");
-            return false;
-        }
+#endif
 
         INFO_LOG("Initialized successfully.");
         return true;
@@ -243,11 +328,20 @@ namespace C3D
     {
         INFO_LOG("Shutting down.");
 
-        Resources.Cleanup(m_mesh);
+        MeshManager::Cleanup(m_mesh);
 
         INFO_LOG("Destroying Vulkan buffers.");
         m_vertexBuffer.Destroy();
         m_indexBuffer.Destroy();
+
+#if C3D_MESH_SHADER
+        m_meshBuffer.Destroy();
+#endif
+
+        m_context.stagingBuffer.Destroy();
+
+        INFO_LOG("Destroying Query pool");
+        vkDestroyQueryPool(m_context.device.GetLogical(), m_queryPool, m_context.allocator);
 
         m_context.device.Destroy();
 
@@ -323,6 +417,11 @@ namespace C3D
 
         VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
+        m_frameCpuBegin = Platform::GetAbsoluteTime() * 1000;
+
+        vkCmdResetQueryPool(commandBuffer, m_queryPool, 0, 128);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 0);
+
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
 
         TransitionLayout(m_context, commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
@@ -346,30 +445,75 @@ namespace C3D
 
         // TODO: move the actual rendering somewhere else
         {
-            VkViewport viewport = { 0, static_cast<f32>(window.height), static_cast<f32>(window.width), -static_cast<f32>(window.height), 0.f, 1.f };
+            VkViewport viewport = { 0, static_cast<f32>(window.height), static_cast<f32>(window.width), -static_cast<f32>(window.height), 0.f, 1.0f };
             VkRect2D scissor    = { { 0, 0 }, { window.width, window.height } };
 
             vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_trianglePipeline);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshPipeline);
 
-            VkDescriptorBufferInfo bufferInfo = {};
-            bufferInfo.buffer                 = m_vertexBuffer.GetHandle();
-            bufferInfo.offset                 = 0;
-            bufferInfo.range                  = m_vertexBuffer.GetSize();
+#if C3D_FVF
+            VkDeviceSize vbOffset = 0;
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, m_vertexBuffer.GetHandlePtr(), &vbOffset);
+            vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
+
+            for (u32 i = 0; i < m_drawCount; ++i)
+            {
+                vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
+            }
+#elif C3D_MESH_SHADER
+            VkDescriptorBufferInfo vbInfo = {};
+            vbInfo.buffer                 = m_vertexBuffer.GetHandle();
+            vbInfo.offset                 = 0;
+            vbInfo.range                  = m_vertexBuffer.GetSize();
+
+            VkDescriptorBufferInfo mbInfo = {};
+            mbInfo.buffer                 = m_meshBuffer.GetHandle();
+            mbInfo.offset                 = 0;
+            mbInfo.range                  = m_meshBuffer.GetSize();
+
+            VkWriteDescriptorSet descriptors[2] = {};
+            descriptors[0].sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptors[0].dstBinding           = 0;
+            descriptors[0].descriptorCount      = 1;
+            descriptors[0].descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptors[0].pBufferInfo          = &vbInfo;
+
+            descriptors[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptors[1].dstBinding      = 1;
+            descriptors[1].descriptorCount = 1;
+            descriptors[1].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptors[1].pBufferInfo     = &mbInfo;
+
+            vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshLayout, 0, ARRAY_SIZE(descriptors), descriptors);
+
+            for (u32 i = 0; i < m_drawCount; ++i)
+            {
+                vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size(), 1, 1);
+            }
+#else
+            VkDescriptorBufferInfo vbInfo = {};
+            vbInfo.buffer                 = m_vertexBuffer.GetHandle();
+            vbInfo.offset                 = 0;
+            vbInfo.range                  = m_vertexBuffer.GetSize();
 
             VkWriteDescriptorSet descriptors[1] = {};
             descriptors[0].sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptors[0].dstBinding           = 0;
             descriptors[0].descriptorCount      = 1;
             descriptors[0].descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            descriptors[0].pBufferInfo          = &bufferInfo;
+            descriptors[0].pBufferInfo          = &vbInfo;
 
-            vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_triangleLayout, 0, 1, descriptors);
+            vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshLayout, 0, ARRAY_SIZE(descriptors), descriptors);
 
             vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexed(commandBuffer, m_mesh.indices.Size(), 1, 0, 0, 0);
+
+            for (u32 i = 0; i < m_drawCount; ++i)
+            {
+                vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
+            }
+#endif
         }
 
         return true;
@@ -385,6 +529,8 @@ namespace C3D
 
         TransitionLayout(m_context, commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 1);
 
         VK_CHECK(vkEndCommandBuffer(commandBuffer));
         return true;
@@ -427,6 +573,25 @@ namespace C3D
 
         VK_CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX));
         VK_CHECK(vkResetFences(device, 1, &fence));
+
+        u64 queryResults[2];
+        VK_CHECK(vkGetQueryPoolResults(device, m_queryPool, 0, ARRAY_SIZE(queryResults), sizeof(queryResults), queryResults, sizeof(queryResults[0]),
+                                       VK_QUERY_RESULT_64_BIT));
+
+        auto props = m_context.device.GetProperties();
+
+        f64 frameGpuBegin = f64(queryResults[0]) * props.limits.timestampPeriod * 1e-6;
+        f64 frameGpuEnd   = f64(queryResults[1]) * props.limits.timestampPeriod * 1e-6;
+
+        f64 frameCpuEnd = Platform::GetAbsoluteTime() * 1000;
+
+        m_frameCpuAvg = m_frameCpuAvg * 0.95 + (frameCpuEnd - m_frameCpuBegin) * 0.05;
+        m_frameGpuAvg = m_frameGpuAvg * 0.95 + (frameGpuEnd - frameGpuBegin) * 0.05;
+
+        Platform::SetWindowTitle(
+            window, String::FromFormat("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; meshlets: {}", m_frameCpuAvg, m_frameGpuAvg,
+                                       m_mesh.indices.Size() / 3 * m_drawCount, m_mesh.vertices.Size() * m_drawCount, m_mesh.indices.Size() * m_drawCount,
+                                       m_mesh.meshlets.Size() * m_drawCount));
 
         // Increment the frame index since we have moved on to the next frame
         backendState->frameIndex++;
@@ -510,16 +675,32 @@ namespace C3D
         }
 
         {
-            // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
-            // Load default shader
-            m_vertexShader   = LoadShader(m_context, "triangle.vert.spv");
-            m_fragmentShader = LoadShader(m_context, "triangle.frag.spv");
+// TODO: This should not be here! It does not depend on the window we just need access to the swapchain
+// Load default shader
+#if C3D_FVF
+            m_vertexShader = LoadShader(m_context, "meshfvf.vert.spv");
+#elif C3D_MESH_SHADER
+            m_vertexShader = LoadShader(m_context, "meshlet.mesh.spv");
+#else
+            m_vertexShader = LoadShader(m_context, "mesh.vert.spv");
+#endif
+
+            m_fragmentShader = LoadShader(m_context, "mesh.frag.spv");
 
             VkPipelineCache cache = VK_NULL_HANDLE;
 
-            m_triangleLayout = CreatePipelineLayout(m_context, m_setLayout);
-            m_trianglePipeline =
-                CreateGraphicsPipeline(m_context, cache, m_vertexShader, m_fragmentShader, backend->swapchain, m_triangleLayout, "TRIANGLE_SHADER");
+            m_meshLayout   = CreatePipelineLayout(m_context, m_setLayout);
+            m_meshPipeline = CreateGraphicsPipeline(m_context, cache, m_vertexShader, m_fragmentShader, backend->swapchain, m_meshLayout, "MESH_SHADER");
+
+            auto commandBuffer = backend->GetCommandBuffer();
+            auto commandPool   = backend->GetCommandPool();
+
+            m_vertexBuffer.Upload(commandBuffer, commandPool, m_mesh.vertices.GetData(), sizeof(Vertex) * m_mesh.vertices.Size());
+            m_indexBuffer.Upload(commandBuffer, commandPool, m_mesh.indices.GetData(), sizeof(u32) * m_mesh.indices.Size());
+
+#if C3D_MESH_SHADER
+            m_meshBuffer.Upload(commandBuffer, commandPool, m_mesh.meshlets.GetData(), sizeof(Meshlet) * m_mesh.meshlets.Size());
+#endif
         }
 
         return true;
@@ -547,8 +728,8 @@ namespace C3D
                 // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
 
                 vkDestroyDescriptorSetLayout(device, m_setLayout, m_context.allocator);
-                vkDestroyPipelineLayout(device, m_triangleLayout, m_context.allocator);
-                vkDestroyPipeline(device, m_trianglePipeline, m_context.allocator);
+                vkDestroyPipelineLayout(device, m_meshLayout, m_context.allocator);
+                vkDestroyPipeline(device, m_meshPipeline, m_context.allocator);
 
                 vkDestroyShaderModule(device, m_vertexShader, m_context.allocator);
                 vkDestroyShaderModule(device, m_fragmentShader, m_context.allocator);

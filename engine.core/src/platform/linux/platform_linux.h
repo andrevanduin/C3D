@@ -15,7 +15,7 @@
 #include "input/keys.h"
 #include "platform/platform_base.h"
 #include "string/string.h"
-#include "systems/system.h"
+#include "system/system.h"
 
 namespace C3D
 {

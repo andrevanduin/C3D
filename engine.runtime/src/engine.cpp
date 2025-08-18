@@ -2,14 +2,14 @@
 #include "engine.h"
 
 #include "application.h"
+#include "config/config_system.h"
 #include "events/event_system.h"
 #include "logger/logger.h"
 #include "metrics/metrics.h"
 #include "platform/platform.h"
 #include "renderer/render_system.h"
-#include "resources/resource_system.h"
 #include "string/string.h"
-#include "systems/system_manager.h"
+#include "system/system_manager.h"
 #include "time/clock.h"
 
 namespace C3D
@@ -32,7 +32,7 @@ namespace C3D
         /** @brief Keep track of the last time. So we can get a delta between each update. */
         f64 lastTime = 0;
         /** @brief A pointer to the application which the engine can use to call it's methods. */
-        Application* app;
+        Application* app = nullptr;
         /** @brief Application config. */
         ApplicationConfig config;
     };
@@ -64,24 +64,32 @@ namespace C3D
 
         INFO_LOG("System reported: {} threads (including main thread).", threadCount);
 
-        // Setup our frame allocator
-        if (state.config.frameAllocatorSize < MebiBytes(8))
-        {
-            ERROR_LOG("Frame allocator must be >= 8 Mebibytes.");
-            return false;
-        }
-
-        // Create a frame allocator that will be freed after every frame
-        state.frameAllocator.Create("FRAME_ALLOCATOR", state.config.frameAllocatorSize);
-
         SystemManager::OnInit();
 
         Platform::SetOnQuitCallback(Quit);
         Platform::SetOnWindowResizedCallback(OnWindowResizeEvent);
 
         // Init before boot systems
-        SystemManager::RegisterSystem<EventSystem>(EventSystemType);                                                // Event System
-        SystemManager::RegisterSystem<ResourceSystem>(ResourceSystemType, state.config.systemConfigs["Resource"]);  // Resource System
+        SystemManager::RegisterSystem<ConfigSystem>(ConfigSystemType, state.config.systemConfigs["Config"]);  // Configuration system
+        SystemManager::RegisterSystem<EventSystem>(EventSystemType);                                          // Event System
+
+        // Setup our frame allocator
+        u64 frameAllocatorSize = 0;
+        if (!Config.GetProperty("FrameAllocatorSize", frameAllocatorSize))
+        {
+            ERROR_LOG("No 'FrameAllocatorSize' specified in Config.");
+            return false;
+        }
+
+        // Make sure our frame allocator is sufficiently large
+        if (MebiBytes(frameAllocatorSize) < MebiBytes(8))
+        {
+            ERROR_LOG("Frame allocator must be >= 8 Mebibytes.");
+            return false;
+        }
+
+        // Create a frame allocator that will be freed after every frame
+        state.frameAllocator.Create("FRAME_ALLOCATOR", MebiBytes(frameAllocatorSize));
 
         // After the Event system is up and running we register an OnQuit event
         Event.Register(EventCodeApplicationQuit, [](u16 code, void* sender, const EventContext& context) {
@@ -273,7 +281,6 @@ namespace C3D
         }
 
         // Destroy the application config
-        state.config.name.Destroy();
         state.config.rendergraphs.Destroy();
         state.config.systemConfigs.Destroy();
         state.config.windowConfigs.Destroy();

@@ -2,7 +2,7 @@
 #pragma once
 #include "defines.h"
 #include "dynamic_library/dynamic_library.h"
-#include "systems/system.h"
+#include "system/system.h"
 #include "types.h"
 
 namespace C3D

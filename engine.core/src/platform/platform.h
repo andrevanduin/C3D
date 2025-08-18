@@ -68,6 +68,15 @@ namespace C3D
         C3D_API bool HideWindow(const Window& window);
 
         /**
+         * @brief Sets the title of the provided window.
+         *
+         * @param window The window you want to change the title of
+         * @param title The new title
+         * @return True is successful; false otherwise
+         */
+        C3D_API bool SetWindowTitle(Window& window, const String& title);
+
+        /**
          * @brief Performs message pumping which is required to handle windowing and other events OS events.
          *
          * @return True when successful, otherwise false

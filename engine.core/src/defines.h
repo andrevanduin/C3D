@@ -114,6 +114,10 @@ constexpr auto ToUnderlying(E e) noexcept
 #define C3D_NO_INLINE
 #endif
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(arr) sizeof(arr) / sizeof(arr[0])
+#endif
+
 /** @brief Gets the number of bytes from amount of gibibytes (GiB) (amount * 1024*1024*1024) */
 constexpr u64 GibiBytes(const u64 amount) { return amount * 1024 * 1024 * 1024; }
 /** @brief Gets the number of bytes from amount of mebibytes (MiB) (amount * 1024*1024) */

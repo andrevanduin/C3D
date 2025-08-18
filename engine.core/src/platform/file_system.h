@@ -190,6 +190,8 @@ namespace C3D
 
         [[nodiscard]] u64 GetSize() const { return m_size; }
 
+        C3D_INLINE bool AtEndOfFile() const { return m_file.eof(); }
+
         bool isValid;
         u64 bytesWritten;
         u64 bytesRead;

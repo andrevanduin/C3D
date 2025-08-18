@@ -76,15 +76,7 @@ namespace C3D
 
         for (const auto& property : config.properties)
         {
-            if (property.name.IEquals("applicationname"))
-            {
-                outConfig.name = property.GetString();
-            }
-            else if (property.name.IEquals("frameallocatorsize"))
-            {
-                outConfig.frameAllocatorSize = MebiBytes(property.GetI64());
-            }
-            else if (property.name.IEquals("windows"))
+            if (property.name.IEquals("windows"))
             {
                 const auto& windowConfigs = property.GetArray();
                 for (const auto& config : windowConfigs.properties)

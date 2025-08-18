@@ -4,7 +4,7 @@
 #include <events/event_system.h>
 #include <events/types.h>
 #include <exceptions.h>
-#include <systems/system_manager.h>
+#include <system/system_manager.h>
 
 namespace C3D
 {

@@ -4,9 +4,9 @@
 
 struct Vertex
 {
-    float x, y, z;
+    float16_t x, y, z;
     uint8_t nx, ny, nz, nw;
-    float u, v;
+    float16_t u, v;
 };
 
 layout (binding = 0) readonly buffer Vertices 
@@ -23,7 +23,7 @@ void main()
     vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
     vec2 texCoord = vec2(v.u, v.v);
 
-    gl_Position = vec4(position + vec3(0, 0, 0.5), 1.0);
+    gl_Position = vec4(position * vec3(1, 1, 0.5) + vec3(0, 0, 0.5), 1.0);
 
     color = vec4(normal * 0.5 + vec3(0.5), 1.0);
 }

@@ -4,6 +4,7 @@
 #include "memory/allocators/linear_allocator.h"
 #include "system.h"
 
+#define Config C3D::SystemManager::GetSystem<C3D::ConfigSystem>(C3D::SystemType::ConfigSystemType)
 #define Event C3D::SystemManager::GetSystem<C3D::EventSystem>(C3D::SystemType::EventSystemType)
 #define Renderer C3D::SystemManager::GetSystem<C3D::RenderSystem>(C3D::SystemType::RenderSystemType)
 #define Resources C3D::SystemManager::GetSystem<C3D::ResourceSystem>(C3D::SystemType::ResourceSystemType)
@@ -15,6 +16,7 @@ namespace C3D
         RenderSystemType = 0,
         ResourceSystemType,
         EventSystemType,
+        ConfigSystemType,
         MaxKnownSystemType
     };
 

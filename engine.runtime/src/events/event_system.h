@@ -4,7 +4,7 @@
 #include "defines.h"
 #include "event_context.h"
 #include "logger/logger.h"
-#include "systems/system.h"
+#include "system/system.h"
 #include "types.h"
 
 namespace C3D

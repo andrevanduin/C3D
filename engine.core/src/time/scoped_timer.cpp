@@ -10,6 +10,6 @@ namespace C3D
     ScopedTimer::~ScopedTimer()
     {
         auto elapsedTime = Platform::GetAbsoluteTime() - m_startTime;
-        Logger::Info("[SCOPED_TIMER] {} took {:.6}ms", m_name, elapsedTime * 1000);
+        INFO_LOG("{} took {:.6}ms", m_name, elapsedTime * 1000);
     }
 }  // namespace C3D

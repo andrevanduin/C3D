@@ -23,8 +23,6 @@ namespace C3D
         VkPhysicalDevice handle = nullptr;
         /** @brief A struct holding the physical device's properties */
         VkPhysicalDeviceProperties properties;
-        /** @brief A struct holding the physical device's properties2 */
-        VkPhysicalDeviceProperties2 properties2;
         /** @brief A struct holding the physical device's memory properties. */
         VkPhysicalDeviceMemoryProperties memory;
         /** @brief The index of the graphics queue family. */
@@ -40,8 +38,6 @@ namespace C3D
         VkDevice handle = nullptr;
         /** @brief A handle to the device queue. */
         VkQueue queue = nullptr;
-        /** @brief A handle to the command pool. */
-        VkCommandPool commandPool = nullptr;
     };
 
     class VulkanDevice
@@ -77,6 +73,7 @@ namespace C3D
         VkPhysicalDevice GetPhysical() const { return m_physical.handle; }
 
         u32 GetGraphicsFamilyIndex() const { return m_physical.graphicsQueueFamilyIndex; }
+        VkPhysicalDeviceProperties GetProperties() const { return m_physical.properties; }
         VkPhysicalDeviceMemoryProperties GetMemoryProperties() const { return m_physical.memory; }
 
         const DynamicArray<VkSurfaceFormatKHR>& GetSurfaceFormats() const { return m_physical.swapchainSupportInfo.formats; }
@@ -85,9 +82,6 @@ namespace C3D
 
         /** @brief Gets a handle to the device queue. */
         VkQueue GetDeviceQueue() const { return m_logical.queue; }
-
-        /** @brief Gets a handle to the command pool. */
-        VkCommandPool GetCommandPool() const { return m_logical.commandPool; }
 
     private:
         /** @brief Selects the ideal physical GPU present on the system. */

@@ -26,9 +26,9 @@
 #include <sys/sysinfo.h>  // Processor info
 #include <unistd.h>
 
-#include "systems/events/event_system.h"
-#include "systems/input/input_system.h"
-#include "systems/system_manager.h"
+#include "system/events/event_system.h"
+#include "system/input/input_system.h"
+#include "system/system_manager.h"
 
 namespace C3D
 {

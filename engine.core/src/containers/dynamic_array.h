@@ -141,6 +141,21 @@ namespace C3D
         }
 
         /**
+         * @brief Resizes the array to have enough memory for the requested size
+         * The array will fill all newly created empty slots up to size - 1 with the provided value.
+         */
+        void ResizeAndFill(const u64 size, T value)
+        {
+            // Reserve enough capacity
+            Reserve(size);
+            // All new empty slots (from m_size onwards) up to the new size should be filled with default elements
+            const auto extraCount = size - m_size;
+            std::memset(m_elements + m_size, value, extraCount * sizeof(T));
+            // Since we default constructed all elements up-to provided size we now also have size elements
+            m_size = size;
+        }
+
+        /**
          * @brief Resizes the array internally to have capacity = size
          * This operation causes a reallocation (and thus copying of elements) if capacity != size
          */

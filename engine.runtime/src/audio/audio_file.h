@@ -1,9 +1,9 @@
 
 #pragma once
+#include "assets/types.h"
 #include "audio_types.h"
 #include "defines.h"
 #include "minimp3/minimp3_ex.h"
-#include "resources/types.h"
 
 struct stb_vorbis;
 
@@ -15,10 +15,10 @@ namespace C3D
         MP3
     };
 
-    class C3D_API AudioFile : public IResource
+    class C3D_API AudioFile : public IAsset
     {
     public:
-        AudioFile() : IResource(ResourceType::AudioFile) {}
+        AudioFile() : IAsset(AssetType::AudioFile) {}
 
         u64 LoadSamples(u32 chunkSize);
         void* StreamBufferData();

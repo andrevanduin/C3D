@@ -476,6 +476,19 @@ namespace C3D
         return true;
     }
 
+    bool Platform::SetWindowTitle(Window& window, const String& title)
+    {
+        if (!SetWindowTextA(window.platformState->hwnd, title.Data()))
+        {
+            ERROR_LOG("Failed to set window title.");
+            return false;
+        }
+
+        // Copy over the title so it's also reflected in our window struct
+        window.title = title;
+        return true;
+    }
+
     bool Platform::PumpMessages()
     {
         MSG msg;

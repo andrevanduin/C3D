@@ -37,12 +37,20 @@ namespace C3D
         VkShaderModule m_vertexShader;
         VkShaderModule m_fragmentShader;
 
-        VkPipelineLayout m_triangleLayout;
-        VkPipeline m_trianglePipeline;
+        VkPipelineLayout m_meshLayout;
+        VkPipeline m_meshPipeline;
         VkDescriptorSetLayout m_setLayout;
 
+        VkQueryPool m_queryPool;
+
+        f64 m_frameCpuAvg = 0, m_frameGpuAvg = 0, m_frameCpuBegin = 0;
+
+        VulkanBuffer m_scratchBuffer;
         VulkanBuffer m_vertexBuffer;
         VulkanBuffer m_indexBuffer;
+        VulkanBuffer m_meshBuffer;
+
+        u32 m_drawCount = 10;
 
         Mesh m_mesh;
 

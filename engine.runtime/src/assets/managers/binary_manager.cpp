@@ -3,14 +3,13 @@
 
 #include "logger/logger.h"
 #include "platform/file_system.h"
-#include "resources/resource_system.h"
-#include "systems/system_manager.h"
+#include "system/system_manager.h"
 
 namespace C3D
 {
-    ResourceManager<BinaryResource>::ResourceManager() : IResourceManager(MemoryType::Array, ResourceType::Binary, nullptr, "shaders") {}
+    BinaryManager::BinaryManager() : IAssetManager(MemoryType::Array, AssetType::Binary, "shaders") {}
 
-    bool ResourceManager<BinaryResource>::Read(const String& name, BinaryResource& resource)
+    bool BinaryManager::Read(const String& name, BinaryAsset& asset)
     {
         if (name.Empty())
         {
@@ -19,7 +18,7 @@ namespace C3D
         }
 
         // TODO: try different extensions
-        auto fullPath = String::FromFormat("{}/{}/{}", Resources.GetBasePath(), typePath, name);
+        auto fullPath = String::FromFormat("{}/{}/{}", m_assetPath, m_subFolder, name);
 
         File file;
         if (!file.Open(fullPath, FileModeRead | FileModeBinary))
@@ -28,7 +27,7 @@ namespace C3D
             return false;
         }
 
-        resource.fullPath = fullPath;
+        asset.path = fullPath;
 
         u64 fileSize = 0;
         if (!file.Size(&fileSize))
@@ -38,10 +37,10 @@ namespace C3D
             return false;
         }
 
-        resource.data = Memory.Allocate<char>(MemoryType::Array, fileSize);
-        resource.name = name;
+        asset.data = Memory.Allocate<char>(MemoryType::Array, fileSize);
+        asset.name = name;
 
-        if (!file.ReadAll(resource.data, &resource.size))
+        if (!file.ReadAll(asset.data, &asset.size))
         {
             ERROR_LOG("Unable to read binary file: '{}'.", fullPath);
             file.Close();
@@ -52,15 +51,15 @@ namespace C3D
         return true;
     }
 
-    void ResourceManager<BinaryResource>::Cleanup(BinaryResource& resource) const
+    void BinaryManager::Cleanup(BinaryAsset& asset)
     {
-        if (resource.data)
+        if (asset.data)
         {
-            Memory.Free(resource.data);
-            resource.data = nullptr;
+            Memory.Free(asset.data);
+            asset.data = nullptr;
         }
 
-        resource.name.Destroy();
-        resource.fullPath.Destroy();
+        asset.name.Destroy();
+        asset.path.Destroy();
     }
 }  // namespace C3D

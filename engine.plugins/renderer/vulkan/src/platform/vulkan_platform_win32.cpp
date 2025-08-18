@@ -14,7 +14,7 @@
 
 #include <platform/platform.h>
 #include <platform/platform_types.h>
-#include <systems/system_manager.h>
+#include <system/system_manager.h>
 #include <volk.h>
 
 #include "vulkan_context.h"

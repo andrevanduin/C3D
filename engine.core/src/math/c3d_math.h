@@ -329,6 +329,45 @@ namespace C3D
         return att;
     }
 
+    // Internals put in an anonymous namespace to make sure nobody else uses these
+    namespace
+    {
+        union FloatBits {
+            float f;
+            unsigned int ui;
+        };
+    }  // namespace
+
+    /**
+     * @brief Quantize a f32 into half-precision (as defined by IEEE-754 fp16) floating point value
+     * Generates +-inf for overflow, preserves NaN, flushes denormals to zero, rounds to nearest
+     * Representable magnitude range: [6e-5; 65504]. Maximum relative reconstruction error: 5e-4.
+     *
+     * Taken from: https://github.com/zeux/meshoptimizer
+     */
+    C3D_API C3D_INLINE u16 QuantizeHalf(f32 v)
+    {
+        FloatBits u     = { v };
+        unsigned int ui = u.ui;
+
+        int s  = (ui >> 16) & 0x8000;
+        int em = ui & 0x7fffffff;
+
+        // Bias exponent and round to nearest; 112 is relative exponent bias (127-15)
+        int h = (em - (112 << 23) + (1 << 12)) >> 13;
+
+        // Underflow: flush to zero; 113 encodes exponent -14
+        h = (em < (113 << 23)) ? 0 : h;
+
+        // Overflow: infinity; 143 encodes exponent 16
+        h = (em >= (143 << 23)) ? 0x7c00 : h;
+
+        // NaN; note that we convert all types of NaN to qNaN
+        h = (em > (255 << 23)) ? 0x7e00 : h;
+
+        return static_cast<u16>(s | h);
+    }
+
     /** @brief Compares x with edge. Returns 0.0f if x < edge otherwise returns 1.0f. */
     C3D_API C3D_INLINE f32 Step(const f32 edge, const f32 x) { return x < edge ? 0.0f : 1.0f; }
 

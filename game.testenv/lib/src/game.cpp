@@ -8,7 +8,7 @@
 #include <math/ray.h>
 #include <metrics/metrics.h>
 #include <string/cstring.h>
-#include <systems/system_manager.h>
+#include <system/system_manager.h>
 
 #include <glm/gtx/matrix_decompose.hpp>
 

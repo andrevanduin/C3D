@@ -19,12 +19,8 @@ namespace C3D
 
     struct ApplicationConfig
     {
-        /** @brief The name of the application. */
-        String name;
         /** @brief The size of total memory (in MB) that should be allocated to the entire engine/game. */
         u64 memorySize = 1024;
-        /** @brief The size that should be allocated for the per-frame allocator. */
-        u64 frameAllocatorSize = 0;
         /** @brief Flags that indicate certain properties about this application. */
         ApplicationFlagBits flags = ApplicationFlagNone;
         /** @brief An array of window configs. */

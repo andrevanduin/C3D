@@ -4,6 +4,7 @@
 #include <renderer/types.h>
 #include <volk.h>
 
+#include "vulkan_buffer.h"
 #include "vulkan_device.h"
 #include "vulkan_types.h"
 
@@ -26,6 +27,9 @@ namespace C3D
 
         /** @brief The Renderer flags passed by the renderer frontend */
         RendererConfigFlags flags;
+
+        /** @brief A staging buffer used to transfer data from CPU to GPU visible memory. */
+        VulkanBuffer stagingBuffer;
 
 #if defined(_DEBUG)
         /** @brief A pointer to the DebugUtilsMessenger extension object used for debugging purposes.*/

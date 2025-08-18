@@ -34,20 +34,23 @@ namespace C3D
     {
         INFO_LOG("Destroying.");
 
-        // First we free all our memory
-        FreeAll();
-        // Then if we actually own the memory block we free the block
-        if (m_ownsMemory && m_memoryBlock)
+        if (m_id != INVALID_ID_U8)
         {
-            // We own the memory so let's free it
-            Memory.Free(m_memoryBlock);
-        }
-        // Destroy the metrics object associated with this allocator
-        Metrics.DestroyAllocator(m_id, false);
+            // First we free all our memory
+            FreeAll();
+            // Then if we actually own the memory block we free the block
+            if (m_ownsMemory && m_memoryBlock)
+            {
+                // We own the memory so let's free it
+                Memory.Free(m_memoryBlock);
+            }
+            // Destroy the metrics object associated with this allocator
+            Metrics.DestroyAllocator(m_id, false);
 
-        m_memoryBlock = nullptr;
-        m_totalSize   = 0;
-        m_ownsMemory  = false;
+            m_memoryBlock = nullptr;
+            m_totalSize   = 0;
+            m_ownsMemory  = false;
+        }
     }
 
     void* LinearAllocator::AllocateBlock(const MemoryType type, const u64 size, u16 alignment) const
