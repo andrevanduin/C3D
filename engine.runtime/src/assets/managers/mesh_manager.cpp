@@ -160,17 +160,25 @@ namespace C3D
 
         {
             ScopedTimer timer(String::FromFormat("Optimizing mesh: '{}'.", asset.name, vertices.Size()));
-
             DynamicArray<u32> remap;
-            u32 uniqueVertexCount = MeshUtils::GenerateVertexRemap(vertices, indexCount, remap);
+            u32 uniqueVertexCount = 0;
+
+            {
+                ScopedTimer timer("Generating remap");
+                uniqueVertexCount = MeshUtils::GenerateVertexRemap(vertices, indexCount, remap);
+            }
 
             asset.vertices.Resize(uniqueVertexCount);
             asset.indices.Resize(indexCount);
 
-            MeshUtils::RemapVertices(asset, indexCount, vertices, remap);
-            MeshUtils::RemapIndices(asset, indexCount, remap);
+            {
+                ScopedTimer timer("Remapping");
 
-            INFO_LOG("Vertices and indices remapped. Went from {} to {} vertices (reduced by {:.2f}%).", vertices.Size(), uniqueVertexCount,
+                MeshUtils::RemapVertices(asset, indexCount, vertices, remap);
+                MeshUtils::RemapIndices(asset, indexCount, remap);
+            }
+
+            INFO_LOG("Went from {} to {} vertices (reduced by {:.2f}%).", vertices.Size(), uniqueVertexCount,
                      (static_cast<f32>(uniqueVertexCount) - vertices.Size()) / vertices.Size() * -100);
         }
 

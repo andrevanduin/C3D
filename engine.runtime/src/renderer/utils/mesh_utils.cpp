@@ -5,69 +5,6 @@
 
 namespace C3D
 {
-
-    bool MeshUtils::BuildMeshlets(Mesh& mesh)
-    {
-        Meshlet meshlet = {};
-
-        DynamicArray<u8> meshletVertices;
-        meshletVertices.ResizeAndFill(mesh.vertices.Size(), 0xFF);
-
-        for (u32 i = 0; i < mesh.indices.Size(); i += 3)
-        {
-            u32 a = mesh.indices[i + 0];
-            u32 b = mesh.indices[i + 1];
-            u32 c = mesh.indices[i + 2];
-
-            u8& av = meshletVertices[a];
-            u8& bv = meshletVertices[b];
-            u8& cv = meshletVertices[c];
-
-            if (meshlet.vertexCount + (av == 0xFF) + (bv == 0xFF) + (cv == 0xFF) > MESHLET_MAX_VERTICES || meshlet.triangleCount >= MESHLET_MAX_TRIANGLES)
-            {
-                mesh.meshlets.EmplaceBack(meshlet);
-
-                for (u32 j = 0; j < meshlet.vertexCount; ++j)
-                {
-                    meshletVertices[meshlet.vertices[j]] = 0xFF;
-                }
-
-                meshlet = {};
-            }
-
-            if (av == 0xFF)
-            {
-                av                                      = meshlet.vertexCount;
-                meshlet.vertices[meshlet.vertexCount++] = a;
-            }
-
-            if (bv == 0xFF)
-            {
-                bv                                      = meshlet.vertexCount;
-                meshlet.vertices[meshlet.vertexCount++] = b;
-            }
-
-            if (cv == 0xFF)
-            {
-                cv                                      = meshlet.vertexCount;
-                meshlet.vertices[meshlet.vertexCount++] = c;
-            }
-
-            meshlet.indices[meshlet.triangleCount * 3 + 0] = av;
-            meshlet.indices[meshlet.triangleCount * 3 + 1] = bv;
-            meshlet.indices[meshlet.triangleCount * 3 + 2] = cv;
-
-            meshlet.triangleCount++;
-        }
-
-        if (meshlet.triangleCount > 0)
-        {
-            mesh.meshlets.EmplaceBack(meshlet);
-        }
-
-        return true;
-    }
-
     namespace
     {
         constexpr u32 SLOT_EMPTY = -1;
@@ -152,6 +89,68 @@ namespace C3D
         }
     }  // namespace
 
+    bool MeshUtils::BuildMeshlets(Mesh& mesh)
+    {
+        Meshlet meshlet = {};
+
+        DynamicArray<u8> meshletVertices;
+        meshletVertices.ResizeAndFill(mesh.vertices.Size(), 0xFF);
+
+        for (u32 i = 0; i < mesh.indices.Size(); i += 3)
+        {
+            u32 a = mesh.indices[i + 0];
+            u32 b = mesh.indices[i + 1];
+            u32 c = mesh.indices[i + 2];
+
+            u8& av = meshletVertices[a];
+            u8& bv = meshletVertices[b];
+            u8& cv = meshletVertices[c];
+
+            if (meshlet.vertexCount + (av == 0xFF) + (bv == 0xFF) + (cv == 0xFF) > MESHLET_MAX_VERTICES || meshlet.triangleCount >= MESHLET_MAX_TRIANGLES)
+            {
+                mesh.meshlets.EmplaceBack(meshlet);
+
+                for (u32 j = 0; j < meshlet.vertexCount; ++j)
+                {
+                    meshletVertices[meshlet.vertices[j]] = 0xFF;
+                }
+
+                meshlet = {};
+            }
+
+            if (av == 0xFF)
+            {
+                av                                      = meshlet.vertexCount;
+                meshlet.vertices[meshlet.vertexCount++] = a;
+            }
+
+            if (bv == 0xFF)
+            {
+                bv                                      = meshlet.vertexCount;
+                meshlet.vertices[meshlet.vertexCount++] = b;
+            }
+
+            if (cv == 0xFF)
+            {
+                cv                                      = meshlet.vertexCount;
+                meshlet.vertices[meshlet.vertexCount++] = c;
+            }
+
+            meshlet.indices[meshlet.triangleCount * 3 + 0] = av;
+            meshlet.indices[meshlet.triangleCount * 3 + 1] = bv;
+            meshlet.indices[meshlet.triangleCount * 3 + 2] = cv;
+
+            meshlet.triangleCount++;
+        }
+
+        if (meshlet.triangleCount > 0)
+        {
+            mesh.meshlets.EmplaceBack(meshlet);
+        }
+
+        return true;
+    }
+
     u32 MeshUtils::GenerateVertexRemap(const DynamicArray<Vertex>& vertices, u32 indexCount, DynamicArray<u32>& outRemap)
     {
         VertexHasher hasher = {};
@@ -176,7 +175,7 @@ namespace C3D
 
         for (u32 i = 0; i < indexCount; ++i)
         {
-            C3D_ASSERT(i < vertexCount);
+            C3D_ASSERT_DEBUG(i < vertexCount);
 
             if (outRemap[i] != SLOT_EMPTY)
             {
@@ -201,7 +200,8 @@ namespace C3D
         // Cleanup our table
         Memory.Free(table);
 
-        C3D_ASSERT_MSG(nextVertex <= vertexCount, "The remapped number of vertices must be <= the original number of vertices");
+        C3D_ASSERT_DEBUG_MSG(nextVertex <= vertexCount, "The remapped number of vertices must be <= the original number of vertices");
+
         return nextVertex;
     }
 
@@ -221,7 +221,7 @@ namespace C3D
     {
         for (u32 i = 0; i < indexCount; ++i)
         {
-            C3D_ASSERT(remap[i] != SLOT_EMPTY);
+            C3D_ASSERT_DEBUG(remap[i] != SLOT_EMPTY);
 
             mesh.indices[i] = remap[i];
         }

@@ -15,7 +15,6 @@ namespace C3D
     constexpr u32 MIN_IMAGES = 3;
 
 #define C3D_MESH_SHADER 1
-#define C3D_FVF 0
 
 #define VK_CHECK_SWAPCHAIN(call, msg)                                                                                      \
     {                                                                                                                      \

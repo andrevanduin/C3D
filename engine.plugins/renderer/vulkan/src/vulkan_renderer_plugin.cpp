@@ -71,11 +71,8 @@ namespace C3D
 
         VkDescriptorSetLayoutCreateInfo setCreateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
         setCreateInfo.flags                           = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-
-#if !C3D_FVF
-        setCreateInfo.bindingCount = ARRAY_SIZE(setBindings);
-        setCreateInfo.pBindings    = setBindings;
-#endif
+        setCreateInfo.bindingCount                    = ARRAY_SIZE(setBindings);
+        setCreateInfo.pBindings                       = setBindings;
 
         VK_CHECK(vkCreateDescriptorSetLayout(device, &setCreateInfo, context.allocator, &setLayout));
 
@@ -117,29 +114,7 @@ namespace C3D
         createInfo.pStages    = stages;
 
         VkPipelineVertexInputStateCreateInfo vertexInput = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-#if C3D_FVF
-        VkVertexInputBindingDescription fvfBindings[1] = {};
-        fvfBindings[0].binding                         = 0;
-        fvfBindings[0].stride                          = sizeof(Vertex);
-        fvfBindings[0].inputRate                       = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        VkVertexInputAttributeDescription fvfAttributes[3] = {};
-        fvfAttributes[0].location                          = 0;
-        fvfAttributes[0].format                            = VK_FORMAT_R16G16B16_SFLOAT;
-        fvfAttributes[0].offset                            = offsetof(Vertex, vx);
-        fvfAttributes[1].location                          = 1;
-        fvfAttributes[1].format                            = VK_FORMAT_R8G8B8A8_UINT;
-        fvfAttributes[1].offset                            = offsetof(Vertex, nx);
-        fvfAttributes[2].location                          = 2;
-        fvfAttributes[2].format                            = VK_FORMAT_R16G16_SFLOAT;
-        fvfAttributes[2].offset                            = offsetof(Vertex, tx);
-
-        vertexInput.vertexBindingDescriptionCount   = ARRAY_SIZE(fvfBindings);
-        vertexInput.pVertexBindingDescriptions      = fvfBindings;
-        vertexInput.vertexAttributeDescriptionCount = ARRAY_SIZE(fvfAttributes);
-        vertexInput.pVertexAttributeDescriptions    = fvfAttributes;
-#endif
-        createInfo.pVertexInputState = &vertexInput;
+        createInfo.pVertexInputState                     = &vertexInput;
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
         inputAssembly.topology                               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -288,21 +263,12 @@ namespace C3D
             return false;
         }
 
-#if C3D_FVF
-        if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(128), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-        {
-            ERROR_LOG("Failed to create vertex buffer.");
-            return false;
-        }
-#else
         if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(128), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create vertex buffer.");
             return false;
         }
-#endif
 
         if (!m_indexBuffer.Create(&m_context, "INDEX", MebiBytes(128), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
@@ -453,12 +419,7 @@ namespace C3D
 
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshPipeline);
 
-#if C3D_FVF
-            VkDeviceSize vbOffset = 0;
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, m_vertexBuffer.GetHandlePtr(), &vbOffset);
-            vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
-#elif C3D_MESH_SHADER
+#if C3D_MESH_SHADER
             VkDescriptorBufferInfo vbInfo = {};
             vbInfo.buffer                 = m_vertexBuffer.GetHandle();
             vbInfo.offset                 = 0;
@@ -664,9 +625,7 @@ namespace C3D
         {
 // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
 // Load default shader
-#if C3D_FVF
-            m_vertexShader = LoadShader(m_context, "meshfvf.vert.spv");
-#elif C3D_MESH_SHADER
+#if C3D_MESH_SHADER
             m_vertexShader = LoadShader(m_context, "meshlet.mesh.spv");
 #else
             m_vertexShader = LoadShader(m_context, "mesh.vert.spv");
