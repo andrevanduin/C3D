@@ -119,7 +119,5 @@ namespace C3D
         VArray<i32> m_fs;
 
         FaceFormat m_faceFormat = FaceFormat::Unknown;
-
-        String m_line;
     };
 }  // namespace C3D

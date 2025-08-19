@@ -13,8 +13,6 @@ namespace C3D
         DynamicArray<u8> meshletVertices;
         meshletVertices.ResizeAndFill(mesh.vertices.Size(), 0xFF);
 
-        constexpr auto maxTriangles = 126 / 3;
-
         for (u32 i = 0; i < mesh.indices.Size(); i += 3)
         {
             u32 a = mesh.indices[i + 0];
@@ -25,7 +23,7 @@ namespace C3D
             u8& bv = meshletVertices[b];
             u8& cv = meshletVertices[c];
 
-            if (meshlet.vertexCount + (av == 0xFF) + (bv == 0xFF) + (cv == 0xFF) > 64 || meshlet.triangleCount + 1 > maxTriangles)
+            if (meshlet.vertexCount + (av == 0xFF) + (bv == 0xFF) + (cv == 0xFF) > MESHLET_MAX_VERTICES || meshlet.triangleCount >= MESHLET_MAX_TRIANGLES)
             {
                 mesh.meshlets.EmplaceBack(meshlet);
 

@@ -7,11 +7,13 @@
 
 namespace C3D
 {
+    constexpr auto MESHLET_MAX_VERTICES  = 64;
+    constexpr auto MESHLET_MAX_TRIANGLES = 126;
+
     struct Meshlet
     {
-        u32 vertices[64];
-        // NOTE: Divisible by 3 so good for up to 42 triangles
-        u8 indices[126];
+        u32 vertices[MESHLET_MAX_VERTICES];
+        u8 indices[MESHLET_MAX_TRIANGLES * 3];
         u8 triangleCount = 0;
         u8 vertexCount   = 0;
     };

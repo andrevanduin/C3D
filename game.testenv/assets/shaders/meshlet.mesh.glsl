@@ -5,12 +5,12 @@
 #extension GL_EXT_shader_explicit_arithmetic_types : require
 #extension GL_EXT_mesh_shader : require
 
-layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-layout (triangles, max_vertices = 64, max_primitives = 42) out;
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+layout (triangles, max_vertices = 64, max_primitives = 126) out;
 
 struct Vertex
 {
-    float16_t x, y, z;
+    float16_t x, y, z, w;
     uint8_t nx, ny, nz, nw;
     float16_t u, v;
 };
@@ -23,8 +23,8 @@ layout (binding = 0) readonly buffer Vertices
 struct Meshlet
 {
     uint vertices[64];
-    // NOTE: Divisible by 3 so good for up to 42 triangles
-    uint8_t indices[126];
+    // NOTE: Up to 126 triangles (3 indices per triangle)
+    uint8_t indices[126 * 3];
     uint8_t triangleCount;
     uint8_t vertexCount;
 };
@@ -39,8 +39,12 @@ layout (location = 0) out vec4 color[];
 void main()
 {
     uint mi = gl_WorkGroupID.x;
+    uint ti = gl_LocalInvocationID.x;
 
-    for (uint i = 0; i < uint(meshlets[mi].vertexCount); ++i)
+    uint vertexCount = meshlets[mi].vertexCount;
+    uint triangleCount = meshlets[mi].triangleCount;
+
+    for (uint i = ti; i < vertexCount; i += 32) 
     {
         uint vi = meshlets[mi].vertices[i];
         
@@ -54,10 +58,13 @@ void main()
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
     }
 
-    SetMeshOutputsEXT(meshlets[mi].vertexCount, meshlets[mi].triangleCount);
-
-    for (int i = 0; i < meshlets[mi].triangleCount; i++)
+    for (uint i = ti; i < triangleCount; i += 32)
     {
         gl_PrimitiveTriangleIndicesEXT[i] = uvec3(meshlets[mi].indices[i * 3 + 0], meshlets[mi].indices[i * 3 + 1], meshlets[mi].indices[i * 3 + 2]);
+    }
+
+    if (ti == 0)
+    {
+        SetMeshOutputsEXT(meshlets[mi].vertexCount, meshlets[mi].triangleCount);
     }
 }

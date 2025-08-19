@@ -457,11 +457,7 @@ namespace C3D
             VkDeviceSize vbOffset = 0;
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, m_vertexBuffer.GetHandlePtr(), &vbOffset);
             vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
-
-            for (u32 i = 0; i < m_drawCount; ++i)
-            {
-                vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
-            }
+            vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
 #elif C3D_MESH_SHADER
             VkDescriptorBufferInfo vbInfo = {};
             vbInfo.buffer                 = m_vertexBuffer.GetHandle();
@@ -487,11 +483,7 @@ namespace C3D
             descriptors[1].pBufferInfo     = &mbInfo;
 
             vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshLayout, 0, ARRAY_SIZE(descriptors), descriptors);
-
-            for (u32 i = 0; i < m_drawCount; ++i)
-            {
-                vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size(), 1, 1);
-            }
+            vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size(), 1, 1);
 #else
             VkDescriptorBufferInfo vbInfo = {};
             vbInfo.buffer                 = m_vertexBuffer.GetHandle();
@@ -508,11 +500,7 @@ namespace C3D
             vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshLayout, 0, ARRAY_SIZE(descriptors), descriptors);
 
             vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
-
-            for (u32 i = 0; i < m_drawCount; ++i)
-            {
-                vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
-            }
+            vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
 #endif
         }
 
@@ -590,8 +578,7 @@ namespace C3D
 
         Platform::SetWindowTitle(
             window, String::FromFormat("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; meshlets: {}", m_frameCpuAvg, m_frameGpuAvg,
-                                       m_mesh.indices.Size() / 3 * m_drawCount, m_mesh.vertices.Size() * m_drawCount, m_mesh.indices.Size() * m_drawCount,
-                                       m_mesh.meshlets.Size() * m_drawCount));
+                                       m_mesh.indices.Size() / 3, m_mesh.vertices.Size(), m_mesh.indices.Size(), m_mesh.meshlets.Size()));
 
         // Increment the frame index since we have moved on to the next frame
         backendState->frameIndex++;

@@ -50,8 +50,6 @@ namespace C3D
         VulkanBuffer m_indexBuffer;
         VulkanBuffer m_meshBuffer;
 
-        u32 m_drawCount = 10;
-
         Mesh m_mesh;
 
         VulkanContext m_context;

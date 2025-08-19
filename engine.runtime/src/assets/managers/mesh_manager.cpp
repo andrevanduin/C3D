@@ -73,14 +73,11 @@ namespace C3D
                 return false;
             }
 
-            // Start off all arrays at a reasonable capacity'
+            // Start off all arrays at a reasonable capacity
             m_vs.Create();
             m_vns.Create();
             m_vts.Create();
             m_fs.Create();
-
-            // Reserve enough space in the line to hold all data we might find
-            m_line.Reserve(512);
 
             char buffer[65536];
 
@@ -130,34 +127,6 @@ namespace C3D
 
             std::fclose(file);
 
-            if (0)
-            {
-                // Read the actual data this time
-                while (m_file.ReadLine(m_line))
-                {
-                    // Skip blank lines
-                    if (m_line.Empty()) continue;
-
-                    // Check based on the first character in the line
-                    switch (m_line[0])
-                    {
-                        case '#':   // Comment so we skip this line
-                        case ' ':   // Lines starting with whitespace we can safely ignore
-                        case '\n':  // Lines starting with a newline character we can ignore
-                            continue;
-                        case 'v':  // Line starts with 'v' meaning it will contain vertex data
-                            ObjParseVertexLine(m_line.Data());
-                            break;
-                        case 'f':  // Line starts with 'f' meaning it will contain face data
-                            ObjParseFaceLine(m_line.Data());
-                            break;
-                        default:
-                            INFO_LOG("Skipped line: '{}' since we have no parsing rule for it.", m_line);
-                            break;
-                    }
-                }
-            }
-
             // Reserve enough space for all the indices which is (m_fs.size / 3) since every face entry contains 3 elements (v/vt/vn)
             indexCount = m_fs.size / 3;
 
@@ -206,10 +175,9 @@ namespace C3D
         }
 
         // TODO: Optimize the mesh further to improve rendering performance
+        // Check MeshOptimizer
 
         // Cleanup our internal data and reset our counters etc.
-        m_line.Destroy();
-
         m_vs.Destroy();
         m_vns.Destroy();
         m_vts.Destroy();
