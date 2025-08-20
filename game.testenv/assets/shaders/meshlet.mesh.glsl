@@ -6,7 +6,6 @@
 
 #extension GL_EXT_shader_explicit_arithmetic_types : require
 #extension GL_EXT_mesh_shader : require
-#extension GL_GOOGLE_include_directive : require
 
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 layout (triangles, max_vertices = 64, max_primitives = 126) out;

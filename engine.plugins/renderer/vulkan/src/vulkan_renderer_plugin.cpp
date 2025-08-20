@@ -1,7 +1,6 @@
 
 #include "vulkan_renderer_plugin.h"
 
-#include <assets/managers/binary_manager.h>
 #include <assets/managers/mesh_manager.h>
 #include <config/config_system.h>
 #include <engine.h>
@@ -11,6 +10,7 @@
 #include <platform/platform.h>
 #include <platform/platform_types.h>
 #include <renderer/utils/mesh_utils.h>
+#include <shaderc/shaderc.h>
 #include <system/system_manager.h>
 
 #include "platform/vulkan_platform.h"
@@ -23,100 +23,6 @@
 
 namespace C3D
 {
-    VkPipeline CreateGraphicsPipeline(VulkanContext& context, VkPipelineCache pipelineCache, VkShaderModule vs, VkShaderModule fs, VulkanSwapchain& swapchain,
-                                      VkPipelineLayout layout, const char* shaderName, bool meshShadingEnabled)
-    {
-        VkGraphicsPipelineCreateInfo createInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-        createInfo.layout                       = layout;
-
-        VkPipelineShaderStageCreateInfo stages[2] = {};
-
-        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-
-        if (meshShadingEnabled)
-        {
-            stages[0].stage = VK_SHADER_STAGE_MESH_BIT_EXT;
-        }
-        else
-        {
-            stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        }
-
-        stages[0].module = vs;
-        stages[0].pName  = "main";
-
-        stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module = fs;
-        stages[1].pName  = "main";
-
-        createInfo.stageCount = 2;
-        createInfo.pStages    = stages;
-
-        VkPipelineVertexInputStateCreateInfo vertexInput = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-        createInfo.pVertexInputState                     = &vertexInput;
-
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-        inputAssembly.topology                               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        createInfo.pInputAssemblyState                       = &inputAssembly;
-
-        VkPipelineViewportStateCreateInfo viewportState = { VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-        viewportState.viewportCount                     = 1;
-        viewportState.scissorCount                      = 1;
-        createInfo.pViewportState                       = &viewportState;
-
-        VkPipelineRasterizationStateCreateInfo rasterizationState = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-        rasterizationState.lineWidth                              = 1.f;
-        rasterizationState.frontFace                              = VK_FRONT_FACE_CLOCKWISE;
-        rasterizationState.cullMode                               = VK_CULL_MODE_BACK_BIT;
-        createInfo.pRasterizationState                            = &rasterizationState;
-
-        VkPipelineMultisampleStateCreateInfo multiSampleState = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-        multiSampleState.rasterizationSamples                 = VK_SAMPLE_COUNT_1_BIT;
-        createInfo.pMultisampleState                          = &multiSampleState;
-
-        VkPipelineDepthStencilStateCreateInfo depthStencilState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-        createInfo.pDepthStencilState                           = &depthStencilState;
-
-        VkPipelineColorBlendAttachmentState colorAttachmentState = {};
-        colorAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-
-        VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-        colorBlendState.logicOpEnable                       = VK_FALSE;
-        colorBlendState.logicOp                             = VK_LOGIC_OP_COPY;
-        colorBlendState.attachmentCount                     = 1;
-        colorBlendState.pAttachments                        = &colorAttachmentState;
-        createInfo.pColorBlendState                         = &colorBlendState;
-
-        VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-
-        VkPipelineDynamicStateCreateInfo dynamicState = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-        dynamicState.dynamicStateCount                = 2;
-        dynamicState.pDynamicStates                   = dynamicStates;
-        createInfo.pDynamicState                      = &dynamicState;
-
-        // NOTE: Because we are using dynamic rendering this can be set to VK_NULL_HANDLE
-        createInfo.renderPass         = VK_NULL_HANDLE;
-        createInfo.basePipelineHandle = VK_NULL_HANDLE;
-        createInfo.basePipelineIndex  = -1;
-
-        // NOTE: Because we are using dynamic rendering we need to provide this structure to pNext of createInfo
-        VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-        pipelineRenderingCreateInfo.colorAttachmentCount          = 1;
-
-        // TODO: Quite bad since this assumes we will always have the same single format as was intially picked for the provided swapchain
-        auto format                                         = swapchain.GetImageFormat();
-        pipelineRenderingCreateInfo.pColorAttachmentFormats = &format;
-        createInfo.pNext                                    = &pipelineRenderingCreateInfo;
-
-        VkPipeline pipeline;
-        VK_CHECK(vkCreateGraphicsPipelines(context.device.GetLogical(), pipelineCache, 1, &createInfo, context.allocator, &pipeline));
-
-        VK_SET_DEBUG_OBJECT_NAME(&context, VK_OBJECT_TYPE_PIPELINE, pipeline, String::FromFormat("PIPELINE_{}", shaderName));
-
-        return pipeline;
-    }
-
     VkQueryPool CreateQueryPool(VulkanContext& context, u32 queryCount)
     {
         VkQueryPoolCreateInfo createInfo = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
@@ -173,6 +79,14 @@ namespace C3D
         }
 
         volkLoadDevice(m_context.device.GetLogical());
+
+        // Initialize shaderc
+        m_context.shaderCompiler = shaderc_compiler_initialize();
+        if (!m_context.shaderCompiler)
+        {
+            ERROR_LOG("Failed to initialize shaderc compiler.");
+            return false;
+        }
 
         // Create our query pool
         m_queryPool = CreateQueryPool(m_context, 128);
@@ -252,6 +166,12 @@ namespace C3D
         Event.UnregisterAll(EventCodeDebug0);
 
         MeshManager::Cleanup(m_mesh);
+
+        if (m_context.shaderCompiler)
+        {
+            shaderc_compiler_release(m_context.shaderCompiler);
+            m_context.shaderCompiler = nullptr;
+        }
 
         INFO_LOG("Destroying Vulkan buffers.");
         m_vertexBuffer.Destroy();
@@ -555,21 +475,57 @@ namespace C3D
 
         {
             // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
-            VkPipelineCache cache = VK_NULL_HANDLE;
+
+            if (!m_meshShaderModule.Create(&m_context, "mesh.vert"))
+            {
+                ERROR_LOG("Failed to create ShaderModule.");
+                return false;
+            }
+
+            if (!m_fragmentShaderModule.Create(&m_context, "mesh.frag"))
+            {
+                ERROR_LOG("Failed to create ShaderModule.");
+                return false;
+            }
+
+            VulkanShaderCreateInfo createInfo;
+            createInfo.context            = &m_context;
+            createInfo.name               = "MESH_SHADER";
+            createInfo.cache              = VK_NULL_HANDLE;
+            createInfo.swapchain          = &backend->swapchain;
+            createInfo.meshShadingEnabled = false;
+
+            const VulkanShaderModule* meshModules[] = { &m_meshShaderModule, &m_fragmentShaderModule };
+            createInfo.modules                      = meshModules;
+            createInfo.numModules                   = ARRAY_SIZE(meshModules);
+
+            if (!m_meshShader.Create(createInfo))
+            {
+                ERROR_LOG("Failed to create MeshShader.");
+                return false;
+            }
 
             if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
             {
-                if (!m_meshletShader.Create(&m_context, cache, backend->swapchain, "MESHLET_SHADER", "meshlet.mesh.spv", "mesh.frag.spv", true))
+                if (!m_meshletShaderModule.Create(&m_context, "meshlet.mesh"))
+                {
+                    ERROR_LOG("Failed to create ShaderModule.");
+                    return false;
+                }
+
+                // For the meshlet shader only the name and one of the modules changes
+                createInfo.name = "MESHLET_SHADER";
+
+                const VulkanShaderModule* meshletModules[] = { &m_meshletShaderModule, &m_fragmentShaderModule };
+                createInfo.modules                         = meshletModules;
+                createInfo.numModules                      = ARRAY_SIZE(meshletModules);
+                createInfo.meshShadingEnabled              = true;
+
+                if (!m_meshletShader.Create(createInfo))
                 {
                     ERROR_LOG("Failed to create MeshletShader.");
                     return false;
                 }
-            }
-
-            if (!m_meshShader.Create(&m_context, cache, backend->swapchain, "MESH_SHADER", "mesh.vert.spv", "mesh.frag.spv", false))
-            {
-                ERROR_LOG("Failed to create MeshShader.");
-                return false;
             }
 
             auto commandBuffer = backend->GetCommandBuffer();
@@ -608,11 +564,15 @@ namespace C3D
             {
                 // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
                 m_meshShader.Destroy();
+                m_meshShaderModule.Destroy();
 
                 if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
                 {
                     m_meshletShader.Destroy();
+                    m_meshletShaderModule.Destroy();
                 }
+
+                m_fragmentShaderModule.Destroy();
             }
 
             INFO_LOG("Destoying Command Pools")

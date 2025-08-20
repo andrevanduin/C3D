@@ -7,6 +7,7 @@
 namespace C3D
 {
     struct VulkanContext;
+    struct VulkanShaderModule;
 
     struct DescriptorInfo
     {
@@ -37,11 +38,28 @@ namespace C3D
         };
     };
 
+    /** @brief A structure used as input for creating a shader. */
+    struct VulkanShaderCreateInfo
+    {
+        /** @brief The name of the shader. Used for logging and debugging purposes. */
+        const char* name = nullptr;
+        /** @brief An array of ShaderModules that should be used by this shader. */
+        const VulkanShaderModule** modules = nullptr;
+        /** @brief The number of ShaderModules in the provided array. */
+        u32 numModules = 0;
+
+        VulkanContext* context     = nullptr;
+        VulkanSwapchain* swapchain = nullptr;
+
+        bool meshShadingEnabled = false;
+
+        VkPipelineCache cache = VK_NULL_HANDLE;
+    };
+
     class VulkanShader
     {
     public:
-        bool Create(VulkanContext* context, VkPipelineCache pipelineCache, VulkanSwapchain& swapchain, const char* name, const char* vertexShaderName,
-                    const char* fragmentShaderName, bool meshShadingEnabled);
+        bool Create(const VulkanShaderCreateInfo& createInfo);
 
         void Bind(VkCommandBuffer commandBuffer) const;
         void PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const;
@@ -60,8 +78,8 @@ namespace C3D
 
         VkPipelineBindPoint m_bindPoint;
 
-        VkShaderModule m_vertexShaderModule   = nullptr;
-        VkShaderModule m_fragmentShaderModule = nullptr;
+        VulkanShaderModule** m_shaderModules = nullptr;
+        u32 m_numShaderModules               = 0;
 
         VkDescriptorSetLayout m_setLayout = nullptr;
         VkPipelineLayout m_layout         = nullptr;

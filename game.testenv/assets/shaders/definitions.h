@@ -1,4 +1,3 @@
-
 struct Vertex
 {
     float16_t x, y, z, w;

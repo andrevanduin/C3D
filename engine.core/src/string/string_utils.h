@@ -181,7 +181,7 @@ namespace C3D::StringUtils
         return elements;
     }
 
-    /*
+    /**
      * @brief Checks if provided string is empty or only contains whitespace
      *
      * @param string The string that you want to check.
@@ -199,6 +199,8 @@ namespace C3D::StringUtils
         }
         return true;
     }
+
+    C3D_API String Join(const char** array, u32 size, char delimiter);
 
     template <class T, class Allocator>
     C3D_API String Join(const DynamicArray<T, Allocator>& array, char delimiter)

@@ -14,7 +14,7 @@ namespace C3D
         Image,
         Material,
         Mesh,
-        Shader,
+        ShaderSource,
         BitmapFont,
         SystemFont,
         Scene,

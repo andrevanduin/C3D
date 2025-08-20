@@ -8,6 +8,8 @@
 #include "vulkan_device.h"
 #include "vulkan_types.h"
 
+struct shaderc_compiler;
+
 namespace C3D
 {
     struct VulkanContext
@@ -35,5 +37,8 @@ namespace C3D
         /** @brief A pointer to the DebugUtilsMessenger extension object used for debugging purposes.*/
         VkDebugUtilsMessengerEXT debugMessenger;
 #endif
+
+        /** @brief The shaderc compiler used to compile glsl text blobs to SPIR-V. */
+        shaderc_compiler* shaderCompiler = nullptr;
     };
 }  // namespace C3D

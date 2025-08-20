@@ -1,7 +1,6 @@
 #version 450
 
 #extension GL_EXT_shader_explicit_arithmetic_types : require
-#extension GL_GOOGLE_include_directive : require
 
 #include "definitions.h"
 

@@ -51,8 +51,9 @@ namespace C3D
         // Fill in all the structures for our extensions
 
         // 16-Bit storage
-        VkPhysicalDeviceVulkan11Features device11Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
-        device11Features.storageBuffer16BitAccess         = VK_TRUE;
+        VkPhysicalDeviceVulkan11Features device11Features   = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+        device11Features.storageBuffer16BitAccess           = VK_TRUE;
+        device11Features.uniformAndStorageBuffer16BitAccess = VK_TRUE;
 
         createInfo.pNext = &device11Features;
 

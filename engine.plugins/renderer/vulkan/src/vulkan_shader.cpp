@@ -1,33 +1,36 @@
 
 #include "vulkan_shader.h"
 
-#include <assets/managers/binary_manager.h>
-
 #include "vulkan_context.h"
+#include "vulkan_shader_module.h"
 #include "vulkan_utils.h"
 
 namespace C3D
 {
-    bool VulkanShader::Create(VulkanContext* context, VkPipelineCache pipelineCache, VulkanSwapchain& swapchain, const char* name, const char* vertexShaderName,
-                              const char* fragmentShaderName, bool meshShadingEnabled)
+    bool VulkanShader::Create(const VulkanShaderCreateInfo& createInfo)
     {
-        m_context            = context;
-        m_meshShadingEnabled = meshShadingEnabled;
-        m_name               = name;
+        INFO_LOG("Creating: '{}'.", createInfo.name);
 
-        INFO_LOG("Creating: '{}'.", m_name);
+        m_context            = createInfo.context;
+        m_name               = createInfo.name;
+        m_meshShadingEnabled = createInfo.meshShadingEnabled;
 
-        if (!LoadShaderModule(vertexShaderName, m_vertexShaderModule))
+        if (createInfo.numModules == 0)
         {
-            ERROR_LOG("Failed to create ShaderModule.");
+            ERROR_LOG("A VulkanShader needs at least one module.");
             return false;
         }
 
-        if (!LoadShaderModule(fragmentShaderName, m_fragmentShaderModule))
+        if (!createInfo.modules)
         {
-            ERROR_LOG("Failed to create ShaderModule.");
+            ERROR_LOG("No valid ShaderModules provided.");
             return false;
         }
+
+        // Copy over the pointers to the shader modules we are going to be using
+        m_numShaderModules = createInfo.numModules;
+        m_shaderModules    = Memory.Allocate<VulkanShaderModule*>(MemoryType::Shader, m_numShaderModules);
+        std::memcpy(m_shaderModules, createInfo.modules, sizeof(VulkanShaderModule*) * m_numShaderModules);
 
         if (!CreateSetLayout())
         {
@@ -41,7 +44,7 @@ namespace C3D
             return false;
         }
 
-        if (!CreateGraphicsPipeline(pipelineCache, swapchain))
+        if (!CreateGraphicsPipeline(createInfo.cache, *createInfo.swapchain))
         {
             ERROR_LOG("Failed to create Graphics Pipeline.");
             return false;
@@ -65,45 +68,24 @@ namespace C3D
 
     void VulkanShader::Destroy()
     {
-        INFO_LOG("Destroying: '{}'.", m_name);
-
-        auto device = m_context->device.GetLogical();
-
-        vkDestroyDescriptorUpdateTemplate(device, m_updateTemplate, m_context->allocator);
-        vkDestroyDescriptorSetLayout(device, m_setLayout, m_context->allocator);
-        vkDestroyPipelineLayout(device, m_layout, m_context->allocator);
-        vkDestroyPipeline(device, m_pipeline, m_context->allocator);
-
-        vkDestroyShaderModule(device, m_vertexShaderModule, m_context->allocator);
-        vkDestroyShaderModule(device, m_fragmentShaderModule, m_context->allocator);
-    }
-
-    bool VulkanShader::LoadShaderModule(const char* name, VkShaderModule& module)
-    {
-        BinaryManager binaryManager;
-        BinaryAsset binary;
-
-        if (!binaryManager.Read(name, binary))
+        if (m_context)
         {
-            ERROR_LOG("Failed to read the binary source for: '{}'.", name);
-            return false;
+            INFO_LOG("Destroying: '{}'.", m_name);
+
+            auto device = m_context->device.GetLogical();
+
+            vkDestroyDescriptorUpdateTemplate(device, m_updateTemplate, m_context->allocator);
+            vkDestroyDescriptorSetLayout(device, m_setLayout, m_context->allocator);
+            vkDestroyPipelineLayout(device, m_layout, m_context->allocator);
+            vkDestroyPipeline(device, m_pipeline, m_context->allocator);
+
+            if (m_shaderModules)
+            {
+                Memory.Free(m_shaderModules);
+                m_shaderModules    = nullptr;
+                m_numShaderModules = 0;
+            }
         }
-
-        VkShaderModuleCreateInfo createInfo = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-        createInfo.codeSize                 = binary.size;
-        createInfo.pCode                    = reinterpret_cast<const u32*>(binary.data);
-
-        auto result = vkCreateShaderModule(m_context->device.GetLogical(), &createInfo, m_context->allocator, &module);
-        if (!VulkanUtils::IsSuccess(result))
-        {
-            ERROR_LOG("Failed to create shader module: '{}' with error: '{}'.", name, VulkanUtils::ResultString(result));
-            return false;
-        }
-
-        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_SHADER_MODULE, module, String::FromFormat("SHADER_MODULE_{}", name));
-
-        BinaryManager::Cleanup(binary);
-        return true;
     }
 
     bool VulkanShader::CreateSetLayout()
@@ -186,12 +168,12 @@ namespace C3D
             stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
         }
 
-        stages[0].module = m_vertexShaderModule;
+        stages[0].module = m_shaderModules[0]->GetHandle();
         stages[0].pName  = "main";
 
         stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module = m_fragmentShaderModule;
+        stages[1].module = m_shaderModules[1]->GetHandle();
         stages[1].pName  = "main";
 
         createInfo.stageCount = 2;

@@ -32,6 +32,21 @@ namespace C3D
         }
     }
 
+    String StringUtils::Join(const char** array, u32 size, char delimiter)
+    {
+        String result;
+
+        for (u32 i = 0; i < size; i++)
+        {
+            result += String(array[i]);
+            if (i != size - 1)
+            {
+                result += delimiter;
+            }
+        }
+        return result;
+    }
+
     i32 StringUtils::ParseI32(const char* s, const char** end)
     {
         // Skip all whitespace

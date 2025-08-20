@@ -856,7 +856,29 @@ namespace C3D
             return end();
         }
 
+        /**
+         * @brief Checks if the string contains the provided char
+         *
+         * @param c The char to check for
+         * @return True if the string contains c; false otherwise
+         */
         [[nodiscard]] bool Contains(const char c) const { return std::find(begin(), end(), c) != end(); }
+
+        /**
+         * @brief Checks if the string contains the provided sequence
+         *
+         * @param sequence The sequence of characters to look for
+         * @return True if the string contains sequence; false otherwise
+         */
+        [[nodiscard]] bool Contains(const char* sequence) const { return std::strstr(m_data, sequence) != nullptr; }
+
+        /**
+         * @brief Checks if the string contains the provided sequence
+         *
+         * @param sequence The sequence of characters to look for
+         * @return True if the string contains sequence; false otherwise
+         */
+        [[nodiscard]] bool Contains(const BasicString& sequence) const { return std::strstr(m_data, sequence.m_data) != nullptr; }
 
         /**
          * @brief Compares the string with the other const char case-sensitive

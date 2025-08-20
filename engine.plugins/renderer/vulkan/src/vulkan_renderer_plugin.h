@@ -6,6 +6,7 @@
 #include "vulkan_buffer.h"
 #include "vulkan_context.h"
 #include "vulkan_shader.h"
+#include "vulkan_shader_module.h"
 
 namespace C3D
 {
@@ -36,6 +37,10 @@ namespace C3D
 
     private:
         bool m_meshShadingEnabled = false;
+
+        VulkanShaderModule m_meshShaderModule;
+        VulkanShaderModule m_meshletShaderModule;
+        VulkanShaderModule m_fragmentShaderModule;
 
         VulkanShader m_meshShader;
         VulkanShader m_meshletShader;
