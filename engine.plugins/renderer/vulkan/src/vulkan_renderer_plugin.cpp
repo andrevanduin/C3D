@@ -11,8 +11,6 @@
 #include <platform/platform.h>
 #include <platform/platform_types.h>
 #include <renderer/utils/mesh_utils.h>
-#include <shaderc/shaderc.h>
-#include <shaderc/status.h>
 #include <system/system_manager.h>
 
 #include "platform/vulkan_platform.h"
@@ -25,74 +23,6 @@
 
 namespace C3D
 {
-    VkShaderModule LoadShader(VulkanContext& context, const char* name)
-    {
-        BinaryManager binaryManager;
-        BinaryAsset binary;
-
-        if (!binaryManager.Read(name, binary))
-        {
-            FATAL_LOG("Failed to read '{}' source", name);
-        }
-
-        VkShaderModuleCreateInfo createInfo = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-        createInfo.codeSize                 = binary.size;
-        createInfo.pCode                    = reinterpret_cast<const u32*>(binary.data);
-
-        VkShaderModule shaderModule;
-        VK_CHECK(vkCreateShaderModule(context.device.GetLogical(), &createInfo, context.allocator, &shaderModule));
-
-        BinaryManager::Cleanup(binary);
-
-        return shaderModule;
-    }
-
-    VkPipelineLayout CreatePipelineLayout(VulkanContext& context, VkDescriptorSetLayout& setLayout, bool meshShadingEnabled)
-    {
-        auto device = context.device.GetLogical();
-
-        VkDescriptorSetLayoutCreateInfo setCreateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-        setCreateInfo.flags                           = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-
-        if (meshShadingEnabled)
-        {
-            VkDescriptorSetLayoutBinding setBindings[2] = {};
-            setBindings[0].binding                      = 0;
-            setBindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            setBindings[0].descriptorCount              = 1;
-            setBindings[0].stageFlags                   = VK_SHADER_STAGE_MESH_BIT_EXT;
-            setBindings[1].binding                      = 1;
-            setBindings[1].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            setBindings[1].descriptorCount              = 1;
-            setBindings[1].stageFlags                   = VK_SHADER_STAGE_MESH_BIT_EXT;
-
-            setCreateInfo.bindingCount = ARRAY_SIZE(setBindings);
-            setCreateInfo.pBindings    = setBindings;
-        }
-        else
-        {
-            VkDescriptorSetLayoutBinding setBindings[1] = {};
-            setBindings[0].binding                      = 0;
-            setBindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            setBindings[0].descriptorCount              = 1;
-            setBindings[0].stageFlags                   = VK_SHADER_STAGE_VERTEX_BIT;
-
-            setCreateInfo.bindingCount = ARRAY_SIZE(setBindings);
-            setCreateInfo.pBindings    = setBindings;
-        }
-
-        VK_CHECK(vkCreateDescriptorSetLayout(device, &setCreateInfo, context.allocator, &setLayout));
-
-        VkPipelineLayoutCreateInfo createInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-        createInfo.setLayoutCount             = 1;
-        createInfo.pSetLayouts                = &setLayout;
-
-        VkPipelineLayout layout;
-        VK_CHECK(vkCreatePipelineLayout(device, &createInfo, context.allocator, &layout));
-
-        return layout;
-    }
-
     VkPipeline CreateGraphicsPipeline(VulkanContext& context, VkPipelineCache pipelineCache, VkShaderModule vs, VkShaderModule fs, VulkanSwapchain& swapchain,
                                       VkPipelineLayout layout, const char* shaderName, bool meshShadingEnabled)
     {
@@ -447,51 +377,19 @@ namespace C3D
 
             if (m_meshShadingEnabled)
             {
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshletPipeline);
+                m_meshletShader.Bind(commandBuffer);
 
-                VkDescriptorBufferInfo vbInfo = {};
-                vbInfo.buffer                 = m_vertexBuffer.GetHandle();
-                vbInfo.offset                 = 0;
-                vbInfo.range                  = m_vertexBuffer.GetSize();
+                DescriptorInfo descriptors[] = { m_vertexBuffer.GetHandle(), m_meshBuffer.GetHandle() };
+                m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
 
-                VkDescriptorBufferInfo mbInfo = {};
-                mbInfo.buffer                 = m_meshBuffer.GetHandle();
-                mbInfo.offset                 = 0;
-                mbInfo.range                  = m_meshBuffer.GetSize();
-
-                VkWriteDescriptorSet descriptors[2] = {};
-                descriptors[0].sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                descriptors[0].dstBinding           = 0;
-                descriptors[0].descriptorCount      = 1;
-                descriptors[0].descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                descriptors[0].pBufferInfo          = &vbInfo;
-
-                descriptors[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                descriptors[1].dstBinding      = 1;
-                descriptors[1].descriptorCount = 1;
-                descriptors[1].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                descriptors[1].pBufferInfo     = &mbInfo;
-
-                vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshletLayout, 0, ARRAY_SIZE(descriptors), descriptors);
                 vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size(), 1, 1);
             }
             else
             {
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshPipeline);
+                m_meshShader.Bind(commandBuffer);
 
-                VkDescriptorBufferInfo vbInfo = {};
-                vbInfo.buffer                 = m_vertexBuffer.GetHandle();
-                vbInfo.offset                 = 0;
-                vbInfo.range                  = m_vertexBuffer.GetSize();
-
-                VkWriteDescriptorSet descriptors[1] = {};
-                descriptors[0].sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                descriptors[0].dstBinding           = 0;
-                descriptors[0].descriptorCount      = 1;
-                descriptors[0].descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                descriptors[0].pBufferInfo          = &vbInfo;
-
-                vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshLayout, 0, ARRAY_SIZE(descriptors), descriptors);
+                DescriptorInfo descriptors[] = { m_vertexBuffer.GetHandle() };
+                m_meshShader.PushDescriptorSet(commandBuffer, descriptors);
 
                 vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
@@ -657,25 +555,21 @@ namespace C3D
 
         {
             // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
-            // Load default shader
-            if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
-            {
-                m_meshletShader = LoadShader(m_context, "meshlet.mesh.spv");
-            }
-
-            m_meshShader     = LoadShader(m_context, "mesh.vert.spv");
-            m_fragmentShader = LoadShader(m_context, "mesh.frag.spv");
-
             VkPipelineCache cache = VK_NULL_HANDLE;
 
-            m_meshLayout   = CreatePipelineLayout(m_context, m_meshSetLayout, false);
-            m_meshPipeline = CreateGraphicsPipeline(m_context, cache, m_meshShader, m_fragmentShader, backend->swapchain, m_meshLayout, "MESH_SHADER", false);
-
             if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
             {
-                m_meshletLayout = CreatePipelineLayout(m_context, m_meshletSetLayout, true);
-                m_meshletPipeline =
-                    CreateGraphicsPipeline(m_context, cache, m_meshletShader, m_fragmentShader, backend->swapchain, m_meshletLayout, "MESH_SHADER", true);
+                if (!m_meshletShader.Create(&m_context, cache, backend->swapchain, "MESHLET_SHADER", "meshlet.mesh.spv", "mesh.frag.spv", true))
+                {
+                    ERROR_LOG("Failed to create MeshletShader.");
+                    return false;
+                }
+            }
+
+            if (!m_meshShader.Create(&m_context, cache, backend->swapchain, "MESH_SHADER", "mesh.vert.spv", "mesh.frag.spv", false))
+            {
+                ERROR_LOG("Failed to create MeshShader.");
+                return false;
             }
 
             auto commandBuffer = backend->GetCommandBuffer();
@@ -713,20 +607,11 @@ namespace C3D
 
             {
                 // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
-                vkDestroyDescriptorSetLayout(device, m_meshSetLayout, m_context.allocator);
-                vkDestroyPipelineLayout(device, m_meshLayout, m_context.allocator);
-                vkDestroyPipeline(device, m_meshPipeline, m_context.allocator);
-
-                vkDestroyShaderModule(device, m_meshShader, m_context.allocator);
-                vkDestroyShaderModule(device, m_fragmentShader, m_context.allocator);
+                m_meshShader.Destroy();
 
                 if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
                 {
-                    vkDestroyDescriptorSetLayout(device, m_meshletSetLayout, m_context.allocator);
-                    vkDestroyPipelineLayout(device, m_meshletLayout, m_context.allocator);
-                    vkDestroyPipeline(device, m_meshletPipeline, m_context.allocator);
-
-                    vkDestroyShaderModule(device, m_meshletShader, m_context.allocator);
+                    m_meshletShader.Destroy();
                 }
             }
 

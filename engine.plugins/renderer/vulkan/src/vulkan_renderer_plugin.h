@@ -5,6 +5,7 @@
 
 #include "vulkan_buffer.h"
 #include "vulkan_context.h"
+#include "vulkan_shader.h"
 
 namespace C3D
 {
@@ -36,14 +37,8 @@ namespace C3D
     private:
         bool m_meshShadingEnabled = false;
 
-        VkShaderModule m_meshShader;
-        VkShaderModule m_meshletShader;
-        VkShaderModule m_fragmentShader;
-
-        VkPipelineLayout m_meshLayout, m_meshletLayout;
-
-        VkPipeline m_meshPipeline, m_meshletPipeline;
-        VkDescriptorSetLayout m_meshSetLayout, m_meshletSetLayout;
+        VulkanShader m_meshShader;
+        VulkanShader m_meshletShader;
 
         VkQueryPool m_queryPool;
 
