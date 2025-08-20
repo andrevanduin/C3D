@@ -14,8 +14,6 @@ namespace C3D
     /** @brief The minimum number of images in flight. */
     constexpr u32 MIN_IMAGES = 3;
 
-#define C3D_MESH_SHADER 1
-
 #define VK_CHECK_SWAPCHAIN(call, msg)                                                                                      \
     {                                                                                                                      \
         VkResult result_ = call;                                                                                           \

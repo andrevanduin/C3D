@@ -30,8 +30,7 @@
 #define MINIMP3_BUF_SIZE (16 * 1024)       /* buffer which can hold minimum 10 consecutive mp3 frames (~16KB) worst case */
 /*#define MINIMP3_SCAN_LIMIT (256*1024)*/  /* how many bytes will be scanned to search first valid mp3 frame, to prevent stall on large
                                               non-mp3 files */
-#define MINIMP3_ENABLE_RING \
-    0 /* WIP enable hardware magic ring buffer if available, to make less input buffer memmove(s) in callback IO mode */
+#define MINIMP3_ENABLE_RING 0              /* WIP enable hardware magic ring buffer if available, to make less input buffer memmove(s) in callback IO mode */
 
 /* return error codes */
 #define MP3D_E_PARAM -1
@@ -92,8 +91,8 @@ typedef struct
     int last_error;
 } mp3dec_ex_t;
 
-typedef int (*MP3D_ITERATE_CB)(void *user_data, const uint8_t *frame, int frame_size, int free_format_bytes, size_t buf_size,
-                               uint64_t offset, mp3dec_frame_info_t *info);
+typedef int (*MP3D_ITERATE_CB)(void *user_data, const uint8_t *frame, int frame_size, int free_format_bytes, size_t buf_size, uint64_t offset,
+                               mp3dec_frame_info_t *info);
 typedef int (*MP3D_PROGRESS_CB)(void *user_data, size_t file_size, uint64_t offset, mp3dec_frame_info_t *info);
 
 #ifdef __cplusplus
@@ -104,10 +103,8 @@ extern "C" {
 int mp3dec_detect_buf(const uint8_t *buf, size_t buf_size);
 int mp3dec_detect_cb(mp3dec_io_t *io, uint8_t *buf, size_t buf_size);
 /* decode whole buffer block */
-int mp3dec_load_buf(mp3dec_t *dec, const uint8_t *buf, size_t buf_size, mp3dec_file_info_t *info, MP3D_PROGRESS_CB progress_cb,
-                    void *user_data);
-int mp3dec_load_cb(mp3dec_t *dec, mp3dec_io_t *io, uint8_t *buf, size_t buf_size, mp3dec_file_info_t *info, MP3D_PROGRESS_CB progress_cb,
-                   void *user_data);
+int mp3dec_load_buf(mp3dec_t *dec, const uint8_t *buf, size_t buf_size, mp3dec_file_info_t *info, MP3D_PROGRESS_CB progress_cb, void *user_data);
+int mp3dec_load_cb(mp3dec_t *dec, mp3dec_io_t *io, uint8_t *buf, size_t buf_size, mp3dec_file_info_t *info, MP3D_PROGRESS_CB progress_cb, void *user_data);
 /* iterate through frames */
 int mp3dec_iterate_buf(const uint8_t *buf, size_t buf_size, MP3D_ITERATE_CB callback, void *user_data);
 int mp3dec_iterate_cb(mp3dec_io_t *io, uint8_t *buf, size_t buf_size, MP3D_ITERATE_CB callback, void *user_data);
@@ -267,14 +264,12 @@ int mp3dec_detect_cb(mp3dec_io_t *io, uint8_t *buf, size_t buf_size)
     return MP3D_E_USER;
 }
 
-int mp3dec_load_buf(mp3dec_t *dec, const uint8_t *buf, size_t buf_size, mp3dec_file_info_t *info, MP3D_PROGRESS_CB progress_cb,
-                    void *user_data)
+int mp3dec_load_buf(mp3dec_t *dec, const uint8_t *buf, size_t buf_size, mp3dec_file_info_t *info, MP3D_PROGRESS_CB progress_cb, void *user_data)
 {
     return mp3dec_load_cb(dec, 0, (uint8_t *)buf, buf_size, info, progress_cb, user_data);
 }
 
-int mp3dec_load_cb(mp3dec_t *dec, mp3dec_io_t *io, uint8_t *buf, size_t buf_size, mp3dec_file_info_t *info, MP3D_PROGRESS_CB progress_cb,
-                   void *user_data)
+int mp3dec_load_cb(mp3dec_t *dec, mp3dec_io_t *io, uint8_t *buf, size_t buf_size, mp3dec_file_info_t *info, MP3D_PROGRESS_CB progress_cb, void *user_data)
 {
     if (!dec || !buf || !info || (size_t)-1 == buf_size || (io && buf_size < MINIMP3_BUF_SIZE)) return MP3D_E_PARAM;
     uint64_t detected_samples = 0;
@@ -808,12 +803,10 @@ size_t mp3dec_ex_read_frame(mp3dec_ex_t *dec, mp3d_sample_t **buf, mp3dec_frame_
         {
             if (!eof && (dec->input_filled - dec->input_consumed) < MINIMP3_BUF_SIZE)
             { /* keep minimum 10 consecutive mp3 frames (~16KB) worst case */
-                memmove((uint8_t *)dec->file.buffer, (uint8_t *)dec->file.buffer + dec->input_consumed,
-                        dec->input_filled - dec->input_consumed);
+                memmove((uint8_t *)dec->file.buffer, (uint8_t *)dec->file.buffer + dec->input_consumed, dec->input_filled - dec->input_consumed);
                 dec->input_filled -= dec->input_consumed;
                 dec->input_consumed = 0;
-                size_t readed =
-                    dec->io->read((uint8_t *)dec->file.buffer + dec->input_filled, dec->file.size - dec->input_filled, dec->io->read_data);
+                size_t readed       = dec->io->read((uint8_t *)dec->file.buffer + dec->input_filled, dec->file.size - dec->input_filled, dec->io->read_data);
                 if (readed > (dec->file.size - dec->input_filled))
                 {
                     dec->last_error = MP3D_E_IOERROR;
@@ -825,8 +818,7 @@ size_t mp3dec_ex_read_frame(mp3dec_ex_t *dec, mp3d_sample_t **buf, mp3dec_frame_
             }
             dec_buf = dec->file.buffer + dec->input_consumed;
             if (!(dec->input_filled - dec->input_consumed)) return 0;
-            dec->buffer_samples =
-                mp3dec_decode_frame(&dec->mp3d, dec_buf, dec->input_filled - dec->input_consumed, dec->buffer, frame_info);
+            dec->buffer_samples = mp3dec_decode_frame(&dec->mp3d, dec_buf, dec->input_filled - dec->input_consumed, dec->buffer, frame_info);
             dec->input_consumed += frame_info->frame_bytes;
         }
         else
@@ -834,8 +826,7 @@ size_t mp3dec_ex_read_frame(mp3dec_ex_t *dec, mp3d_sample_t **buf, mp3dec_frame_
             dec_buf           = dec->file.buffer + dec->offset;
             uint64_t buf_size = end_offset - dec->offset;
             if (!buf_size) return 0;
-            dec->buffer_samples =
-                mp3dec_decode_frame(&dec->mp3d, dec_buf, MINIMP3_MIN(buf_size, (uint64_t)INT_MAX), dec->buffer, frame_info);
+            dec->buffer_samples = mp3dec_decode_frame(&dec->mp3d, dec_buf, MINIMP3_MIN(buf_size, (uint64_t)INT_MAX), dec->buffer, frame_info);
         }
         dec->buffer_consumed = 0;
         if (dec->info.hz != frame_info->hz || dec->info.layer != frame_info->layer)
@@ -1063,7 +1054,6 @@ error:
 #endif /*MINIMP3_ENABLE_RING*/
 #elif defined(_WIN32)
 // Undef C3D Engine defines that cause issues with Windows.h
-#undef Resources
 #undef Event
 
 #define WIN32_LEAN_AND_MEAN
@@ -1076,7 +1066,6 @@ error:
 #undef RGB
 
 // Redefine the C3D Engine macros again for further use
-#define Resources C3D::SystemManager::GetInstance().GetSystem<C3D::ResourceSystem>(C3D::SystemType::ResourceSystemType)
 #define Event C3D::SystemManager::GetInstance().GetSystem<C3D::EventSystem>(C3D::SystemType::EventSystemType)
 
 static void mp3dec_close_file(mp3dec_map_info_t *map_info)
@@ -1171,8 +1160,7 @@ static int mp3dec_detect_mapinfo(mp3dec_map_info_t *map_info)
     return ret;
 }
 
-static int mp3dec_load_mapinfo(mp3dec_t *dec, mp3dec_map_info_t *map_info, mp3dec_file_info_t *info, MP3D_PROGRESS_CB progress_cb,
-                               void *user_data)
+static int mp3dec_load_mapinfo(mp3dec_t *dec, mp3dec_map_info_t *map_info, mp3dec_file_info_t *info, MP3D_PROGRESS_CB progress_cb, void *user_data)
 {
     int ret = mp3dec_load_buf(dec, map_info->buffer, map_info->size, info, progress_cb, user_data);
     mp3dec_close_file(map_info);

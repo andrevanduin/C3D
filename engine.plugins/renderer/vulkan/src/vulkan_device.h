@@ -16,6 +16,13 @@ namespace C3D
         DynamicArray<VkPresentModeKHR> presentModes;
     };
 
+    enum PhysicalDeviceSupportFlag : u8
+    {
+        PHYSICAL_DEVICE_SUPPORT_NONE              = 0x0,
+        PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING = 0x1,
+    };
+    using PhysicalDeviceSupportFlags = u8;
+
     /** @brief A struct containing everything relevant to the physical device (actual GPU) */
     struct PhysicalDevice
     {
@@ -29,6 +36,8 @@ namespace C3D
         u32 graphicsQueueFamilyIndex = INVALID_ID;
         /** @brief The swapchain support info. */
         VulkanSwapchainSupportInfo swapchainSupportInfo;
+        /** @brief Flags indicating different supported features. */
+        PhysicalDeviceSupportFlags supportFlags;
     };
 
     /** @brief A struct containing everything relevant to Vulkan's abstraction over the device. */
@@ -80,12 +89,17 @@ namespace C3D
         const DynamicArray<VkPresentModeKHR>& GetPresentModes() const { return m_physical.swapchainSupportInfo.presentModes; }
         const VkSurfaceCapabilitiesKHR& GetSurfaceCapabilities() const { return m_physical.swapchainSupportInfo.capabilities; }
 
+        bool IsFeatureSupported(PhysicalDeviceSupportFlag flag) const { return m_physical.supportFlags & flag; }
+
         /** @brief Gets a handle to the device queue. */
         VkQueue GetDeviceQueue() const { return m_logical.queue; }
 
     private:
+        /** @brief Checks that the device supports all requirements.*/
+        bool DeviceSupportsMandatoryRequirements(VkPhysicalDevice device, const DynamicArray<const char*>& requiredExtensions);
+
         /** @brief Selects the ideal physical GPU present on the system. */
-        bool SelectPhyiscalDevice();
+        bool SelectPhyiscalDevice(const DynamicArray<const char*>& requiredExtensions);
 
         /** @brief Finds the index of the graphics queue family. */
         u32 SelectGraphicsFamilyIndex(VkPhysicalDevice handle);

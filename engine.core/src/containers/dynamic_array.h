@@ -68,12 +68,11 @@ namespace C3D
         }
 
         /**
-         * @brief Creates the array with enough memory allocated for the provided initial capacity.
-         * No initialization is done on the internal memory.
+         * @brief Creates the array with initialSize default constructed elements
          */
-        explicit DynamicArray(const u64 initialCapacity, const Allocator* allocator = BaseAllocator<Allocator>::GetDefault()) : m_allocator(allocator)
+        explicit DynamicArray(const u64 initialSize, const Allocator* allocator = BaseAllocator<Allocator>::GetDefault()) : m_allocator(allocator)
         {
-            Reserve(initialCapacity);
+            Resize(initialSize);
         }
 
         DynamicArray(std::initializer_list<T> list, const Allocator* allocator = BaseAllocator<Allocator>::GetDefault()) : m_allocator(allocator)

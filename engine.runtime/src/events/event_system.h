@@ -36,7 +36,7 @@ namespace C3D
 
         bool UnregisterAll(u16 code);
 
-        bool Fire(u16 code, void* sender, const EventContext& data) const;
+        bool Fire(u16 code, void* sender, const EventContext& context) const;
 
     private:
         EventCodeEntry m_registered[MAX_MESSAGE_CODES] = {};

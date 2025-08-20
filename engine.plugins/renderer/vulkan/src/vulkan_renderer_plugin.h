@@ -34,12 +34,16 @@ namespace C3D
         void OnDestroyWindow(Window& window) override;
 
     private:
-        VkShaderModule m_vertexShader;
+        bool m_meshShadingEnabled = false;
+
+        VkShaderModule m_meshShader;
+        VkShaderModule m_meshletShader;
         VkShaderModule m_fragmentShader;
 
-        VkPipelineLayout m_meshLayout;
-        VkPipeline m_meshPipeline;
-        VkDescriptorSetLayout m_setLayout;
+        VkPipelineLayout m_meshLayout, m_meshletLayout;
+
+        VkPipeline m_meshPipeline, m_meshletPipeline;
+        VkDescriptorSetLayout m_meshSetLayout, m_meshletSetLayout;
 
         VkQueryPool m_queryPool;
 

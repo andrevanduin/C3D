@@ -4,6 +4,7 @@
 #include <engine.h>
 #include <events/event_system.h>
 #include <frame_data.h>
+#include <input/input_system.h>
 #include <logger/logger.h>
 #include <math/ray.h>
 #include <metrics/metrics.h>
@@ -22,7 +23,14 @@ bool TestEnv::OnBoot()
 
 bool TestEnv::OnRun(C3D::FrameData& frameData) { return true; }
 
-void TestEnv::OnUpdate(C3D::FrameData& frameData) {}
+void TestEnv::OnUpdate(C3D::FrameData& frameData)
+{
+    if (Input.IsKeyPressed(C3D::Key0))
+    {
+        C3D::EventContext context;
+        Event.Fire(C3D::EventCodeDebug0, nullptr, context);
+    }
+}
 
 bool TestEnv::OnPrepareFrame(C3D::FrameData& frameData) { return true; }
 

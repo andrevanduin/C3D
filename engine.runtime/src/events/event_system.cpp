@@ -90,7 +90,7 @@ namespace C3D
         return true;
     }
 
-    bool EventSystem::Fire(const u16 code, void* sender, const EventContext& data) const
+    bool EventSystem::Fire(const u16 code, void* sender, const EventContext& context) const
     {
         if (!m_initialized) return true;
 
@@ -100,6 +100,6 @@ namespace C3D
             return false;
         }
 
-        return std::ranges::any_of(events, [&](const EventCallback& e) { return e.func(code, sender, data); });
+        return std::ranges::any_of(events, [&](const EventCallback& e) { return e.func(code, sender, context); });
     }
 }  // namespace C3D

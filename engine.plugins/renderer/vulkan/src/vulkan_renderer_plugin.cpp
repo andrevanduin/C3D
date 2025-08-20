@@ -47,32 +47,39 @@ namespace C3D
         return shaderModule;
     }
 
-    VkPipelineLayout CreatePipelineLayout(VulkanContext& context, VkDescriptorSetLayout& setLayout)
+    VkPipelineLayout CreatePipelineLayout(VulkanContext& context, VkDescriptorSetLayout& setLayout, bool meshShadingEnabled)
     {
         auto device = context.device.GetLogical();
 
-#if C3D_MESH_SHADER
-        VkDescriptorSetLayoutBinding setBindings[2] = {};
-        setBindings[0].binding                      = 0;
-        setBindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        setBindings[0].descriptorCount              = 1;
-        setBindings[0].stageFlags                   = VK_SHADER_STAGE_MESH_BIT_EXT;
-        setBindings[1].binding                      = 1;
-        setBindings[1].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        setBindings[1].descriptorCount              = 1;
-        setBindings[1].stageFlags                   = VK_SHADER_STAGE_MESH_BIT_EXT;
-#else
-        VkDescriptorSetLayoutBinding setBindings[1] = {};
-        setBindings[0].binding                      = 0;
-        setBindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        setBindings[0].descriptorCount              = 1;
-        setBindings[0].stageFlags                   = VK_SHADER_STAGE_VERTEX_BIT;
-#endif
-
         VkDescriptorSetLayoutCreateInfo setCreateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
         setCreateInfo.flags                           = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-        setCreateInfo.bindingCount                    = ARRAY_SIZE(setBindings);
-        setCreateInfo.pBindings                       = setBindings;
+
+        if (meshShadingEnabled)
+        {
+            VkDescriptorSetLayoutBinding setBindings[2] = {};
+            setBindings[0].binding                      = 0;
+            setBindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            setBindings[0].descriptorCount              = 1;
+            setBindings[0].stageFlags                   = VK_SHADER_STAGE_MESH_BIT_EXT;
+            setBindings[1].binding                      = 1;
+            setBindings[1].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            setBindings[1].descriptorCount              = 1;
+            setBindings[1].stageFlags                   = VK_SHADER_STAGE_MESH_BIT_EXT;
+
+            setCreateInfo.bindingCount = ARRAY_SIZE(setBindings);
+            setCreateInfo.pBindings    = setBindings;
+        }
+        else
+        {
+            VkDescriptorSetLayoutBinding setBindings[1] = {};
+            setBindings[0].binding                      = 0;
+            setBindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            setBindings[0].descriptorCount              = 1;
+            setBindings[0].stageFlags                   = VK_SHADER_STAGE_VERTEX_BIT;
+
+            setCreateInfo.bindingCount = ARRAY_SIZE(setBindings);
+            setCreateInfo.pBindings    = setBindings;
+        }
 
         VK_CHECK(vkCreateDescriptorSetLayout(device, &setCreateInfo, context.allocator, &setLayout));
 
@@ -87,7 +94,7 @@ namespace C3D
     }
 
     VkPipeline CreateGraphicsPipeline(VulkanContext& context, VkPipelineCache pipelineCache, VkShaderModule vs, VkShaderModule fs, VulkanSwapchain& swapchain,
-                                      VkPipelineLayout layout, const char* shaderName)
+                                      VkPipelineLayout layout, const char* shaderName, bool meshShadingEnabled)
     {
         VkGraphicsPipelineCreateInfo createInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
         createInfo.layout                       = layout;
@@ -96,11 +103,14 @@ namespace C3D
 
         stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 
-#if C3D_MESH_SHADER
-        stages[0].stage = VK_SHADER_STAGE_MESH_BIT_EXT;
-#else
-        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-#endif
+        if (meshShadingEnabled)
+        {
+            stages[0].stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+        }
+        else
+        {
+            stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        }
 
         stages[0].module = vs;
         stages[0].pName  = "main";
@@ -251,9 +261,10 @@ namespace C3D
             return false;
         }
 
-#if C3D_MESH_SHADER
-        MeshUtils::BuildMeshlets(m_mesh);
-#endif
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+        {
+            MeshUtils::BuildMeshlets(m_mesh);
+        }
 
         // Create our buffers
         if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(128), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -277,14 +288,28 @@ namespace C3D
             return false;
         }
 
-#if C3D_MESH_SHADER
-        if (!m_meshBuffer.Create(&m_context, "MESH", MebiBytes(128), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
-            ERROR_LOG("Failed to create mesh buffer.");
-            return false;
+            if (!m_meshBuffer.Create(&m_context, "MESH", MebiBytes(128), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+            {
+                ERROR_LOG("Failed to create mesh buffer.");
+                return false;
+            }
         }
-#endif
+
+        Event.Register(EventCodeDebug0, [this](const u16 code, void* sender, const EventContext& context) {
+            if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+            {
+                m_meshShadingEnabled ^= true;
+                INFO_LOG("Mesh shading is now {}.", m_meshShadingEnabled ? "enabled" : "disabled");
+            }
+            else
+            {
+                WARN_LOG("Mesh shading is not support by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
+            }
+            return true;
+        });
 
         INFO_LOG("Initialized successfully.");
         return true;
@@ -294,15 +319,18 @@ namespace C3D
     {
         INFO_LOG("Shutting down.");
 
+        Event.UnregisterAll(EventCodeDebug0);
+
         MeshManager::Cleanup(m_mesh);
 
         INFO_LOG("Destroying Vulkan buffers.");
         m_vertexBuffer.Destroy();
         m_indexBuffer.Destroy();
 
-#if C3D_MESH_SHADER
-        m_meshBuffer.Destroy();
-#endif
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+        {
+            m_meshBuffer.Destroy();
+        }
 
         m_context.stagingBuffer.Destroy();
 
@@ -417,52 +445,57 @@ namespace C3D
             vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshPipeline);
+            if (m_meshShadingEnabled)
+            {
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshletPipeline);
 
-#if C3D_MESH_SHADER
-            VkDescriptorBufferInfo vbInfo = {};
-            vbInfo.buffer                 = m_vertexBuffer.GetHandle();
-            vbInfo.offset                 = 0;
-            vbInfo.range                  = m_vertexBuffer.GetSize();
+                VkDescriptorBufferInfo vbInfo = {};
+                vbInfo.buffer                 = m_vertexBuffer.GetHandle();
+                vbInfo.offset                 = 0;
+                vbInfo.range                  = m_vertexBuffer.GetSize();
 
-            VkDescriptorBufferInfo mbInfo = {};
-            mbInfo.buffer                 = m_meshBuffer.GetHandle();
-            mbInfo.offset                 = 0;
-            mbInfo.range                  = m_meshBuffer.GetSize();
+                VkDescriptorBufferInfo mbInfo = {};
+                mbInfo.buffer                 = m_meshBuffer.GetHandle();
+                mbInfo.offset                 = 0;
+                mbInfo.range                  = m_meshBuffer.GetSize();
 
-            VkWriteDescriptorSet descriptors[2] = {};
-            descriptors[0].sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptors[0].dstBinding           = 0;
-            descriptors[0].descriptorCount      = 1;
-            descriptors[0].descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            descriptors[0].pBufferInfo          = &vbInfo;
+                VkWriteDescriptorSet descriptors[2] = {};
+                descriptors[0].sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptors[0].dstBinding           = 0;
+                descriptors[0].descriptorCount      = 1;
+                descriptors[0].descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                descriptors[0].pBufferInfo          = &vbInfo;
 
-            descriptors[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptors[1].dstBinding      = 1;
-            descriptors[1].descriptorCount = 1;
-            descriptors[1].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            descriptors[1].pBufferInfo     = &mbInfo;
+                descriptors[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptors[1].dstBinding      = 1;
+                descriptors[1].descriptorCount = 1;
+                descriptors[1].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                descriptors[1].pBufferInfo     = &mbInfo;
 
-            vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshLayout, 0, ARRAY_SIZE(descriptors), descriptors);
-            vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size(), 1, 1);
-#else
-            VkDescriptorBufferInfo vbInfo = {};
-            vbInfo.buffer                 = m_vertexBuffer.GetHandle();
-            vbInfo.offset                 = 0;
-            vbInfo.range                  = m_vertexBuffer.GetSize();
+                vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshletLayout, 0, ARRAY_SIZE(descriptors), descriptors);
+                vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size(), 1, 1);
+            }
+            else
+            {
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshPipeline);
 
-            VkWriteDescriptorSet descriptors[1] = {};
-            descriptors[0].sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptors[0].dstBinding           = 0;
-            descriptors[0].descriptorCount      = 1;
-            descriptors[0].descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            descriptors[0].pBufferInfo          = &vbInfo;
+                VkDescriptorBufferInfo vbInfo = {};
+                vbInfo.buffer                 = m_vertexBuffer.GetHandle();
+                vbInfo.offset                 = 0;
+                vbInfo.range                  = m_vertexBuffer.GetSize();
 
-            vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshLayout, 0, ARRAY_SIZE(descriptors), descriptors);
+                VkWriteDescriptorSet descriptors[1] = {};
+                descriptors[0].sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptors[0].dstBinding           = 0;
+                descriptors[0].descriptorCount      = 1;
+                descriptors[0].descriptorType       = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                descriptors[0].pBufferInfo          = &vbInfo;
 
-            vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
-#endif
+                vkCmdPushDescriptorSetKHR(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_meshLayout, 0, ARRAY_SIZE(descriptors), descriptors);
+
+                vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
+            }
         }
 
         return true;
@@ -623,20 +656,27 @@ namespace C3D
         }
 
         {
-// TODO: This should not be here! It does not depend on the window we just need access to the swapchain
-// Load default shader
-#if C3D_MESH_SHADER
-            m_vertexShader = LoadShader(m_context, "meshlet.mesh.spv");
-#else
-            m_vertexShader = LoadShader(m_context, "mesh.vert.spv");
-#endif
+            // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
+            // Load default shader
+            if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+            {
+                m_meshletShader = LoadShader(m_context, "meshlet.mesh.spv");
+            }
 
+            m_meshShader     = LoadShader(m_context, "mesh.vert.spv");
             m_fragmentShader = LoadShader(m_context, "mesh.frag.spv");
 
             VkPipelineCache cache = VK_NULL_HANDLE;
 
-            m_meshLayout   = CreatePipelineLayout(m_context, m_setLayout);
-            m_meshPipeline = CreateGraphicsPipeline(m_context, cache, m_vertexShader, m_fragmentShader, backend->swapchain, m_meshLayout, "MESH_SHADER");
+            m_meshLayout   = CreatePipelineLayout(m_context, m_meshSetLayout, false);
+            m_meshPipeline = CreateGraphicsPipeline(m_context, cache, m_meshShader, m_fragmentShader, backend->swapchain, m_meshLayout, "MESH_SHADER", false);
+
+            if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+            {
+                m_meshletLayout = CreatePipelineLayout(m_context, m_meshletSetLayout, true);
+                m_meshletPipeline =
+                    CreateGraphicsPipeline(m_context, cache, m_meshletShader, m_fragmentShader, backend->swapchain, m_meshletLayout, "MESH_SHADER", true);
+            }
 
             auto commandBuffer = backend->GetCommandBuffer();
             auto commandPool   = backend->GetCommandPool();
@@ -644,9 +684,10 @@ namespace C3D
             m_vertexBuffer.Upload(commandBuffer, commandPool, m_mesh.vertices.GetData(), sizeof(Vertex) * m_mesh.vertices.Size());
             m_indexBuffer.Upload(commandBuffer, commandPool, m_mesh.indices.GetData(), sizeof(u32) * m_mesh.indices.Size());
 
-#if C3D_MESH_SHADER
-            m_meshBuffer.Upload(commandBuffer, commandPool, m_mesh.meshlets.GetData(), sizeof(Meshlet) * m_mesh.meshlets.Size());
-#endif
+            if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+            {
+                m_meshBuffer.Upload(commandBuffer, commandPool, m_mesh.meshlets.GetData(), sizeof(Meshlet) * m_mesh.meshlets.Size());
+            }
         }
 
         return true;
@@ -672,13 +713,21 @@ namespace C3D
 
             {
                 // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
-
-                vkDestroyDescriptorSetLayout(device, m_setLayout, m_context.allocator);
+                vkDestroyDescriptorSetLayout(device, m_meshSetLayout, m_context.allocator);
                 vkDestroyPipelineLayout(device, m_meshLayout, m_context.allocator);
                 vkDestroyPipeline(device, m_meshPipeline, m_context.allocator);
 
-                vkDestroyShaderModule(device, m_vertexShader, m_context.allocator);
+                vkDestroyShaderModule(device, m_meshShader, m_context.allocator);
                 vkDestroyShaderModule(device, m_fragmentShader, m_context.allocator);
+
+                if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+                {
+                    vkDestroyDescriptorSetLayout(device, m_meshletSetLayout, m_context.allocator);
+                    vkDestroyPipelineLayout(device, m_meshletLayout, m_context.allocator);
+                    vkDestroyPipeline(device, m_meshletPipeline, m_context.allocator);
+
+                    vkDestroyShaderModule(device, m_meshletShader, m_context.allocator);
+                }
             }
 
             INFO_LOG("Destoying Command Pools")

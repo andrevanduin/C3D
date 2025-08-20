@@ -4,6 +4,7 @@
 #include "application.h"
 #include "config/config_system.h"
 #include "events/event_system.h"
+#include "input/input_system.h"
 #include "logger/logger.h"
 #include "metrics/metrics.h"
 #include "platform/platform.h"
@@ -72,6 +73,7 @@ namespace C3D
         // Init before boot systems
         SystemManager::RegisterSystem<ConfigSystem>(ConfigSystemType, state.config.systemConfigs["Config"]);  // Configuration system
         SystemManager::RegisterSystem<EventSystem>(EventSystemType);                                          // Event System
+        SystemManager::RegisterSystem<InputSystem>(InputSystemType);                                          // Input system
 
         // Setup our frame allocator
         u64 frameAllocatorSize = 0;
@@ -226,6 +228,8 @@ namespace C3D
                 }
 
                 state.clocks.onRender.End();
+
+                Input.OnUpdate(state.frameData);
 
                 state.clocks.total.End();
                 state.lastTime = currentTime;
