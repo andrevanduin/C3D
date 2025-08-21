@@ -33,7 +33,7 @@ namespace C3D
         bool CompileIntoSPIRV(const char* source, u64 sourceSize, u32** code, u64& codeSize);
 
         /** @brief Reflect SPIR-V to collect data about the shader. */
-        bool ReflectSPIRV(u32* code, u64 codeSize);
+        bool ReflectSPIRV(u32* code, u64 numBytes);
 
         /** @brief The name of the shader. */
         String m_name;

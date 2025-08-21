@@ -71,9 +71,7 @@ namespace C3D
 
         VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_SHADER_MODULE, m_handle, String::FromFormat("SHADER_MODULE_{}", name));
 
-        // Code size defines the number of u32's (so bytes / 4)
-        u64 codeSize = numBytes / 4;
-        if (!ReflectSPIRV(code, codeSize))
+        if (!ReflectSPIRV(code, numBytes))
         {
             ERROR_LOG("Failed to reflect the SPIRV for: '{}'.", name);
             return false;
@@ -241,12 +239,16 @@ namespace C3D
     }
 
     /** @brief See: https://github.com/KhronosGroup/SPIRV-Guide/blob/main/chapters/parsing_instructions.md for more info */
-    bool VulkanShaderModule::ReflectSPIRV(u32* code, u64 codeSize)
+    bool VulkanShaderModule::ReflectSPIRV(u32* code, u64 numBytes)
     {
-        C3D_ASSERT_MSG(code[0] == SpvMagicNumber, "Missing SPV Magic number.");
+        C3D_ASSERT(numBytes % 4 == 0);
+        C3D_ASSERT(code[0] == SpvMagicNumber);
 
+        // Code size defines the number of u32's (so bytes / 4)
+        u64 codeSize = numBytes / 4;
+
+        // Index 3 defines the upper bound for the number of ids in the shader
         u32 idBound = code[3];
-
         DynamicArray<ID> ids(idBound);
 
         // First instruction starts at index 5

@@ -290,10 +290,9 @@ namespace C3D
         createInfo.pDescriptorUpdateEntries   = entries.GetData();
 
         // NOTE: We might need to change this in the future
-        createInfo.templateType        = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS;
-        createInfo.pipelineBindPoint   = m_bindPoint;
-        createInfo.descriptorSetLayout = m_setLayout;
-        createInfo.pipelineLayout      = m_layout;
+        createInfo.templateType      = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS;
+        createInfo.pipelineBindPoint = m_bindPoint;
+        createInfo.pipelineLayout    = m_layout;
 
         auto result = vkCreateDescriptorUpdateTemplate(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_updateTemplate);
         if (!VulkanUtils::IsSuccess(result))
