@@ -11,9 +11,8 @@ namespace C3D
     {
         INFO_LOG("Creating: '{}'.", createInfo.name);
 
-        m_context            = createInfo.context;
-        m_name               = createInfo.name;
-        m_meshShadingEnabled = createInfo.meshShadingEnabled;
+        m_context = createInfo.context;
+        m_name    = createInfo.name;
 
         if (createInfo.numModules == 0)
         {
@@ -31,6 +30,19 @@ namespace C3D
         m_numShaderModules = createInfo.numModules;
         m_shaderModules    = Memory.Allocate<VulkanShaderModule*>(MemoryType::Shader, m_numShaderModules);
         std::memcpy(m_shaderModules, createInfo.modules, sizeof(VulkanShaderModule*) * m_numShaderModules);
+
+        // Verify that the passed in ShaderModule stages make sense
+        if (m_shaderModules[0]->GetShaderStage() != VK_SHADER_STAGE_VERTEX_BIT && m_shaderModules[0]->GetShaderStage() != VK_SHADER_STAGE_MESH_BIT_EXT)
+        {
+            ERROR_LOG("Expected first ShaderModule to be of type VERTEX_SHADER or MESH_SHADER.");
+            return false;
+        }
+
+        if (m_shaderModules[1]->GetShaderStage() != VK_SHADER_STAGE_FRAGMENT_BIT)
+        {
+            ERROR_LOG("Expected second ShaderModule to be of type FRAGMENT_SHADER.");
+            return false;
+        }
 
         if (!CreateSetLayout())
         {
@@ -90,35 +102,42 @@ namespace C3D
 
     bool VulkanShader::CreateSetLayout()
     {
+        DynamicArray<VkDescriptorSetLayoutBinding> setBindings;
+
+        u32 storageBufferMask = 0;
+        for (u32 i = 0; i < m_numShaderModules; ++i)
+        {
+            storageBufferMask |= m_shaderModules[i]->GetStorageBufferMask();
+        }
+
+        for (u32 i = 0; i < 32; ++i)
+        {
+            if (storageBufferMask & (1 << i))
+            {
+                VkDescriptorSetLayoutBinding binding = {};
+
+                binding.binding         = i;
+                binding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                binding.descriptorCount = 1;
+
+                binding.stageFlags = 0;
+                for (u32 j = 0; j < m_numShaderModules; ++j)
+                {
+                    if (m_shaderModules[j]->GetStorageBufferMask() & (1 << i))
+                    {
+                        binding.stageFlags |= m_shaderModules[j]->GetShaderStage();
+                    }
+                }
+
+                setBindings.PushBack(binding);
+            }
+        }
+
         VkDescriptorSetLayoutCreateInfo setCreateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-        setCreateInfo.flags                           = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
 
-        if (m_meshShadingEnabled)
-        {
-            VkDescriptorSetLayoutBinding setBindings[2] = {};
-            setBindings[0].binding                      = 0;
-            setBindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            setBindings[0].descriptorCount              = 1;
-            setBindings[0].stageFlags                   = VK_SHADER_STAGE_MESH_BIT_EXT;
-            setBindings[1].binding                      = 1;
-            setBindings[1].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            setBindings[1].descriptorCount              = 1;
-            setBindings[1].stageFlags                   = VK_SHADER_STAGE_MESH_BIT_EXT;
-
-            setCreateInfo.bindingCount = ARRAY_SIZE(setBindings);
-            setCreateInfo.pBindings    = setBindings;
-        }
-        else
-        {
-            VkDescriptorSetLayoutBinding setBindings[1] = {};
-            setBindings[0].binding                      = 0;
-            setBindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            setBindings[0].descriptorCount              = 1;
-            setBindings[0].stageFlags                   = VK_SHADER_STAGE_VERTEX_BIT;
-
-            setCreateInfo.bindingCount = ARRAY_SIZE(setBindings);
-            setCreateInfo.pBindings    = setBindings;
-        }
+        setCreateInfo.flags        = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+        setCreateInfo.bindingCount = setBindings.Size();
+        setCreateInfo.pBindings    = setBindings.GetData();
 
         auto result = vkCreateDescriptorSetLayout(m_context->device.GetLogical(), &setCreateInfo, m_context->allocator, &m_setLayout);
         if (!VulkanUtils::IsSuccess(result))
@@ -157,22 +176,13 @@ namespace C3D
 
         VkPipelineShaderStageCreateInfo stages[2] = {};
 
-        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-
-        if (m_meshShadingEnabled)
-        {
-            stages[0].stage = VK_SHADER_STAGE_MESH_BIT_EXT;
-        }
-        else
-        {
-            stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        }
-
+        stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage  = m_shaderModules[0]->GetShaderStage();
         stages[0].module = m_shaderModules[0]->GetHandle();
         stages[0].pName  = "main";
 
         stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].stage  = m_shaderModules[1]->GetShaderStage();
         stages[1].module = m_shaderModules[1]->GetHandle();
         stages[1].pName  = "main";
 
@@ -251,34 +261,27 @@ namespace C3D
     {
         DynamicArray<VkDescriptorUpdateTemplateEntry> entries;
 
-        if (m_meshShadingEnabled)
+        u32 storageBufferMask = 0;
+        for (u32 i = 0; i < m_numShaderModules; ++i)
         {
-            entries.Resize(2);
-
-            entries[0].dstBinding      = 0;
-            entries[0].dstArrayElement = 0;
-            entries[0].descriptorCount = 1;
-            entries[0].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            entries[0].offset          = sizeof(DescriptorInfo) * 0;
-            entries[0].stride          = sizeof(DescriptorInfo);
-
-            entries[1].dstBinding      = 1;
-            entries[1].dstArrayElement = 0;
-            entries[1].descriptorCount = 1;
-            entries[1].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            entries[1].offset          = sizeof(DescriptorInfo) * 1;
-            entries[1].stride          = sizeof(DescriptorInfo);
+            storageBufferMask |= m_shaderModules[i]->GetStorageBufferMask();
         }
-        else
-        {
-            entries.Resize(1);
 
-            entries[0].dstBinding      = 0;
-            entries[0].dstArrayElement = 0;
-            entries[0].descriptorCount = 1;
-            entries[0].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            entries[0].offset          = sizeof(DescriptorInfo) * 0;
-            entries[0].stride          = sizeof(DescriptorInfo);
+        for (u32 i = 0; i < 32; ++i)
+        {
+            if (storageBufferMask & (1 << i))
+            {
+                VkDescriptorUpdateTemplateEntry entry = {};
+
+                entry.dstBinding      = i;
+                entry.dstArrayElement = 0;
+                entry.descriptorCount = 1;
+                entry.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                entry.offset          = sizeof(DescriptorInfo) * i;
+                entry.stride          = sizeof(DescriptorInfo);
+
+                entries.PushBack(entry);
+            }
         }
 
         VkDescriptorUpdateTemplateCreateInfo createInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO };

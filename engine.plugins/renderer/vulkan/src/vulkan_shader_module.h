@@ -22,17 +22,25 @@ namespace C3D
         void Destroy();
 
         VkShaderModule GetHandle() const { return m_handle; }
+        VkShaderStageFlagBits GetShaderStage() const { return m_shaderStage; }
+        u32 GetStorageBufferMask() const { return m_storageBufferMask; }
 
     private:
         /** @brief Determines the shader stage based on the name of the input glsl file. */
         void DetermineShaderStage();
 
         /** @brief Compiles text (GLSL) input into SPIR-V. */
-        bool CompileIntoSPIRV(const char* source, u64 sourceSize, u32** code, u64& byteCount);
+        bool CompileIntoSPIRV(const char* source, u64 sourceSize, u32** code, u64& codeSize);
 
+        /** @brief Reflect SPIR-V to collect data about the shader. */
+        bool ReflectSPIRV(u32* code, u64 codeSize);
+
+        /** @brief The name of the shader. */
         String m_name;
-
-        VkShaderStageFlags m_shaderStage;
+        /** @brief The type of shader stage. */
+        VkShaderStageFlagBits m_shaderStage;
+        /** @brief A mask containing all storage buffers. */
+        u32 m_storageBufferMask = 0;
 
         VkShaderModule m_handle  = nullptr;
         VulkanContext* m_context = nullptr;

@@ -51,8 +51,6 @@ namespace C3D
         VulkanContext* context     = nullptr;
         VulkanSwapchain* swapchain = nullptr;
 
-        bool meshShadingEnabled = false;
-
         VkPipelineCache cache = VK_NULL_HANDLE;
     };
 
@@ -86,8 +84,6 @@ namespace C3D
         VkPipeline m_pipeline             = nullptr;
 
         VkDescriptorUpdateTemplate m_updateTemplate = nullptr;
-
-        bool m_meshShadingEnabled = false;
 
         VulkanContext* m_context = nullptr;
     };

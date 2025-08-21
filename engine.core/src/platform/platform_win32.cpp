@@ -130,7 +130,7 @@ namespace C3D
 
     void Platform::Shutdown()
     {
-        INFO_LOG("Started.");
+        INFO_LOG("Shutting down.");
 
         // Unwatch all files that we are currently watching
         for (const auto& watch : state.fileWatches)

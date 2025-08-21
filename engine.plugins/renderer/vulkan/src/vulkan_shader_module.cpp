@@ -3,6 +3,7 @@
 
 #include <assets/managers/shader_manager.h>
 #include <shaderc/shaderc.h>
+#include <spirv-headers/spirv.h>
 #include <time/scoped_timer.h>
 
 #include "vulkan_context.h"
@@ -10,6 +11,21 @@
 
 namespace C3D
 {
+    struct ID
+    {
+        enum Kind
+        {
+            Unknown,
+            Variable
+        };
+
+        Kind kind = Unknown;
+        u32 type;
+        u32 storageClass;
+        u32 binding;
+        u32 set;
+    };
+
     bool VulkanShaderModule::Create(VulkanContext* context, const char* name)
     {
         m_name    = name;
@@ -28,9 +44,9 @@ namespace C3D
 
         DetermineShaderStage();
 
-        u32* code     = nullptr;
-        u64 byteCount = 0;
-        if (!CompileIntoSPIRV(shader.source, shader.size, &code, byteCount))
+        u32* code    = nullptr;
+        u64 numBytes = 0;
+        if (!CompileIntoSPIRV(shader.source, shader.size, &code, numBytes))
         {
             ERROR_LOG("Failed to compile GLSL into SPIRV for: '{}'.", name);
             return false;
@@ -39,7 +55,7 @@ namespace C3D
         ShaderManager::Cleanup(shader);
 
         VkShaderModuleCreateInfo createInfo = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-        createInfo.codeSize                 = byteCount;
+        createInfo.codeSize                 = numBytes;
         createInfo.pCode                    = code;
 
         auto result = vkCreateShaderModule(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_handle);
@@ -54,6 +70,14 @@ namespace C3D
         }
 
         VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_SHADER_MODULE, m_handle, String::FromFormat("SHADER_MODULE_{}", name));
+
+        // Code size defines the number of u32's (so bytes / 4)
+        u64 codeSize = numBytes / 4;
+        if (!ReflectSPIRV(code, codeSize))
+        {
+            ERROR_LOG("Failed to reflect the SPIRV for: '{}'.", name);
+            return false;
+        }
 
         if (code)
         {
@@ -117,7 +141,7 @@ namespace C3D
         }
     }
 
-    bool VulkanShaderModule::CompileIntoSPIRV(const char* source, u64 sourceSize, u32** code, u64& byteCount)
+    bool VulkanShaderModule::CompileIntoSPIRV(const char* source, u64 sourceSize, u32** code, u64& numBytes)
     {
         ScopedTimer timer("Compilation");
 
@@ -185,14 +209,121 @@ namespace C3D
 
         // Extract the data from the result.
         const char* bytes = shaderc_result_get_bytes(compilationResult);
-        byteCount         = shaderc_result_get_length(compilationResult);
+        numBytes          = shaderc_result_get_length(compilationResult);
 
         // Take a copy of the result data and cast it to a u32* as is required by Vulkan.
-        *code = Memory.Allocate<u32>(C3D::MemoryType::RenderSystem, byteCount);
-        std::memcpy(*code, bytes, byteCount);
+        *code = Memory.Allocate<u32>(C3D::MemoryType::RenderSystem, numBytes / 4);
+        std::memcpy(*code, bytes, numBytes);
 
         // Release the compilation result.
         shaderc_result_release(compilationResult);
+        shaderc_compile_options_release(options);
+
+        return true;
+    }
+
+    static VkShaderStageFlagBits ExecutionModelToShaderStage(SpvExecutionModel model)
+    {
+        switch (model)
+        {
+            case SpvExecutionModelVertex:
+                return VK_SHADER_STAGE_VERTEX_BIT;
+            case SpvExecutionModelFragment:
+                return VK_SHADER_STAGE_FRAGMENT_BIT;
+            case SpvExecutionModelTaskEXT:
+                return VK_SHADER_STAGE_TASK_BIT_EXT;
+            case SpvExecutionModelMeshEXT:
+                return VK_SHADER_STAGE_MESH_BIT_EXT;
+            default:
+                C3D_ASSERT_MSG(false, "Unsupported exection model!");
+                return VkShaderStageFlagBits(0);
+        }
+    }
+
+    /** @brief See: https://github.com/KhronosGroup/SPIRV-Guide/blob/main/chapters/parsing_instructions.md for more info */
+    bool VulkanShaderModule::ReflectSPIRV(u32* code, u64 codeSize)
+    {
+        C3D_ASSERT_MSG(code[0] == SpvMagicNumber, "Missing SPV Magic number.");
+
+        u32 idBound = code[3];
+
+        DynamicArray<ID> ids(idBound);
+
+        // First instruction starts at index 5
+        u32 offset = 5;
+        while (offset < codeSize)
+        {
+            u32* instruction = code + offset;
+            u32 opcode       = instruction[0] & 0xFFFF;
+            u32 wordCount    = instruction[0] >> 16;
+
+            C3D_ASSERT(wordCount > 0);
+
+            offset += wordCount;
+
+            switch (opcode)
+            {
+                case SpvOpEntryPoint:
+                {
+                    C3D_ASSERT(wordCount >= 2);
+                    m_shaderStage = ExecutionModelToShaderStage(SpvExecutionModel(instruction[1]));
+                    break;
+                }
+                case SpvOpDecorate:
+                {
+                    C3D_ASSERT(wordCount >= 3);
+
+                    u32 id = instruction[1];
+                    C3D_ASSERT(id < idBound);
+
+                    switch (instruction[2])
+                    {
+                        case SpvDecorationDescriptorSet:
+                        {
+                            C3D_ASSERT(wordCount == 4);
+                            ids[id].set = instruction[3];
+                            break;
+                        }
+                        case SpvDecorationBinding:
+                        {
+                            C3D_ASSERT(wordCount == 4);
+                            ids[id].binding = instruction[3];
+                            break;
+                        }
+                    }
+                    break;
+                }
+                case SpvOpVariable:
+                {
+                    C3D_ASSERT(wordCount >= 4);
+
+                    u32 id = instruction[2];
+                    C3D_ASSERT(id < idBound);
+
+                    C3D_ASSERT(ids[id].kind == ID::Unknown);
+                    ids[id].kind         = ID::Variable;
+                    ids[id].type         = instruction[1];
+                    ids[id].storageClass = instruction[3];
+
+                    INFO_LOG("Found id = {} storageClass = {}.", id, ids[id].storageClass);
+
+                    break;
+                }
+            }
+        }
+
+        for (auto& id : ids)
+        {
+            if (id.kind == ID::Variable && id.storageClass == SpvStorageClassStorageBuffer)
+            {
+                // Assume that id.type refers to a pointer to a storage buffer
+                C3D_ASSERT(id.set == 0);
+                C3D_ASSERT(id.binding < 32);
+                C3D_ASSERT((m_storageBufferMask & (1 << id.binding)) == 0);
+
+                m_storageBufferMask |= 1 << id.binding;
+            }
+        }
 
         return true;
     }

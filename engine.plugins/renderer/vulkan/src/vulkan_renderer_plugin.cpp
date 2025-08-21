@@ -489,11 +489,10 @@ namespace C3D
             }
 
             VulkanShaderCreateInfo createInfo;
-            createInfo.context            = &m_context;
-            createInfo.name               = "MESH_SHADER";
-            createInfo.cache              = VK_NULL_HANDLE;
-            createInfo.swapchain          = &backend->swapchain;
-            createInfo.meshShadingEnabled = false;
+            createInfo.context   = &m_context;
+            createInfo.name      = "MESH_SHADER";
+            createInfo.cache     = VK_NULL_HANDLE;
+            createInfo.swapchain = &backend->swapchain;
 
             const VulkanShaderModule* meshModules[] = { &m_meshShaderModule, &m_fragmentShaderModule };
             createInfo.modules                      = meshModules;
@@ -517,9 +516,9 @@ namespace C3D
                 createInfo.name = "MESHLET_SHADER";
 
                 const VulkanShaderModule* meshletModules[] = { &m_meshletShaderModule, &m_fragmentShaderModule };
-                createInfo.modules                         = meshletModules;
-                createInfo.numModules                      = ARRAY_SIZE(meshletModules);
-                createInfo.meshShadingEnabled              = true;
+
+                createInfo.modules    = meshletModules;
+                createInfo.numModules = ARRAY_SIZE(meshletModules);
 
                 if (!m_meshletShader.Create(createInfo))
                 {
