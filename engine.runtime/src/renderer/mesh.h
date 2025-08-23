@@ -10,8 +10,9 @@ namespace C3D
     constexpr auto MESHLET_MAX_VERTICES  = 64;
     constexpr auto MESHLET_MAX_TRIANGLES = 126;
 
-    struct Meshlet
+    struct alignas(16) Meshlet
     {
+        vec4 cone;
         u32 vertices[MESHLET_MAX_VERTICES];
         u8 indices[MESHLET_MAX_TRIANGLES * 3];
         u8 triangleCount = 0;

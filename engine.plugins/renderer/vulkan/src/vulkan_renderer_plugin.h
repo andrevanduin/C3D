@@ -41,6 +41,7 @@ namespace C3D
         VulkanShaderModule m_meshShaderModule;
         VulkanShaderModule m_meshletShaderModule;
         VulkanShaderModule m_fragmentShaderModule;
+        VulkanShaderModule m_meshletTaskShaderModule;
 
         VulkanShader m_meshShader;
         VulkanShader m_meshletShader;

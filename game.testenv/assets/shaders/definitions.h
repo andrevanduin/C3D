@@ -1,12 +1,13 @@
 struct Vertex
 {
-    float16_t x, y, z, w;
+    float x, y, z;
     uint8_t nx, ny, nz, nw;
     float16_t u, v;
 };
 
 struct Meshlet
 {
+    vec4 cone;
     uint vertices[64];
     // NOTE: Up to 126 triangles (3 indices per triangle)
     uint8_t indices[126 * 3];

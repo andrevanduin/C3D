@@ -38,11 +38,13 @@ namespace C3D
         float queuePriorities[] = { 1.0f };
 
         VkDeviceQueueCreateInfo queueInfo = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
-        queueInfo.queueFamilyIndex        = m_physical.graphicsQueueFamilyIndex;
-        queueInfo.queueCount              = 1;
-        queueInfo.pQueuePriorities        = queuePriorities;
 
-        VkDeviceCreateInfo createInfo      = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+        queueInfo.queueFamilyIndex = m_physical.graphicsQueueFamilyIndex;
+        queueInfo.queueCount       = 1;
+        queueInfo.pQueuePriorities = queuePriorities;
+
+        VkDeviceCreateInfo createInfo = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+
         createInfo.queueCreateInfoCount    = 1;
         createInfo.pQueueCreateInfos       = &queueInfo;
         createInfo.enabledExtensionCount   = requiredExtensions.Size();
@@ -51,14 +53,16 @@ namespace C3D
         // Fill in all the structures for our extensions
 
         // 16-Bit storage
-        VkPhysicalDeviceVulkan11Features device11Features   = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+        VkPhysicalDeviceVulkan11Features device11Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+
         device11Features.storageBuffer16BitAccess           = VK_TRUE;
         device11Features.uniformAndStorageBuffer16BitAccess = VK_TRUE;
 
         createInfo.pNext = &device11Features;
 
         // 8-Bit storage and shader float16
-        VkPhysicalDeviceVulkan12Features device12Features  = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+        VkPhysicalDeviceVulkan12Features device12Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+
         device12Features.shaderInt8                        = VK_TRUE;
         device12Features.shaderFloat16                     = VK_TRUE;
         device12Features.uniformAndStorageBuffer8BitAccess = VK_TRUE;
@@ -67,12 +71,15 @@ namespace C3D
 
         // Dynamic rendering
         VkPhysicalDeviceDynamicRenderingFeatures dynamicRendering = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES };
-        dynamicRendering.dynamicRendering                         = VK_TRUE;
-        device12Features.pNext                                    = &dynamicRendering;
+
+        dynamicRendering.dynamicRendering = VK_TRUE;
+        device12Features.pNext            = &dynamicRendering;
 
         // Mesh shaders
         VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT };
-        meshShaderFeatures.meshShader                            = VK_TRUE;
+
+        meshShaderFeatures.meshShader = VK_TRUE;
+        meshShaderFeatures.taskShader = VK_TRUE;
 
         if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {

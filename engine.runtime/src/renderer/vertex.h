@@ -7,11 +7,11 @@ namespace C3D
 {
     struct Vertex
     {
-        /** @brief The position of the vertex. Halfs (2-byte floats) to save some space. */
-        u16 vx, vy, vz, vw;
+        /** @brief The position of the vertex. */
+        vec3 pos;
         /** @brief The normal of the vertex. */
         u8 nx, ny, nz, nw;
-        /** @brief The texture coordinates (u, v) (again halfs to save space). */
+        /** @brief The texture coordinates (u, v) (Halfs to save space). */
         u16 tx, ty;
     };
 

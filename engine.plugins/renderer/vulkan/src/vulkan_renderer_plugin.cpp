@@ -108,6 +108,7 @@ namespace C3D
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
             MeshUtils::BuildMeshlets(m_mesh);
+            MeshUtils::BuildMesletCones(m_mesh);
         }
 
         // Create our buffers
@@ -302,7 +303,7 @@ namespace C3D
                 DescriptorInfo descriptors[] = { m_vertexBuffer.GetHandle(), m_meshBuffer.GetHandle() };
                 m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
 
-                vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size(), 1, 1);
+                vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size() / 32, 1, 1);
             }
             else
             {
@@ -388,9 +389,19 @@ namespace C3D
         m_frameCpuAvg = m_frameCpuAvg * 0.95 + (frameCpuEnd - m_frameCpuBegin) * 0.05;
         m_frameGpuAvg = m_frameGpuAvg * 0.95 + (frameGpuEnd - frameGpuBegin) * 0.05;
 
-        Platform::SetWindowTitle(
-            window, String::FromFormat("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; meshlets: {}", m_frameCpuAvg, m_frameGpuAvg,
-                                       m_mesh.indices.Size() / 3, m_mesh.vertices.Size(), m_mesh.indices.Size(), m_mesh.meshlets.Size()));
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) && m_meshShadingEnabled)
+        {
+            Platform::SetWindowTitle(
+                window,
+                String::FromFormat("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; Mesh Shading: ON, meshlets: {}", m_frameCpuAvg,
+                                   m_frameGpuAvg, m_mesh.indices.Size() / 3, m_mesh.vertices.Size(), m_mesh.indices.Size(), m_mesh.meshlets.Size()));
+        }
+        else
+        {
+            Platform::SetWindowTitle(
+                window, String::FromFormat("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; Mesh Shading: OFF", m_frameCpuAvg,
+                                           m_frameGpuAvg, m_mesh.indices.Size() / 3, m_mesh.vertices.Size(), m_mesh.indices.Size()));
+        }
 
         // Increment the frame index since we have moved on to the next frame
         backendState->frameIndex++;
@@ -512,10 +523,16 @@ namespace C3D
                     return false;
                 }
 
+                if (!m_meshletTaskShaderModule.Create(&m_context, "meshlet.task"))
+                {
+                    ERROR_LOG("Failed to create ShaderModule.");
+                    return false;
+                }
+
                 // For the meshlet shader only the name and one of the modules changes
                 createInfo.name = "MESHLET_SHADER";
 
-                const VulkanShaderModule* meshletModules[] = { &m_meshletShaderModule, &m_fragmentShaderModule };
+                const VulkanShaderModule* meshletModules[] = { &m_meshletTaskShaderModule, &m_meshletShaderModule, &m_fragmentShaderModule };
 
                 createInfo.modules    = meshletModules;
                 createInfo.numModules = ARRAY_SIZE(meshletModules);
@@ -569,6 +586,7 @@ namespace C3D
                 {
                     m_meshletShader.Destroy();
                     m_meshletShaderModule.Destroy();
+                    m_meshletTaskShaderModule.Destroy();
                 }
 
                 m_fragmentShaderModule.Destroy();

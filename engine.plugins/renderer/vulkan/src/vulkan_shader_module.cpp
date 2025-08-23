@@ -74,6 +74,10 @@ namespace C3D
         if (!ReflectSPIRV(code, numBytes))
         {
             ERROR_LOG("Failed to reflect the SPIRV for: '{}'.", name);
+            if (code)
+            {
+                Memory.Free(code);
+            }
             return false;
         }
 
@@ -115,6 +119,10 @@ namespace C3D
         {
             m_shaderStage = VK_SHADER_STAGE_COMPUTE_BIT;
         }
+        else if (m_name.Contains(".task"))
+        {
+            m_shaderStage = VK_SHADER_STAGE_TASK_BIT_EXT;
+        }
         else
         {
             C3D_ASSERT_MSG(false, "Could not determine shader stage.");
@@ -133,6 +141,8 @@ namespace C3D
                 return shaderc_glsl_default_mesh_shader;
             case VK_SHADER_STAGE_COMPUTE_BIT:
                 return shaderc_glsl_default_compute_shader;
+            case VK_SHADER_STAGE_TASK_BIT_EXT:
+                return shaderc_glsl_default_task_shader;
             default:
                 C3D_ASSERT_MSG(false, "Could not determine shader kind");
                 return shaderc_glsl_vertex_shader;
@@ -189,10 +199,11 @@ namespace C3D
 
             }*/
 
-            ERROR_LOG("Source:\n{}", source);
+            ERROR_LOG("Source:\n{}", fmt::string_view(source, sourceSize));
             ERROR_LOG("Errors:\n{}", errorMessage);
 
             shaderc_result_release(compilationResult);
+            shaderc_compile_options_release(options);
             return false;
         }
 
@@ -306,9 +317,6 @@ namespace C3D
                     ids[id].kind         = ID::Variable;
                     ids[id].type         = instruction[1];
                     ids[id].storageClass = instruction[3];
-
-                    INFO_LOG("Found id = {} storageClass = {}.", id, ids[id].storageClass);
-
                     break;
                 }
             }

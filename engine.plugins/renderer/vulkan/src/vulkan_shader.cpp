@@ -31,19 +31,6 @@ namespace C3D
         m_shaderModules    = Memory.Allocate<VulkanShaderModule*>(MemoryType::Shader, m_numShaderModules);
         std::memcpy(m_shaderModules, createInfo.modules, sizeof(VulkanShaderModule*) * m_numShaderModules);
 
-        // Verify that the passed in ShaderModule stages make sense
-        if (m_shaderModules[0]->GetShaderStage() != VK_SHADER_STAGE_VERTEX_BIT && m_shaderModules[0]->GetShaderStage() != VK_SHADER_STAGE_MESH_BIT_EXT)
-        {
-            ERROR_LOG("Expected first ShaderModule to be of type VERTEX_SHADER or MESH_SHADER.");
-            return false;
-        }
-
-        if (m_shaderModules[1]->GetShaderStage() != VK_SHADER_STAGE_FRAGMENT_BIT)
-        {
-            ERROR_LOG("Expected second ShaderModule to be of type FRAGMENT_SHADER.");
-            return false;
-        }
-
         if (!CreateSetLayout())
         {
             ERROR_LOG("Failed to create SetLayout.");
@@ -174,20 +161,23 @@ namespace C3D
         VkGraphicsPipelineCreateInfo createInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
         createInfo.layout                       = m_layout;
 
-        VkPipelineShaderStageCreateInfo stages[2] = {};
+        DynamicArray<VkPipelineShaderStageCreateInfo> stages;
 
-        stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[0].stage  = m_shaderModules[0]->GetShaderStage();
-        stages[0].module = m_shaderModules[0]->GetHandle();
-        stages[0].pName  = "main";
+        for (u32 i = 0; i < m_numShaderModules; ++i)
+        {
+            VulkanShaderModule* m = m_shaderModules[i];
 
-        stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[1].stage  = m_shaderModules[1]->GetShaderStage();
-        stages[1].module = m_shaderModules[1]->GetHandle();
-        stages[1].pName  = "main";
+            VkPipelineShaderStageCreateInfo stageInfo = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
-        createInfo.stageCount = 2;
-        createInfo.pStages    = stages;
+            stageInfo.stage  = m->GetShaderStage();
+            stageInfo.module = m->GetHandle();
+            stageInfo.pName  = "main";
+
+            stages.PushBack(stageInfo);
+        }
+
+        createInfo.stageCount = stages.Size();
+        createInfo.pStages    = stages.GetData();
 
         VkPipelineVertexInputStateCreateInfo vertexInput = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
         createInfo.pVertexInputState                     = &vertexInput;
@@ -218,8 +208,6 @@ namespace C3D
         colorAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
         VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-        colorBlendState.logicOpEnable                       = VK_FALSE;
-        colorBlendState.logicOp                             = VK_LOGIC_OP_COPY;
         colorBlendState.attachmentCount                     = 1;
         colorBlendState.pAttachments                        = &colorAttachmentState;
         createInfo.pColorBlendState                         = &colorBlendState;

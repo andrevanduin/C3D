@@ -2,6 +2,7 @@
 #pragma once
 #include <algorithm>
 
+#include "asserts/asserts.h"
 #include "defines.h"
 #include "math_types.h"
 
@@ -366,6 +367,31 @@ namespace C3D
         h = (em > (255 << 23)) ? 0x7e00 : h;
 
         return static_cast<u16>(s | h);
+    }
+
+    /**
+     * @brief Dequantize a half-precision (as defined by IEEE-754 fp16) floating point value back into a f32 float.
+     *
+     * Taken from: https://github.com/zeux/meshoptimizer
+     */
+    C3D_API C3D_INLINE f32 DequantizeHalf(u16 h)
+    {
+        u32 s  = static_cast<u32>(h & 0x8000) << 16;
+        i32 em = h & 0x7fff;
+
+        // Bias exponent and pad mantissa with 0; 112 is relative exponent bias (127-15)
+        i32 r = (em + (112 << 10)) << 13;
+
+        // Denormal: flush to zero
+        r = (em < (1 << 10)) ? 0 : r;
+
+        // Infinity/NaN; note that we preserve NaN payload as a byproduct of unifying inf/nan cases
+        // 112 is an exponent bias fixup; since we already applied it once, applying it twice converts 31 to 255
+        r += (em >= (31 << 10)) ? (112 << 23) : 0;
+
+        FloatBits u;
+        u.ui = s | r;
+        return u.f;
     }
 
     /** @brief Compares x with edge. Returns 0.0f if x < edge otherwise returns 1.0f. */

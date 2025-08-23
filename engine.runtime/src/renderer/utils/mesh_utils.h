@@ -6,6 +6,8 @@ namespace C3D::MeshUtils
 {
     bool C3D_API BuildMeshlets(Mesh& mesh);
 
+    bool C3D_API BuildMesletCones(Mesh& mesh);
+
     /**
      * @brief Generates a remap containing only indices to unique vertices
      * This remap can then be used to generate a mesh with only unique vertices with the corresponding indices.
@@ -41,4 +43,25 @@ namespace C3D::MeshUtils
      * @param remap The remap containing the new mapping over vertices/indices
      */
     void C3D_API RemapIndices(Mesh& mesh, u32 indexCount, const DynamicArray<u32>& remap);
+
+    /**
+     * @brief Optimize mesh for vertex cache.
+     * Reorders indices to reduce the number of GPU vertex shader invocations
+     *
+     * Heavily inspired by https://github.com/zeux/meshoptimizer.
+     *
+     * @param mesh The mesh you want to optimize
+     */
+    void C3D_API OptimizeForVertexCache(Mesh& mesh);
+
+    /**
+     * @brief Vertex fetch cache optimizer
+     * Reorders vertices and changes indices to reduce the amount of GPU memory fetches during vertex processing
+     *
+     * Heavily inspired by https://github.com/zeux/meshoptimizer.
+     *
+     * @param mesh The mesh you want to optimize
+     */
+    void C3D_API OptimizeForVertexFetch(Mesh& mesh);
+
 }  // namespace C3D::MeshUtils

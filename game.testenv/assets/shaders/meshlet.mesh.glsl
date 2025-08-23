@@ -2,7 +2,7 @@
 
 #version 450
 
-#define DEBUG 1
+#define DEBUG 0
 
 #extension GL_EXT_shader_explicit_arithmetic_types : require
 #extension GL_EXT_mesh_shader : require
@@ -22,6 +22,12 @@ layout (binding = 1) readonly buffer Meshlets
     Meshlet meshlets[];
 };
 
+struct Task
+{
+    uint meshletIndices[32];
+};
+taskPayloadSharedEXT Task IN;
+
 layout (location = 0) out vec4 color[];
 
 #if DEBUG
@@ -35,9 +41,9 @@ uint pcg_hash(uint a)
 
 void main()
 {
-    uint mi = gl_WorkGroupID.x;
     uint ti = gl_LocalInvocationID.x;
-
+    uint mi = IN.meshletIndices[gl_WorkGroupID.x];
+    
     uint vertexCount = meshlets[mi].vertexCount;
     uint triangleCount = meshlets[mi].triangleCount;
 
@@ -72,6 +78,6 @@ void main()
 
     if (ti == 0)
     {
-        SetMeshOutputsEXT(meshlets[mi].vertexCount, meshlets[mi].triangleCount);
+        SetMeshOutputsEXT(vertexCount, triangleCount);
     }
 }

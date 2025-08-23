@@ -142,9 +142,7 @@ namespace C3D
 
                 Vertex vertex = {};
 
-                vertex.vx = QuantizeHalf(m_vs.data[vi * 3 + 0]);
-                vertex.vy = QuantizeHalf(m_vs.data[vi * 3 + 1]);
-                vertex.vz = QuantizeHalf(m_vs.data[vi * 3 + 2]);
+                vertex.pos = { m_vs.data[vi * 3 + 0], m_vs.data[vi * 3 + 1], m_vs.data[vi * 3 + 2] };
 
                 // TODO: Fix rounding
                 vertex.nx = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 0] * 127.f + 127.f);
@@ -159,31 +157,27 @@ namespace C3D
         }
 
         {
-            ScopedTimer timer(String::FromFormat("Optimizing mesh: '{}'.", asset.name, vertices.Size()));
-            DynamicArray<u32> remap;
-            u32 uniqueVertexCount = 0;
+            ScopedTimer timer(String::FromFormat("Remap optimization of: '{}'.", asset.name));
 
-            {
-                ScopedTimer timer("Generating remap");
-                uniqueVertexCount = MeshUtils::GenerateVertexRemap(vertices, indexCount, remap);
-            }
+            DynamicArray<u32> remap;
+            u32 uniqueVertexCount = MeshUtils::GenerateVertexRemap(vertices, indexCount, remap);
 
             asset.vertices.Resize(uniqueVertexCount);
             asset.indices.Resize(indexCount);
 
-            {
-                ScopedTimer timer("Remapping");
-
-                MeshUtils::RemapVertices(asset, indexCount, vertices, remap);
-                MeshUtils::RemapIndices(asset, indexCount, remap);
-            }
+            MeshUtils::RemapVertices(asset, indexCount, vertices, remap);
+            MeshUtils::RemapIndices(asset, indexCount, remap);
 
             INFO_LOG("Went from {} to {} vertices (reduced by {:.2f}%).", vertices.Size(), uniqueVertexCount,
                      (static_cast<f32>(uniqueVertexCount) - vertices.Size()) / vertices.Size() * -100);
         }
 
-        // TODO: Optimize the mesh further to improve rendering performance
-        // Check MeshOptimizer
+        {
+            ScopedTimer timer(String::FromFormat("Optimization for Vertex Cache and Fetch of: '{}'.", asset.name));
+
+            MeshUtils::OptimizeForVertexCache(asset);
+            MeshUtils::OptimizeForVertexFetch(asset);
+        }
 
         // Cleanup our internal data and reset our counters etc.
         m_vs.Destroy();
