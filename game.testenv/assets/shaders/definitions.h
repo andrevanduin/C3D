@@ -8,9 +8,13 @@ struct Vertex
 struct Meshlet
 {
     vec4 cone;
-    uint vertices[64];
-    // NOTE: Up to 126 triangles (3 indices per triangle)
-    uint8_t indices[126 * 3];
+    uint dataOffset;
     uint8_t triangleCount;
     uint8_t vertexCount;
+};
+
+struct MeshDraw
+{
+    vec2 offset;
+    vec2 scale;
 };

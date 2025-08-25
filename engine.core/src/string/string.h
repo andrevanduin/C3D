@@ -511,7 +511,7 @@ namespace C3D
         template <typename... Args>
         void Format(const char* format, Args&&... args)
         {
-            fmt::format_to(std::back_inserter(*this), format, std::forward<Args>(args)...);
+            fmt::vformat_to(std::back_inserter(*this), format, fmt::make_format_args(args...));
         }
 
         /** @brief Builds a string from the format and the provided arguments.

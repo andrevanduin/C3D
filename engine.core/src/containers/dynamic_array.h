@@ -125,17 +125,35 @@ namespace C3D
         }
 
         /**
-         * @brief Resizes the array to have enough memory for the requested size
-         * The array will default construct elements in all newly created empty slots up to size - 1
+         * @brief Resizes the array to at least the requested size.
+         * There are 3 scenarios:
+         * - requested_size == current_size: Nothing will change
+         * - requested_size > current_size: The array will reallocate memory and default construct elements in all newly created empty slots up to
+         * requested_size - 1
+         * - requested_size < current_size: The elements after requested_size will be destroyed
+         *
+         * In all cases after calling this method the size will equal the requested size
          */
         void Resize(const u64 size)
         {
-            // Reserve enough capacity
-            Reserve(size);
-            // All new empty slots (from m_size onwards) up to the new size should be filled with default elements
-            const auto extraCount = size - m_size;
-            std::uninitialized_default_construct_n(begin() + m_size, extraCount);
-            // Since we default constructed all elements up-to provided size we now also have size elements
+            // No need to do anything
+            if (size == m_size) return;
+
+            if (m_size < size)
+            {
+                // We need to grow
+                Reserve(size);
+                // All new empty slots (from m_size onwards) up to the new size should be filled with default elements
+                const auto extraCount = size - m_size;
+                std::uninitialized_default_construct_n(begin() + m_size, extraCount);
+            }
+            else
+            {
+                // We need to shrink so we destroy elements are size
+                std::destroy_n(begin() + size, m_size - size);
+            }
+
+            // Finally our size is now equal to the requested size
             m_size = size;
         }
 

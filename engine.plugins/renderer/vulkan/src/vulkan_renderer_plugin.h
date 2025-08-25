@@ -50,10 +50,13 @@ namespace C3D
 
         f64 m_frameCpuAvg = 0, m_frameGpuAvg = 0, m_frameCpuBegin = 0;
 
+        u32 m_drawCount = 100;
+
         VulkanBuffer m_scratchBuffer;
         VulkanBuffer m_vertexBuffer;
         VulkanBuffer m_indexBuffer;
-        VulkanBuffer m_meshBuffer;
+        VulkanBuffer m_meshletBuffer;
+        VulkanBuffer m_meshletDataBuffer;
 
         Mesh m_mesh;
 

@@ -51,6 +51,7 @@ namespace C3D
         asset.vertices.Destroy();
         asset.indices.Destroy();
         asset.meshlets.Destroy();
+        asset.meshletData.Destroy();
     }
 
     i32 MeshManager::FixIndex(i32 index, u32 size) { return (index >= 0) ? index - 1 : i32(size) + index; }

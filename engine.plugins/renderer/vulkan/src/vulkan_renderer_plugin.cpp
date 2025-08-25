@@ -107,26 +107,91 @@ namespace C3D
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
-            MeshUtils::BuildMeshlets(m_mesh);
-            MeshUtils::BuildMesletCones(m_mesh);
+            // Determine our upper bound of meshlets
+            u32 maxMeshlets = MeshUtils::DetermineMaxMeshlets(m_mesh.indices.Size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
+            // Preallocate enough memory for the maximum number of meshlets
+            DynamicArray<MeshUtils::Meshlet> meshlets(maxMeshlets);
+            DynamicArray<u32> meshletVertices(maxMeshlets * MESHLET_MAX_VERTICES);
+            DynamicArray<u8> meshletTriangles(maxMeshlets * MESHLET_MAX_TRIANGLES * 3);
+            // Generate our meshlets
+            u32 numMeshlets = MeshUtils::GenerateMeshlets(m_mesh, meshlets, meshletVertices, meshletTriangles, 0.25f);
+            // Resize our meshlet array to the actual number of meshlets
+            meshlets.Resize(numMeshlets);
+
+            // Reserve enough space for all meshlets
+            m_mesh.meshlets.Reserve(meshlets.Size());
+
+            for (const auto& meshlet : meshlets)
+            {
+                Meshlet m       = {};
+                m.vertexCount   = meshlet.vertexCount;
+                m.triangleCount = meshlet.triangleCount;
+                m.dataOffset    = m_mesh.meshletData.Size();
+
+                // Populate the vertex indices
+                for (u32 i = 0; i < meshlet.vertexCount; ++i)
+                {
+                    m_mesh.meshletData.PushBack(meshletVertices[meshlet.vertexOffset + i]);
+                }
+
+                if (meshlet.triangleCount > 0)
+                {
+                    // Get a pointer to the triangle data as u32
+                    u32* triangleData = reinterpret_cast<u32*>(meshletTriangles.GetData() + meshlet.triangleOffset);
+                    // Count the number of indices (triangles * 3) and add 3 to ensure that rounded down we always have enough room
+                    u32 packedTriangleCount = (meshlet.triangleCount * 3 + 3) / 4;
+
+                    // Populate the triangle indices
+                    for (u32 i = 0; i < packedTriangleCount; ++i)
+                    {
+                        m_mesh.meshletData.PushBack(triangleData[i]);
+                    }
+                }
+
+                MeshletBounds bounds = MeshUtils::GenerateMeshletBounds(m_mesh, meshlet, meshletVertices, meshletTriangles);
+
+                m.cone.x = bounds.coneAxis.x;
+                m.cone.y = bounds.coneAxis.y;
+                m.cone.z = bounds.coneAxis.z;
+                m.cone.w = bounds.coneCutoff;
+
+                m_mesh.meshlets.PushBack(m);
+            }
+
+#if 1
+            constexpr vec3 view = vec3(0, 0, 1);
+            u32 numCulled       = 0;
+
+            for (auto& meshlet : m_mesh.meshlets)
+            {
+                vec3 cone = { meshlet.cone.x, meshlet.cone.y, meshlet.cone.z };
+                if (glm::dot(cone, view) > meshlet.cone.w)
+                {
+                    numCulled++;
+                }
+            }
+
+            INFO_LOG("Number of meshlets culled with view (0, 0, 1): {}/{} ({:.2f}%)", numCulled, m_mesh.meshlets.Size(),
+                     (static_cast<f32>(numCulled) / m_mesh.meshlets.Size()) * 100.f);
+#endif
         }
 
         // Create our buffers
-        if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(128), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(64), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
         {
             ERROR_LOG("Failed to create vertex buffer.");
             return false;
         }
 
-        if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(128), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create vertex buffer.");
             return false;
         }
 
-        if (!m_indexBuffer.Create(&m_context, "INDEX", MebiBytes(128), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        if (!m_indexBuffer.Create(&m_context, "INDEX", MebiBytes(32), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create index buffer.");
@@ -135,8 +200,15 @@ namespace C3D
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
-            if (!m_meshBuffer.Create(&m_context, "MESH", MebiBytes(128), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+            if (!m_meshletBuffer.Create(&m_context, "MESHLET", MebiBytes(32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+            {
+                ERROR_LOG("Failed to create mesh buffer.");
+                return false;
+            }
+
+            if (!m_meshletDataBuffer.Create(&m_context, "MESHLET_DATA", MebiBytes(32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
             {
                 ERROR_LOG("Failed to create mesh buffer.");
                 return false;
@@ -180,7 +252,8 @@ namespace C3D
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
-            m_meshBuffer.Destroy();
+            m_meshletBuffer.Destroy();
+            m_meshletDataBuffer.Destroy();
         }
 
         m_context.stagingBuffer.Destroy();
@@ -239,6 +312,7 @@ namespace C3D
     bool VulkanRendererPlugin::Begin(Window& window)
     {
         constexpr VkClearColorValue clearColor = { 30.f / 255.f, 54.f / 255.f, 42.f / 255.f, 1 };
+        static std::vector<MeshDraw> draws;
 
         auto backendState = window.rendererState->backendState;
 
@@ -296,14 +370,27 @@ namespace C3D
             vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+            draws.resize(m_drawCount);
+            for (u32 i = 0; i < m_drawCount; ++i)
+            {
+                draws[i].offset.x = static_cast<f32>(i % 10) * 0.1f + 0.05f;
+                draws[i].offset.y = static_cast<f32>(i / 10) * 0.1f + 0.05f;
+                draws[i].scale.x  = 0.1f;
+                draws[i].scale.y  = 0.1f;
+            }
+
             if (m_meshShadingEnabled)
             {
                 m_meshletShader.Bind(commandBuffer);
 
-                DescriptorInfo descriptors[] = { m_vertexBuffer.GetHandle(), m_meshBuffer.GetHandle() };
+                DescriptorInfo descriptors[] = { m_vertexBuffer.GetHandle(), m_meshletBuffer.GetHandle(), m_meshletDataBuffer.GetHandle() };
                 m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
 
-                vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size() / 32, 1, 1);
+                for (auto& draw : draws)
+                {
+                    m_meshletShader.PushConstants(commandBuffer, &draw, sizeof(draw));
+                    vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size() / 32, 1, 1);
+                }
             }
             else
             {
@@ -313,7 +400,12 @@ namespace C3D
                 m_meshShader.PushDescriptorSet(commandBuffer, descriptors);
 
                 vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
-                vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
+
+                for (auto& draw : draws)
+                {
+                    m_meshShader.PushConstants(commandBuffer, &draw, sizeof(draw));
+                    vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
+                }
             }
         }
 
@@ -364,6 +456,8 @@ namespace C3D
 
     bool VulkanRendererPlugin::Present(Window& window)
     {
+        static String titleText;
+
         auto backendState = window.rendererState->backendState;
         auto queue        = m_context.device.GetDeviceQueue();
 
@@ -389,19 +483,24 @@ namespace C3D
         m_frameCpuAvg = m_frameCpuAvg * 0.95 + (frameCpuEnd - m_frameCpuBegin) * 0.05;
         m_frameGpuAvg = m_frameGpuAvg * 0.95 + (frameGpuEnd - frameGpuBegin) * 0.05;
 
+        f64 trianglesPerSecond = static_cast<f64>(m_drawCount) * static_cast<f64>(m_mesh.indices.Size() / 3) / (m_frameGpuAvg * 1e-3);
+
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) && m_meshShadingEnabled)
         {
-            Platform::SetWindowTitle(
-                window,
-                String::FromFormat("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; Mesh Shading: ON, meshlets: {}", m_frameCpuAvg,
-                                   m_frameGpuAvg, m_mesh.indices.Size() / 3, m_mesh.vertices.Size(), m_mesh.indices.Size(), m_mesh.meshlets.Size()));
+            titleText.Clear();
+            titleText.Format("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; meshlets: {}; Mesh Shading: ON; {:.1f}B tri/sec",
+                             m_frameCpuAvg, m_frameGpuAvg, m_mesh.indices.Size() / 3, m_mesh.vertices.Size(), m_mesh.indices.Size(), m_mesh.meshlets.Size(),
+                             trianglesPerSecond * 1e-9);
         }
         else
         {
-            Platform::SetWindowTitle(
-                window, String::FromFormat("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; Mesh Shading: OFF", m_frameCpuAvg,
-                                           m_frameGpuAvg, m_mesh.indices.Size() / 3, m_mesh.vertices.Size(), m_mesh.indices.Size()));
+            titleText.Clear();
+            titleText.Format("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; meshlets: {}; Mesh Shading: OFF; {:.1f}B tri/sec",
+                             m_frameCpuAvg, m_frameGpuAvg, m_mesh.indices.Size() / 3, m_mesh.vertices.Size(), m_mesh.indices.Size(), 0,
+                             trianglesPerSecond * 1e-9);
         }
+
+        Platform::SetWindowTitle(window, titleText);
 
         // Increment the frame index since we have moved on to the next frame
         backendState->frameIndex++;
@@ -500,14 +599,16 @@ namespace C3D
             }
 
             VulkanShaderCreateInfo createInfo;
-            createInfo.context   = &m_context;
-            createInfo.name      = "MESH_SHADER";
-            createInfo.cache     = VK_NULL_HANDLE;
-            createInfo.swapchain = &backend->swapchain;
+            createInfo.context           = &m_context;
+            createInfo.name              = "MESH_SHADER";
+            createInfo.cache             = VK_NULL_HANDLE;
+            createInfo.swapchain         = &backend->swapchain;
+            createInfo.pushConstantsSize = sizeof(MeshDraw);
 
             const VulkanShaderModule* meshModules[] = { &m_meshShaderModule, &m_fragmentShaderModule };
-            createInfo.modules                      = meshModules;
-            createInfo.numModules                   = ARRAY_SIZE(meshModules);
+
+            createInfo.modules    = meshModules;
+            createInfo.numModules = ARRAY_SIZE(meshModules);
 
             if (!m_meshShader.Create(createInfo))
             {
@@ -552,7 +653,16 @@ namespace C3D
 
             if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
             {
-                m_meshBuffer.Upload(commandBuffer, commandPool, m_mesh.meshlets.GetData(), sizeof(Meshlet) * m_mesh.meshlets.Size());
+                if (!m_meshletBuffer.Upload(commandBuffer, commandPool, m_mesh.meshlets.GetData(), sizeof(Meshlet) * m_mesh.meshlets.Size()))
+                {
+                    ERROR_LOG("Failed to upload meshlets.");
+                    return false;
+                }
+                if (!m_meshletDataBuffer.Upload(commandBuffer, commandPool, m_mesh.meshletData.GetData(), sizeof(u32) * m_mesh.meshletData.Size()))
+                {
+                    ERROR_LOG("Failed to upload meshlet data.");
+                    return false;
+                }
             }
         }
 

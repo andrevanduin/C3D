@@ -329,9 +329,13 @@ namespace C3D
                 // Assume that id.type refers to a pointer to a storage buffer
                 C3D_ASSERT(id.set == 0);
                 C3D_ASSERT(id.binding < 32);
-                C3D_ASSERT((m_storageBufferMask & (1 << id.binding)) == 0);
 
                 m_storageBufferMask |= 1 << id.binding;
+            }
+
+            if (id.kind == ID::Variable && id.storageClass == SpvStorageClassPushConstant)
+            {
+                m_usePushConstants = true;
             }
         }
 

@@ -3,16 +3,17 @@
 
 #include "containers/hash_map.h"
 #include "math/c3d_math.h"
+#include "time/scoped_timer.h"
 
 namespace C3D
 {
-#define SHOW_NUM_CULLED 1
-
     namespace
     {
-        constexpr u32 SLOT_EMPTY       = -1;
-        constexpr u64 K_CACHE_SIZE_MAX = 16;
-        constexpr u64 K_VALENCE_MAX    = 8;
+        constexpr u32 SLOT_EMPTY          = -1;
+        constexpr u64 K_CACHE_SIZE_MAX    = 16;
+        constexpr u64 K_VALENCE_MAX       = 8;
+        constexpr u64 K_MESHLET_MAX_SEEDS = 256;
+        constexpr u64 K_MESHLET_ADD_SEEDS = 4;
 
         // This work is based on:
         // Matthias Teschner, Bruno Heidelberger, Matthias Mueller, Danat Pomeranets, Markus Gross. Optimized Spatial Hashing for Collision Detection of
@@ -50,7 +51,7 @@ namespace C3D
 
             u64 hash(u32 index) const { return hashUpdate4(0, data + index * vertexStride, vertexSize); }
 
-            bool equal(u32 lhs, u32 rhs) const { return memcmp(data + lhs * vertexStride, data + rhs * vertexStride, vertexSize) == 0; }
+            bool equal(u32 lhs, u32 rhs) const { return std::memcmp(data + lhs * vertexStride, data + rhs * vertexStride, vertexSize) == 0; }
         };
 
         struct VertexScoreTable
@@ -63,6 +64,19 @@ namespace C3D
         constexpr VertexScoreTable K_VERTEX_SCORE_TABLE = {
             { 0.f, 0.779f, 0.791f, 0.789f, 0.981f, 0.843f, 0.726f, 0.847f, 0.882f, 0.867f, 0.799f, 0.642f, 0.613f, 0.600f, 0.568f, 0.372f, 0.234f },
             { 0.f, 0.995f, 0.713f, 0.450f, 0.404f, 0.059f, 0.005f, 0.147f, 0.006f },
+        };
+
+        constexpr vec3 K_AXES[7] = {
+            // X, Y, Z
+            vec3(1, 0, 0),
+            vec3(0, 1, 0),
+            vec3(0, 0, 1),
+
+            // XYZ, -XYZ, X-YZ, XY-Z; normalized to unit length
+            vec3(0.57735026f, 0.57735026f, 0.57735026f),
+            vec3(-0.57735026f, 0.57735026f, 0.57735026f),
+            vec3(0.57735026f, -0.57735026f, 0.57735026f),
+            vec3(0.57735026f, 0.57735026f, -0.57735026f),
         };
 
         struct TriangleAdjacency
@@ -85,6 +99,279 @@ namespace C3D
                 if (data) Memory.Free(data);
             }
         };
+
+        struct Cone
+        {
+            vec3 p;
+            vec3 n;
+        };
+
+        struct KDNode
+        {
+            union {
+                f32 split;
+                u32 index;
+            };
+
+            // Leaves: axis = 3, children = number of extra points after this one (0 if 'index' is the only point)
+            // Branches: axis != 3, left subtree = skip 1, right subtree = skip 1+children
+            u32 axis : 2;
+            u32 children : 30;
+        };
+
+        void ComputeBoundingSphere(vec4& result, const vec3* points, u64 count, u64 axisCount)
+        {
+            C3D_ASSERT(count > 0);
+
+            // find extremum points along all axes; for each axis we get a pair of points with min/max coordinates
+            u64 pmin[7], pmax[7];
+            f32 tmin[7], tmax[7];
+
+            for (u64 axis = 0; axis < axisCount; ++axis)
+            {
+                pmin[axis] = pmax[axis] = 0;
+                tmin[axis]              = FLT_MAX;
+                tmax[axis]              = -FLT_MAX;
+            }
+
+            for (u64 i = 0; i < count; ++i)
+            {
+                const vec3& p = points[i];
+
+                for (size_t axis = 0; axis < axisCount; ++axis)
+                {
+                    const vec3& ax = K_AXES[axis];
+
+                    f32 tp    = glm::dot(ax, p);
+                    f32 tpmin = tp, tpmax = tp;
+
+                    pmin[axis] = (tpmin < tmin[axis]) ? i : pmin[axis];
+                    pmax[axis] = (tpmax > tmax[axis]) ? i : pmax[axis];
+                    tmin[axis] = (tpmin < tmin[axis]) ? tpmin : tmin[axis];
+                    tmax[axis] = (tpmax > tmax[axis]) ? tpmax : tmax[axis];
+                }
+            }
+
+            // Find the pair of points with largest distance
+            u64 paxis   = 0;
+            f32 paxisdr = 0;
+
+            for (u64 axis = 0; axis < axisCount; ++axis)
+            {
+                const vec3& p1 = points[pmin[axis]];
+                const vec3& p2 = points[pmax[axis]];
+
+                f32 d = glm::length(p2 - p1);
+                if (d > paxisdr)
+                {
+                    paxisdr = d;
+                    paxis   = axis;
+                }
+            }
+
+            // Use the longest segment as the initial sphere diameter
+            const vec3 p1 = points[pmin[paxis]];
+            const vec3 p2 = points[pmax[paxis]];
+
+            f32 paxisd = glm::length(p2 - p1);
+            f32 paxisk = paxisd > 0 ? (paxisd) / (2 * paxisd) : 0.f;
+
+            vec3 center = p1 + (p2 - p1) * paxisk;
+            f32 radius  = paxisdr / 2;
+
+            // Iteratively adjust the sphere up until all points fit
+            for (size_t i = 0; i < count; ++i)
+            {
+                const vec3& p = points[i];
+                f32 d         = glm::length(p - center);
+                if (d > radius)
+                {
+                    f32 k = d > 0 ? (d - radius) / (2 * d) : 0.f;
+
+                    center += k * (p - center);
+                    radius = (radius + d) / 2;
+                }
+            }
+
+            result.x = center.x;
+            result.y = center.y;
+            result.z = center.z;
+            result.w = radius;
+        }
+
+        f32 GetDistance(const vec3& d, bool aa)
+        {
+            if (!aa)
+            {
+                return glm::length(d);
+            }
+
+            vec3 r  = glm::abs(d);
+            f32 rxy = r.x > r.y ? r.x : r.y;
+            return rxy > r.z ? rxy : r.z;
+        }
+
+        f32 GetMeshletScore(f32 distance, f32 spread, f32 coneWeight, f32 expectedRadius)
+        {
+            if (coneWeight < 0)
+            {
+                return 1 + distance / expectedRadius;
+            }
+
+            f32 cone        = 1.f - spread * coneWeight;
+            f32 coneClamped = cone < 1e-3f ? 1e-3f : cone;
+
+            return (1 + distance / expectedRadius * (1 - coneWeight)) * coneClamped;
+        }
+
+        Cone GetMeshletCone(const Cone& acc, u32 triangleCount)
+        {
+            Cone result = acc;
+
+            f32 centerScale = triangleCount == 0 ? 0.f : 1.f / f32(triangleCount);
+
+            result.p *= centerScale;
+
+            f32 axisLength = glm::dot(result.n, result.n);
+            f32 axisScale  = axisLength == 0.f ? 0.f : 1.f / std::sqrtf(axisLength);
+
+            result.n *= axisScale;
+
+            return result;
+        }
+
+        u64 KDTreePartition(u32* indices, u64 count, const vec3* points, u32 axis, f32 pivot)
+        {
+            u64 m = 0;
+
+            // Invariant: elements in range [0, m) are < pivot, elements in range [m, i) are >= pivot
+            for (u64 i = 0; i < count; ++i)
+            {
+                f32 v = points[indices[i]][axis];
+
+                // Swap(m, i) unconditionally
+                u32 t      = indices[m];
+                indices[m] = indices[i];
+                indices[i] = t;
+
+                // When v >= pivot, we swap i with m without advancing it, preserving invariants
+                m += v < pivot;
+            }
+
+            return m;
+        }
+
+        u64 KDTreeBuildLeaf(u64 offset, KDNode* nodes, u64 nodeCount, u32* indices, u64 count)
+        {
+            C3D_ASSERT(offset + count <= nodeCount);
+
+            KDNode& result = nodes[offset];
+
+            result.index    = indices[0];
+            result.axis     = 3;
+            result.children = static_cast<u32>(count - 1);
+
+            // All remaining points are stored in nodes immediately following the leaf
+            for (u64 i = 1; i < count; ++i)
+            {
+                KDNode& tail = nodes[offset + i];
+
+                tail.index    = indices[i];
+                tail.axis     = 3;
+                tail.children = INVALID_ID >> 2;  // Bogus value to prevent misuse
+            }
+
+            return offset + count;
+        }
+
+        u64 KDTreeBuild(u64 offset, KDNode* nodes, u64 nodeCount, const vec3* points, u32* indices, u64 count, u64 leafSize)
+        {
+            C3D_ASSERT(count > 0);
+            C3D_ASSERT(offset < nodeCount);
+
+            if (count <= leafSize)
+            {
+                return KDTreeBuildLeaf(offset, nodes, nodeCount, indices, count);
+            }
+
+            vec3 mean = {};
+            vec3 vars = {};
+            f32 runc = 1, runs = 1;
+
+            // Gather statistics on the points in the subtree using Welford's algorithm
+            for (u64 i = 0; i < count; ++i, runc += 1.f, runs = 1.f / runc)
+            {
+                vec3 point = points[indices[i]];
+                vec3 delta = point - mean;
+                mean += delta * runs;
+                vars += delta * (point - mean);
+            }
+
+            // Split axis is one where the variance is largest
+            u32 axis = (vars[0] >= vars[1] && vars[0] >= vars[2]) ? 0 : (vars[1] >= vars[2] ? 1 : 2);
+
+            f32 split  = mean[axis];
+            u64 middle = KDTreePartition(indices, count, points, axis, split);
+
+            // When the partition is degenerate simply consolidate the points into a single node
+            if (middle <= leafSize / 2 || middle >= count - leafSize / 2)
+            {
+                return KDTreeBuildLeaf(offset, nodes, nodeCount, indices, count);
+            }
+
+            KDNode& result = nodes[offset];
+
+            result.split = split;
+            result.axis  = axis;
+
+            // Left subtree is right after our node
+            size_t next_offset = KDTreeBuild(offset + 1, nodes, nodeCount, points, indices, middle, leafSize);
+
+            // Distance to the right subtree is represented explicitly
+            result.children = static_cast<u32>(next_offset - offset - 1);
+
+            return KDTreeBuild(next_offset, nodes, nodeCount, points, indices + middle, count - middle, leafSize);
+        }
+
+        void KDTreeNearest(KDNode* nodes, u32 root, const vec3* points, const u8* emittedFlags, const vec3& position, bool aa, u32& result, f32& limit)
+        {
+            const KDNode& node = nodes[root];
+
+            if (node.axis == 3)
+            {
+                // Leaf
+                for (u32 i = 0; i <= node.children; ++i)
+                {
+                    u32 index = nodes[root + i].index;
+
+                    if (emittedFlags[index]) continue;
+
+                    vec3 point   = points[index];
+                    f32 distance = GetDistance(point - position, aa);
+
+                    if (distance < limit)
+                    {
+                        result = index;
+                        limit  = distance;
+                    }
+                }
+            }
+            else
+            {
+                // Branch; we order recursion to process the node that search position is in first
+                f32 delta  = position[node.axis] - node.split;
+                u32 first  = (delta <= 0) ? 0 : node.children;
+                u32 second = first ^ node.children;
+
+                KDTreeNearest(nodes, root + 1 + first, points, emittedFlags, position, aa, result, limit);
+
+                // Only process the other node if it can have a match based on closest distance so far
+                if (std::fabsf(delta) <= limit)
+                {
+                    KDTreeNearest(nodes, root + 1 + second, points, emittedFlags, position, aa, result, limit);
+                }
+            }
+        }
 
         u64 HashBuckets(size_t count)
         {
@@ -170,6 +457,356 @@ namespace C3D
             }
         }
 
+        void BuildTriangleAdjacencySparse(TriangleAdjacency& adjacency, u32* indices, u64 indexCount, u64 vertexCount)
+        {
+            // Sparse mode can build adjacency more quickly by ignoring unused vertices, using a bit to mark visited vertices
+            constexpr u32 SPARSE_SEEN = 1u << 31;
+            C3D_ASSERT(indexCount < SPARSE_SEEN);
+
+            u64 faceCount = indexCount / 3;
+
+            // Allocate arrays
+            adjacency.Allocate(vertexCount, indexCount);
+
+            // Fill triangle counts
+            for (u64 i = 0; i < indexCount; ++i)
+            {
+                C3D_ASSERT(indices[i] < vertexCount);
+                adjacency.counts[indices[i]] = 0;
+            }
+
+            for (u64 i = 0; i < indexCount; ++i)
+            {
+                adjacency.counts[indices[i]]++;
+            }
+
+            // Fill offset table; uses SPARSE_SEEN bit to tag visited vertices
+            u32 offset = 0;
+
+            for (u64 i = 0; i < indexCount; ++i)
+            {
+                u32 v = indices[i];
+
+                if ((adjacency.counts[v] & SPARSE_SEEN) == 0)
+                {
+                    adjacency.offsets[v] = offset;
+                    offset += adjacency.counts[v];
+                    adjacency.counts[v] |= SPARSE_SEEN;
+                }
+            }
+
+            C3D_ASSERT(offset == indexCount);
+
+            // Fill triangle data
+            for (u64 i = 0; i < faceCount; ++i)
+            {
+                u32 a = indices[i * 3 + 0], b = indices[i * 3 + 1], c = indices[i * 3 + 2];
+
+                adjacency.data[adjacency.offsets[a]++] = static_cast<u32>(i);
+                adjacency.data[adjacency.offsets[b]++] = static_cast<u32>(i);
+                adjacency.data[adjacency.offsets[c]++] = static_cast<u32>(i);
+            }
+
+            // Fix offsets that have been disturbed by the previous pass
+            // also fix counts (that were marked with SPARSE_SEEN by the first pass)
+            for (u64 i = 0; i < indexCount; ++i)
+            {
+                u32 v = indices[i];
+
+                if (adjacency.counts[v] & SPARSE_SEEN)
+                {
+                    adjacency.counts[v] &= ~SPARSE_SEEN;
+
+                    C3D_ASSERT(adjacency.offsets[v] >= adjacency.counts[v]);
+                    adjacency.offsets[v] -= adjacency.counts[v];
+                }
+            }
+        }
+
+        f32 ComputeTriangleCones(Cone* triangles, const DynamicArray<u32>& indices, const DynamicArray<Vertex>& vertices)
+        {
+            u64 vertexCount = vertices.Size();
+            u64 indexCount  = indices.Size();
+            u64 faceCount   = indexCount / 3;
+
+            f32 meshArea = 0;
+
+            for (u64 i = 0; i < faceCount; ++i)
+            {
+                u32 a = indices[i * 3 + 0], b = indices[i * 3 + 1], c = indices[i * 3 + 2];
+                C3D_ASSERT(a < vertexCount && b < vertexCount && c < vertexCount);
+
+                const vec3& p0 = vertices[a].pos;
+                const vec3& p1 = vertices[b].pos;
+                const vec3& p2 = vertices[c].pos;
+
+                vec3 p10 = p1 - p0;
+                vec3 p20 = p2 - p1;
+
+                vec3 normal = glm::cross(p10, p20);
+
+                f32 area    = glm::length(normal);
+                f32 invarea = (area == 0.f) ? 0.f : 1.f / area;
+
+                triangles[i].p = (p0 + p1 + p2) / 3.f;
+                triangles[i].n = normal * invarea;
+
+                meshArea += area;
+            }
+
+            return meshArea;
+        }
+
+        void FinishMeshlet(MeshUtils::Meshlet& meshlet, DynamicArray<u8>& meshletTriangles)
+        {
+            u64 offset = meshlet.triangleOffset + meshlet.triangleCount * 3;
+
+            // fill 4b padding with 0
+            while (offset & 3)
+            {
+                meshletTriangles[offset++] = 0;
+            }
+        }
+
+        bool AppendMeshlet(MeshUtils::Meshlet& meshlet, u32 a, u32 b, u32 c, i16* used, DynamicArray<MeshUtils::Meshlet>& meshlets,
+                           DynamicArray<u32>& meshletVertices, DynamicArray<u8>& meshletTriangles, u64 meshletOffset, u64 maxVertices, u64 maxTriangles,
+                           bool split = false)
+        {
+            i16& av = used[a];
+            i16& bv = used[b];
+            i16& cv = used[c];
+
+            bool result = false;
+
+            int used_extra = (av < 0) + (bv < 0) + (cv < 0);
+
+            if (meshlet.vertexCount + used_extra > maxVertices || meshlet.triangleCount >= maxTriangles || split)
+            {
+                meshlets[meshletOffset] = meshlet;
+
+                for (u64 j = 0; j < meshlet.vertexCount; ++j)
+                {
+                    used[meshletVertices[meshlet.vertexOffset + j]] = -1;
+                }
+
+                FinishMeshlet(meshlet, meshletTriangles);
+
+                meshlet.vertexOffset += meshlet.vertexCount;
+                meshlet.triangleOffset += (meshlet.triangleCount * 3 + 3) & ~3;  // 4b padding
+                meshlet.vertexCount   = 0;
+                meshlet.triangleCount = 0;
+
+                result = true;
+            }
+
+            if (av < 0)
+            {
+                av                                                            = i16(meshlet.vertexCount);
+                meshletVertices[meshlet.vertexOffset + meshlet.vertexCount++] = a;
+            }
+
+            if (bv < 0)
+            {
+                bv                                                            = i16(meshlet.vertexCount);
+                meshletVertices[meshlet.vertexOffset + meshlet.vertexCount++] = b;
+            }
+
+            if (cv < 0)
+            {
+                cv                                                            = i16(meshlet.vertexCount);
+                meshletVertices[meshlet.vertexOffset + meshlet.vertexCount++] = c;
+            }
+
+            meshletTriangles[meshlet.triangleOffset + meshlet.triangleCount * 3 + 0] = static_cast<u8>(av);
+            meshletTriangles[meshlet.triangleOffset + meshlet.triangleCount * 3 + 1] = static_cast<u8>(bv);
+            meshletTriangles[meshlet.triangleOffset + meshlet.triangleCount * 3 + 2] = static_cast<u8>(cv);
+            meshlet.triangleCount++;
+
+            return result;
+        }
+
+        u32 GetNeighborTriangle(const MeshUtils::Meshlet& meshlet, const Cone& meshletCone, const DynamicArray<u32>& meshletVertices,
+                                const DynamicArray<u32>& indices, const TriangleAdjacency& adjacency, const Cone* triangles, const u32* liveTriangles,
+                                const i16* used, f32 meshletExpectedRadius, f32 coneWeight)
+        {
+            u32 bestTriangle = INVALID_ID;
+            i32 bestPriority = 5;
+            f32 bestScore    = FLT_MAX;
+
+            for (size_t i = 0; i < meshlet.vertexCount; ++i)
+            {
+                u32 index = meshletVertices[meshlet.vertexOffset + i];
+
+                u32* neighbors    = &adjacency.data[0] + adjacency.offsets[index];
+                u64 neighborsSize = adjacency.counts[index];
+
+                for (u64 j = 0; j < neighborsSize; ++j)
+                {
+                    u32 triangle = neighbors[j];
+                    u32 a = indices[triangle * 3 + 0], b = indices[triangle * 3 + 1], c = indices[triangle * 3 + 2];
+
+                    i32 extra = (used[a] < 0) + (used[b] < 0) + (used[c] < 0);
+                    C3D_ASSERT(extra <= 2);
+
+                    i32 priority = -1;
+
+                    // Triangles that don't add new vertices to meshlets are max. priority
+                    if (extra == 0)
+                    {
+                        priority = 0;
+                    }
+                    // Artificially increase the priority of dangling triangles as they're expensive to add to new meshlets
+                    else if (liveTriangles[a] == 1 || liveTriangles[b] == 1 || liveTriangles[c] == 1)
+                    {
+                        priority = 1;
+                    }
+                    // If two vertices have live count of 2, removing this triangle will make another triangle dangling which is good for overall flow
+                    else if ((liveTriangles[a] == 2) + (liveTriangles[b] == 2) + (liveTriangles[c] == 2) >= 2)
+                    {
+                        priority = 1 + extra;
+                    }
+                    // Otherwise adjust priority to be after the above cases, 3 or 4 based on used[] count
+                    else
+                    {
+                        priority = 2 + extra;
+                    }
+
+                    // Since topology-based priority is always more important than the score, we can skip scoring in some cases
+                    if (priority > bestPriority) continue;
+
+                    const Cone& triCone = triangles[triangle];
+
+                    float distance = GetDistance(triCone.p - meshletCone.p, coneWeight < 0);
+                    f32 spread     = glm::dot(triCone.n, meshletCone.n);
+
+                    f32 score = GetMeshletScore(distance, spread, coneWeight, meshletExpectedRadius);
+
+                    // Note that topology-based priority is always more important than the score
+                    // this helps maintain reasonable effectiveness of meshlet data and reduces scoring cost
+                    if (priority < bestPriority || score < bestScore)
+                    {
+                        bestTriangle = triangle;
+                        bestPriority = priority;
+                        bestScore    = score;
+                    }
+                }
+            }
+
+            return bestTriangle;
+        }
+
+        u64 AppendSeedTriangles(u32* seeds, const MeshUtils::Meshlet& meshlet, const DynamicArray<u32>& meshletVertices, const DynamicArray<u32>& indices,
+                                const TriangleAdjacency& adjacency, const Cone* triangles, const u32* liveTriangles, const vec3& corner)
+        {
+            u32 bestSeeds[K_MESHLET_MAX_SEEDS];
+            u32 bestLive[K_MESHLET_MAX_SEEDS];
+            f32 bestScore[K_MESHLET_MAX_SEEDS];
+
+            for (u64 i = 0; i < K_MESHLET_MAX_SEEDS; ++i)
+            {
+                bestSeeds[i] = INVALID_ID;
+                bestLive[i]  = INVALID_ID;
+                bestScore[i] = FLT_MAX;
+            }
+
+            for (u64 i = 0; i < meshlet.vertexCount; ++i)
+            {
+                u32 index = meshletVertices[meshlet.vertexOffset + i];
+
+                u32 bestNeighbor     = INVALID_ID;
+                u32 bestNeighborLive = INVALID_ID;
+
+                // Find the neighbor with the smallest live metric
+                u32* neighbors    = &adjacency.data[0] + adjacency.offsets[index];
+                u64 neighborsSize = adjacency.counts[index];
+
+                for (u64 j = 0; j < neighborsSize; ++j)
+                {
+                    u32 triangle = neighbors[j];
+                    u32 a = indices[triangle * 3 + 0], b = indices[triangle * 3 + 1], c = indices[triangle * 3 + 2];
+
+                    u32 live = liveTriangles[a] + liveTriangles[b] + liveTriangles[c];
+
+                    if (live < bestNeighborLive)
+                    {
+                        bestNeighbor     = triangle;
+                        bestNeighborLive = live;
+                    }
+                }
+
+                // Add the neighbor to the list of seeds; the list is unsorted and the replacement criteria is approximate
+                if (bestNeighbor == INVALID_ID) continue;
+
+                f32 bestNeighborScore = GetDistance(triangles[bestNeighbor].p - corner, false);
+
+                for (u64 j = 0; j < K_MESHLET_ADD_SEEDS; ++j)
+                {
+                    // Non-strict comparison reduces the number of duplicate seeds (triangles adjacent to multiple vertices)
+                    if (bestNeighborLive < bestLive[j] || (bestNeighborLive == bestLive[j] && bestNeighborScore <= bestScore[j]))
+                    {
+                        bestSeeds[j] = bestNeighbor;
+                        bestLive[j]  = bestNeighborLive;
+                        bestScore[j] = bestNeighborScore;
+                        break;
+                    }
+                }
+            }
+
+            // Add surviving seeds to the meshlet
+            u64 seedCount = 0;
+
+            for (u64 i = 0; i < K_MESHLET_ADD_SEEDS; ++i)
+            {
+                if (bestSeeds[i] != INVALID_ID)
+                {
+                    seeds[seedCount++] = bestSeeds[i];
+                }
+            }
+
+            return seedCount;
+        }
+
+        u64 PruneSeedTriangles(u32* seeds, u64 seedCount, const u8* emittedFlags)
+        {
+            u64 result = 0;
+
+            for (u64 i = 0; i < seedCount; ++i)
+            {
+                u32 index = seeds[i];
+
+                seeds[result] = index;
+                result += emittedFlags[index] == 0;
+            }
+
+            return result;
+        }
+
+        u32 SelectSeedTriangle(const u32* seeds, u64 seedCount, const DynamicArray<u32>& indices, const Cone* triangles, const u32* liveTriangles,
+                               const vec3& corner)
+        {
+            u32 bestSeed  = INVALID_ID;
+            u32 bestLive  = INVALID_ID;
+            f32 bestScore = FLT_MAX;
+
+            for (u64 i = 0; i < seedCount; ++i)
+            {
+                u32 index = seeds[i];
+                u32 a = indices[index * 3 + 0], b = indices[index * 3 + 1], c = indices[index * 3 + 2];
+
+                u32 live  = liveTriangles[a] + liveTriangles[b] + liveTriangles[c];
+                f32 score = GetDistance(triangles[index].p - corner, false);
+
+                if (live < bestLive || (live == bestLive && score < bestScore))
+                {
+                    bestSeed  = index;
+                    bestLive  = live;
+                    bestScore = score;
+                }
+            }
+
+            return bestSeed;
+        }
+
         u32 GetNextVertexDeadEnd(const u32* deadEnd, u32& deadEndTop, u32& inputCursor, const u32* liveTriangles, u64 vertexCount)
         {
             // Check dead-end stack
@@ -246,154 +883,333 @@ namespace C3D
         }
     }  // namespace
 
-    bool MeshUtils::BuildMeshlets(Mesh& mesh)
+    u32 MeshUtils::DetermineMaxMeshlets(u64 indexCount, u64 maxVertices, u64 maxTriangles)
     {
-        Meshlet meshlet = {};
+        C3D_ASSERT(indexCount % 3 == 0);
+        C3D_ASSERT_MSG(maxTriangles % 4 == 0, "Index data is 4b aligned so maxTriangles must be divisible by 4.");
 
-        DynamicArray<u8> meshletVertices;
-        meshletVertices.ResizeAndFill(mesh.vertices.Size(), 0xFF);
+        u64 maxVerticesConservative = maxVertices - 2;
+        u64 meshletLimitVertices    = (indexCount + maxVerticesConservative - 1) / maxVerticesConservative;
+        u64 meshletLimitTriangles   = (indexCount / 3 + maxTriangles - 1) / maxTriangles;
 
-        for (u32 i = 0; i < mesh.indices.Size(); i += 3)
-        {
-            u32 a = mesh.indices[i + 0];
-            u32 b = mesh.indices[i + 1];
-            u32 c = mesh.indices[i + 2];
-
-            u8& av = meshletVertices[a];
-            u8& bv = meshletVertices[b];
-            u8& cv = meshletVertices[c];
-
-            if (meshlet.vertexCount + (av == 0xFF) + (bv == 0xFF) + (cv == 0xFF) > MESHLET_MAX_VERTICES || meshlet.triangleCount >= MESHLET_MAX_TRIANGLES)
-            {
-                mesh.meshlets.EmplaceBack(meshlet);
-
-                for (u32 j = 0; j < meshlet.vertexCount; ++j)
-                {
-                    meshletVertices[meshlet.vertices[j]] = 0xFF;
-                }
-
-                meshlet = {};
-            }
-
-            if (av == 0xFF)
-            {
-                av                                      = meshlet.vertexCount;
-                meshlet.vertices[meshlet.vertexCount++] = a;
-            }
-
-            if (bv == 0xFF)
-            {
-                bv                                      = meshlet.vertexCount;
-                meshlet.vertices[meshlet.vertexCount++] = b;
-            }
-
-            if (cv == 0xFF)
-            {
-                cv                                      = meshlet.vertexCount;
-                meshlet.vertices[meshlet.vertexCount++] = c;
-            }
-
-            meshlet.indices[meshlet.triangleCount * 3 + 0] = av;
-            meshlet.indices[meshlet.triangleCount * 3 + 1] = bv;
-            meshlet.indices[meshlet.triangleCount * 3 + 2] = cv;
-
-            meshlet.triangleCount++;
-        }
-
-        if (meshlet.triangleCount > 0)
-        {
-            mesh.meshlets.EmplaceBack(meshlet);
-        }
-
-        while (mesh.meshlets.Size() % 32) mesh.meshlets.EmplaceBack();
-
-        return true;
+        return Max(meshletLimitVertices, meshletLimitTriangles);
     }
 
-    bool MeshUtils::BuildMesletCones(Mesh& mesh)
+    u32 MeshUtils::GenerateMeshlets(const Mesh& mesh, DynamicArray<MeshUtils::Meshlet>& meshlets, DynamicArray<u32>& meshletVertices,
+                                    DynamicArray<u8>& meshletTriangles, f32 coneWeight)
     {
-        for (auto& meshlet : mesh.meshlets)
+        ScopedTimer timer(String::FromFormat("Generating meshlets for: {}", mesh.name));
+
+        u64 vertexCount = mesh.vertices.Size();
+        u64 indexCount  = mesh.indices.Size();
+        u64 faceCount   = indexCount / 3;
+
+        C3D_ASSERT(indexCount % 3 == 0);
+
+        if (indexCount == 0) return 0;
+
+        TriangleAdjacency adjacency = {};
+        if (vertexCount > indexCount && indexCount < (1u << 31))
         {
-            vec3 normals[126] = {};
+            BuildTriangleAdjacencySparse(adjacency, mesh.indices.GetData(), indexCount, vertexCount);
+        }
+        else
+        {
+            BuildTriangleAdjacency(adjacency, mesh.indices.GetData(), indexCount, vertexCount);
+        }
 
-            for (u32 i = 0; i < meshlet.triangleCount; ++i)
+        // Live triangle counts; note, we alias adjacency.counts as we remove triangles after emitting them so the counts always match
+        u32* liveTriangles = adjacency.counts;
+
+        u8* emittedFlags = Memory.Allocate<u8>(MemoryType::Array, faceCount);
+
+        // For each triangle, precompute centroid & normal to use for scoring
+        Cone* triangles = Memory.Allocate<Cone>(MemoryType::Array, faceCount);
+
+        f32 meshArea = ComputeTriangleCones(triangles, mesh.indices, mesh.vertices);
+
+        // Assuming each meshlet is a square patch, expected radius is sqrt(expected area)
+        float triangleAreaAvg       = faceCount == 0 ? 0.f : meshArea / static_cast<f32>(faceCount) * 0.5f;
+        float meshletExpectedRadius = std::sqrtf(triangleAreaAvg * MESHLET_MAX_TRIANGLES) * 0.5f;
+
+        // Build a kd-tree for nearest neighbor lookup
+        u32* kdindices = Memory.Allocate<u32>(MemoryType::Array, faceCount);
+        for (size_t i = 0; i < faceCount; ++i)
+        {
+            kdindices[i] = static_cast<u32>(i);
+        }
+
+        KDNode* nodes = Memory.Allocate<KDNode>(MemoryType::Array, faceCount * 2);
+        KDTreeBuild(0, nodes, faceCount * 2, &triangles[0].p, kdindices, faceCount, /* leaf_size= */ 8);
+
+        // Find a specific corner of the mesh to use as a starting point for meshlet flow
+        vec3 corner = vec3(FLT_MAX);
+        for (size_t i = 0; i < faceCount; ++i)
+        {
+            const Cone& tri = triangles[i];
+            corner.x        = Min(corner.x, tri.p.x);
+            corner.y        = Min(corner.y, tri.p.y);
+            corner.z        = Min(corner.z, tri.p.z);
+        }
+
+        // Index of the vertex in the meshlet, -1 if the vertex isn't used
+        i16* used = Memory.Allocate<i16>(MemoryType::Array, vertexCount);
+        std::memset(used, -1, vertexCount * sizeof(i16));
+
+        // Initial seed triangle is the one closest to the corner
+        u32 initialSeed  = INVALID_ID;
+        f32 initialScore = FLT_MAX;
+
+        for (u64 i = 0; i < faceCount; ++i)
+        {
+            const Cone& tri = triangles[i];
+            float score     = GetDistance(tri.p - corner, false);
+
+            if (initialSeed == INVALID_ID || score < initialScore)
             {
-                u32 a = meshlet.indices[i * 3 + 0];
-                u32 b = meshlet.indices[i * 3 + 1];
-                u32 c = meshlet.indices[i * 3 + 2];
-
-                const Vertex& va = mesh.vertices[meshlet.vertices[a]];
-                const Vertex& vb = mesh.vertices[meshlet.vertices[b]];
-                const Vertex& vc = mesh.vertices[meshlet.vertices[c]];
-
-                vec3 p10 = vb.pos - va.pos;
-                vec3 p20 = vc.pos - va.pos;
-
-                vec3 normal = glm::cross(p10, p20);
-
-                float area    = glm::length(normal);
-                float invArea = (area == 0.f) ? 0.f : 1 / area;
-
-                normals[i].x = normal.x * invArea;
-                normals[i].y = normal.y * invArea;
-                normals[i].z = normal.z * invArea;
+                initialSeed  = static_cast<u32>(i);
+                initialScore = score;
             }
+        }
 
-            vec3 avgNormal = {};
-            for (u32 i = 0; i < meshlet.triangleCount; ++i)
+        // Seed triangles to continue meshlet flow
+        u32 seeds[K_MESHLET_MAX_SEEDS] = {};
+        u64 seedCount                  = 0;
+
+        MeshUtils::Meshlet meshlet = {};
+        u64 meshletOffset          = 0;
+
+        Cone meshletConeAcc = {};
+
+        for (;;)
+        {
+            Cone meshletCone = GetMeshletCone(meshletConeAcc, meshlet.triangleCount);
+
+            u32 bestTriangle = INVALID_ID;
+
+            // For the first triangle, we don't have a meshlet cone yet, so we use the initial seed
+            // to continue the meshlet, we select an adjacent triangle based on connectivity and spatial scoring
+            if (meshletOffset == 0 && meshlet.triangleCount == 0)
             {
-                avgNormal.x += normals[i][0];
-                avgNormal.y += normals[i][1];
-                avgNormal.z += normals[i][2];
-            }
-
-            float avgLength = glm::length(avgNormal);
-
-            if (avgLength == 0.f)
-            {
-                avgNormal.x = 1.f;
-                avgNormal.y = 0.f;
-                avgNormal.z = 0.f;
+                bestTriangle = initialSeed;
             }
             else
             {
-                avgNormal /= avgLength;
+                bestTriangle = GetNeighborTriangle(meshlet, meshletCone, meshletVertices, mesh.indices, adjacency, triangles, liveTriangles, used,
+                                                   meshletExpectedRadius, coneWeight);
             }
 
-            float mindp = 1.f;
+            bool split = false;
 
-            for (u32 i = 0; i < meshlet.triangleCount; ++i)
+            // When we run out of adjacent triangles we need to switch to spatial search; we currently just pick the closest triangle irrespective of
+            // connectivity
+            if (bestTriangle == INVALID_ID)
             {
-                float dp = glm::dot(normals[i], avgNormal);
-                mindp    = std::min(mindp, dp);
+                u32 index    = INVALID_ID;
+                f32 distance = FLT_MAX;
+
+                KDTreeNearest(nodes, 0, &triangles[0].p, emittedFlags, meshletCone.p, coneWeight < 0.f, index, distance);
+
+                bestTriangle = index;
+                split        = meshlet.triangleCount >= MESHLET_MAX_TRIANGLES && distance > meshletExpectedRadius * 0.0f;
             }
 
-            f32 conew = mindp <= 0.f ? 1 : sqrtf(1 - mindp * mindp);
+            if (bestTriangle == INVALID_ID) break;
 
-            meshlet.cone.x = avgNormal.x;
-            meshlet.cone.y = avgNormal.y;
-            meshlet.cone.z = avgNormal.z;
-            meshlet.cone.w = conew;
+            i32 bestExtra = (used[mesh.indices[bestTriangle * 3 + 0]] < 0) + (used[mesh.indices[bestTriangle * 3 + 1]] < 0) +
+                            (used[mesh.indices[bestTriangle * 3 + 2]] < 0);
+
+            // If the best triangle doesn't fit into current meshlet, we re-select using seeds to maintain global flow
+            if (split || (meshlet.vertexCount + bestExtra > MESHLET_MAX_VERTICES || meshlet.triangleCount >= MESHLET_MAX_TRIANGLES))
+            {
+                seedCount = PruneSeedTriangles(seeds, seedCount, emittedFlags);
+                seedCount = (seedCount + K_MESHLET_ADD_SEEDS <= K_MESHLET_MAX_SEEDS) ? seedCount : K_MESHLET_MAX_SEEDS - K_MESHLET_ADD_SEEDS;
+                seedCount += AppendSeedTriangles(seeds + seedCount, meshlet, meshletVertices, mesh.indices, adjacency, triangles, liveTriangles, corner);
+
+                u32 bestSeed = SelectSeedTriangle(seeds, seedCount, mesh.indices, triangles, liveTriangles, corner);
+
+                // We may not find a valid seed triangle if the mesh is disconnected as seeds are based on adjacency
+                bestTriangle = bestSeed != INVALID_ID ? bestSeed : bestTriangle;
+            }
+
+            u32 a = mesh.indices[bestTriangle * 3 + 0], b = mesh.indices[bestTriangle * 3 + 1], c = mesh.indices[bestTriangle * 3 + 2];
+            C3D_ASSERT(a < vertexCount && b < vertexCount && c < vertexCount);
+
+            // Add meshlet to the output; when the current meshlet is full we reset the accumulated bounds
+            if (AppendMeshlet(meshlet, a, b, c, used, meshlets, meshletVertices, meshletTriangles, meshletOffset, MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES,
+                              split))
+            {
+                meshletOffset++;
+                std::memset(&meshletConeAcc, 0, sizeof(meshletConeAcc));
+            }
+
+            // Remove emitted triangle from adjacency data
+            // this makes sure that we spend less time traversing these lists on subsequent iterations
+            // live triangle counts are updated as a byproduct of these adjustments
+            for (u64 k = 0; k < 3; ++k)
+            {
+                u32 index = mesh.indices[bestTriangle * 3 + k];
+
+                u32* neighbors    = &adjacency.data[0] + adjacency.offsets[index];
+                u64 neighborsSize = adjacency.counts[index];
+
+                for (u64 i = 0; i < neighborsSize; ++i)
+                {
+                    u32 tri = neighbors[i];
+
+                    if (tri == bestTriangle)
+                    {
+                        neighbors[i] = neighbors[neighborsSize - 1];
+                        adjacency.counts[index]--;
+                        break;
+                    }
+                }
+            }
+
+            // Update aggregated meshlet cone data for scoring subsequent triangles
+            meshletConeAcc.p += triangles[bestTriangle].p;
+            meshletConeAcc.n += triangles[bestTriangle].n;
+
+            C3D_ASSERT(!emittedFlags[bestTriangle]);
+            emittedFlags[bestTriangle] = 1;
         }
 
-#if SHOW_NUM_CULLED
-        constexpr vec3 view = vec3(0, 0, 1);
-        u32 numCulled       = 0;
-
-        for (auto& meshlet : mesh.meshlets)
+        if (meshlet.triangleCount)
         {
-            vec3 cone = { meshlet.cone.x, meshlet.cone.y, meshlet.cone.z };
-            if (glm::dot(cone, view) > meshlet.cone.w)
-            {
-                numCulled++;
-            }
+            FinishMeshlet(meshlet, meshletTriangles);
+
+            meshlets[meshletOffset++] = meshlet;
         }
 
-        INFO_LOG("Number of meshlets culled with view (0, 0, 1): {}/{} ({:.2f}%)", numCulled, mesh.meshlets.Size(),
-                 (static_cast<f32>(numCulled) / mesh.meshlets.Size()) * 100.f);
-#endif
+        C3D_ASSERT(meshletOffset <= DetermineMaxMeshlets(indexCount, MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES));
 
-        return true;
+        // Pad out the number of meshlets to a number divisible by 32
+        // TODO: We don't really need this but it insures we can assume we always need 32 meshlets in the task shader
+        while (meshletOffset % 32) meshletOffset++;
+
+        INFO_LOG("Estimated: {} meshlets, actual meshlets: {}", meshlets.Size(), meshletOffset);
+
+        Memory.Free(emittedFlags);
+        Memory.Free(triangles);
+        Memory.Free(kdindices);
+        Memory.Free(nodes);
+        Memory.Free(used);
+
+        adjacency.Destroy();
+
+        return meshletOffset;
+    }
+
+    MeshletBounds MeshUtils::GenerateMeshletBounds(const Mesh& mesh, const Meshlet& meshlet, const DynamicArray<u32>& meshletVertices,
+                                                   const DynamicArray<u8>& meshletTriangles)
+    {
+        // compute triangle normals and gather triangle corners
+        vec3 normals[MESHLET_MAX_TRIANGLES];
+        vec3 corners[MESHLET_MAX_TRIANGLES][3];
+        u64 triangles = 0;
+
+        u64 vertexCount = meshletVertices.Size();
+
+        for (u64 i = 0; i < meshlet.triangleCount * 3; i += 3)
+        {
+            u32 a = meshletVertices[meshletTriangles[i + 0]];
+            u32 b = meshletVertices[meshletTriangles[i + 1]];
+            u32 c = meshletVertices[meshletTriangles[i + 2]];
+
+            const vec3& p0 = mesh.vertices[a].pos;
+            const vec3& p1 = mesh.vertices[b].pos;
+            const vec3& p2 = mesh.vertices[c].pos;
+
+            vec3 p10 = p1 - p0;
+            vec3 p20 = p2 - p0;
+
+            vec3 normal = glm::cross(p10, p20);
+            f32 area    = glm::length(normal);
+
+            // No need to include degenerate triangles - they will be invisible anyway
+            if (area == 0.f) continue;
+
+            // Record triangle normals & corners for future use; normal and corner 0 define a plane equation
+            normals[triangles]    = normal / area;
+            corners[triangles][0] = p0;
+            corners[triangles][1] = p1;
+            corners[triangles][2] = p2;
+            triangles++;
+        }
+
+        MeshletBounds bounds = {};
+
+        // Degenerate cluster, no valid triangles => trivial reject (cone data is 0)
+        if (triangles == 0) return bounds;
+
+        // Compute cluster bounding sphere; we'll use the center to determine normal cone apex as well
+        vec4 psphere = {};
+        ComputeBoundingSphere(psphere, corners[0], triangles * 3, 7);
+
+        vec3 center = { psphere.x, psphere.y, psphere.z };
+
+        // Treating triangle normals as points, find the bounding sphere - the sphere center determines the optimal cone axis
+        vec4 nsphere = {};
+        ComputeBoundingSphere(nsphere, normals, triangles, 3);
+
+        vec3 axis         = { nsphere.x, nsphere.y, nsphere.z };
+        f32 axislength    = glm::length(axis);
+        f32 invaxislength = axislength == 0.f ? 0.f : 1.f / axislength;
+
+        axis *= invaxislength;
+
+        // Compute a tight cone around all normals, mindp = cos(angle/2)
+        f32 mindp = 1.f;
+
+        for (u64 i = 0; i < triangles; ++i)
+        {
+            f32 dp = glm::dot(normals[i], axis);
+            mindp  = (dp < mindp) ? dp : mindp;
+        }
+
+        // Fill bounding sphere info; note that below we can return bounds without cone information for degenerate cones
+        bounds.center = center;
+        bounds.radius = psphere.w;
+
+        // Degenerate cluster, normal cone is larger than a hemisphere => trivial accept
+        // note that if mindp is positive but close to 0, the triangle intersection code below gets less stable
+        // we arbitrarily decide that if a normal cone is ~168 degrees wide or more, the cone isn't useful
+        if (mindp <= 0.1f)
+        {
+            bounds.coneCutoff = 1;
+            return bounds;
+        }
+
+        f32 maxt = 0;
+
+        // We need to find the point on center-t*axis ray that lies in negative half-space of all triangles
+        for (u64 i = 0; i < triangles; ++i)
+        {
+            // dot(center-t*axis-corner, trinormal) = 0
+            // dot(center-corner, trinormal) - t * dot(axis, trinormal) = 0
+            vec3 c = center - corners[i][0];
+
+            f32 dc = glm::dot(c, normals[i]);
+            f32 dn = glm::dot(axis, normals[i]);
+
+            // dn should be larger than mindp cutoff above
+            C3D_ASSERT(dn > 0.f);
+            f32 t = dc / dn;
+
+            maxt = (t > maxt) ? t : maxt;
+        }
+
+        // Cone apex should be in the negative half-space of all cluster triangles by construction
+        bounds.coneApex = center - axis * maxt;
+
+        // NOTE: this axis is the axis of the normal cone, but our test for perspective camera effectively negates the axis
+        bounds.coneAxis = axis;
+
+        // Cos(a) for normal cone is mindp; we need to add 90 degrees on both sides and invert the cone
+        // which gives us -cos(a+90) = -(-sin(a)) = sin(a) = sqrt(1 - cos^2(a))
+        bounds.coneCutoff = Sqrt(1 - mindp * mindp);
+
+        return bounds;
     }
 
     u32 MeshUtils::GenerateVertexRemap(const DynamicArray<Vertex>& vertices, u32 indexCount, DynamicArray<u32>& outRemap)

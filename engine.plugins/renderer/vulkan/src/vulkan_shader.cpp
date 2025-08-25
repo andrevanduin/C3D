@@ -7,6 +7,8 @@
 
 namespace C3D
 {
+    void Jandino(const VulkanShaderModule** const elements, u64 num) { INFO_LOG("je moeder"); }
+
     bool VulkanShader::Create(const VulkanShaderCreateInfo& createInfo)
     {
         INFO_LOG("Creating: '{}'.", createInfo.name);
@@ -27,9 +29,17 @@ namespace C3D
         }
 
         // Copy over the pointers to the shader modules we are going to be using
-        m_numShaderModules = createInfo.numModules;
-        m_shaderModules    = Memory.Allocate<VulkanShaderModule*>(MemoryType::Shader, m_numShaderModules);
-        std::memcpy(m_shaderModules, createInfo.modules, sizeof(VulkanShaderModule*) * m_numShaderModules);
+        m_shaderModules.Copy(createInfo.modules, createInfo.numModules);
+
+        // Parse the provided Shader Modules
+        for (auto shader : m_shaderModules)
+        {
+            // Keep track of all modules that use push constants
+            if (shader->UsesPushConstants())
+            {
+                m_pushConstantStages |= shader->GetShaderStage();
+            }
+        }
 
         if (!CreateSetLayout())
         {
@@ -37,7 +47,7 @@ namespace C3D
             return false;
         }
 
-        if (!CreatePipelineLayout())
+        if (!CreatePipelineLayout(createInfo.pushConstantsSize))
         {
             ERROR_LOG("Failed to create PipelineLayout.");
             return false;
@@ -65,6 +75,11 @@ namespace C3D
         vkCmdPushDescriptorSetWithTemplateKHR(commandBuffer, m_updateTemplate, m_layout, 0, descriptors);
     }
 
+    void VulkanShader::PushConstants(VkCommandBuffer commandBuffer, void* data, u64 size) const
+    {
+        vkCmdPushConstants(commandBuffer, m_layout, m_pushConstantStages, 0, size, data);
+    }
+
     void VulkanShader::Destroy()
     {
         if (m_context)
@@ -78,12 +93,7 @@ namespace C3D
             vkDestroyPipelineLayout(device, m_layout, m_context->allocator);
             vkDestroyPipeline(device, m_pipeline, m_context->allocator);
 
-            if (m_shaderModules)
-            {
-                Memory.Free(m_shaderModules);
-                m_shaderModules    = nullptr;
-                m_numShaderModules = 0;
-            }
+            m_shaderModules.Destroy();
         }
     }
 
@@ -92,9 +102,9 @@ namespace C3D
         DynamicArray<VkDescriptorSetLayoutBinding> setBindings;
 
         u32 storageBufferMask = 0;
-        for (u32 i = 0; i < m_numShaderModules; ++i)
+        for (auto shader : m_shaderModules)
         {
-            storageBufferMask |= m_shaderModules[i]->GetStorageBufferMask();
+            storageBufferMask |= shader->GetStorageBufferMask();
         }
 
         for (u32 i = 0; i < 32; ++i)
@@ -108,11 +118,11 @@ namespace C3D
                 binding.descriptorCount = 1;
 
                 binding.stageFlags = 0;
-                for (u32 j = 0; j < m_numShaderModules; ++j)
+                for (auto shader : m_shaderModules)
                 {
-                    if (m_shaderModules[j]->GetStorageBufferMask() & (1 << i))
+                    if (shader->GetStorageBufferMask() & (1 << i))
                     {
-                        binding.stageFlags |= m_shaderModules[j]->GetShaderStage();
+                        binding.stageFlags |= shader->GetShaderStage();
                     }
                 }
 
@@ -138,11 +148,24 @@ namespace C3D
         return true;
     }
 
-    bool VulkanShader::CreatePipelineLayout()
+    bool VulkanShader::CreatePipelineLayout(u64 pushConstantsSize)
     {
         VkPipelineLayoutCreateInfo createInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
         createInfo.setLayoutCount             = 1;
         createInfo.pSetLayouts                = &m_setLayout;
+
+        VkPushConstantRange pushConstantRange = {};
+
+        if (pushConstantsSize)
+        {
+            C3D_ASSERT_MSG(m_pushConstantStages != 0, "PushConstantsSize > 0 but no stages that use push constants were provided to the Shader.");
+
+            pushConstantRange.size       = pushConstantsSize;
+            pushConstantRange.stageFlags = m_pushConstantStages;
+
+            createInfo.pushConstantRangeCount = 1;
+            createInfo.pPushConstantRanges    = &pushConstantRange;
+        }
 
         auto result = vkCreatePipelineLayout(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_layout);
         if (!VulkanUtils::IsSuccess(result))
@@ -163,14 +186,12 @@ namespace C3D
 
         DynamicArray<VkPipelineShaderStageCreateInfo> stages;
 
-        for (u32 i = 0; i < m_numShaderModules; ++i)
+        for (auto shader : m_shaderModules)
         {
-            VulkanShaderModule* m = m_shaderModules[i];
-
             VkPipelineShaderStageCreateInfo stageInfo = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
-            stageInfo.stage  = m->GetShaderStage();
-            stageInfo.module = m->GetHandle();
+            stageInfo.stage  = shader->GetShaderStage();
+            stageInfo.module = shader->GetHandle();
             stageInfo.pName  = "main";
 
             stages.PushBack(stageInfo);
@@ -250,9 +271,9 @@ namespace C3D
         DynamicArray<VkDescriptorUpdateTemplateEntry> entries;
 
         u32 storageBufferMask = 0;
-        for (u32 i = 0; i < m_numShaderModules; ++i)
+        for (auto shader : m_shaderModules)
         {
-            storageBufferMask |= m_shaderModules[i]->GetStorageBufferMask();
+            storageBufferMask |= shader->GetStorageBufferMask();
         }
 
         for (u32 i = 0; i < 32; ++i)

@@ -2,15 +2,20 @@
 
 #version 450
 
-#define DEBUG 0
-
 #extension GL_EXT_shader_explicit_arithmetic_types : require
 #extension GL_EXT_mesh_shader : require
 
-layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
-layout (triangles, max_vertices = 64, max_primitives = 126) out;
-
 #include "definitions.h"
+
+#define DEBUG 0
+
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+layout (triangles, max_vertices = 64, max_primitives = 124) out;
+
+layout (push_constant) uniform block
+{
+    MeshDraw meshDraw;
+};
 
 layout (binding = 0) readonly buffer Vertices 
 {
@@ -20,6 +25,17 @@ layout (binding = 0) readonly buffer Vertices
 layout (binding = 1) readonly buffer Meshlets
 {
     Meshlet meshlets[];
+};
+
+layout(binding = 2) readonly buffer MeshletData
+{
+	uint meshletData[];
+};
+
+// Same binding as before but now interpret as u8 data
+layout(binding = 2) readonly buffer MeshletData8
+{
+	uint8_t meshletData8[];
 };
 
 struct Task
@@ -47,6 +63,10 @@ void main()
     uint vertexCount = meshlets[mi].vertexCount;
     uint triangleCount = meshlets[mi].triangleCount;
 
+    uint vertexOffset = meshlets[mi].dataOffset;
+    // Multiply by 4 to compensate for the fact that this index is based on u32's and we will index based on u8's
+    uint indexOffset = (vertexOffset + vertexCount) * 4;
+
 #if DEBUG
     uint meshletHash = pcg_hash(mi); 
     vec3 meshletColor = vec3(meshletHash & 255, (meshletHash >> 8) & 255, (meshletHash >> 16) & 225) / 255;
@@ -54,7 +74,7 @@ void main()
 
     for (uint i = ti; i < vertexCount; i += 32) 
     {
-        uint vi = meshlets[mi].vertices[i];
+        uint vi = meshletData[vertexOffset + i];
         
         Vertex v = vertices[vi];
 
@@ -62,7 +82,7 @@ void main()
         vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
         vec2 texCoord = vec2(v.u, v.v);
 
-        gl_MeshVerticesEXT[i].gl_Position = vec4(position * vec3(1, 1, 0.5) + vec3(0, 0, 0.5), 1.0);
+        gl_MeshVerticesEXT[i].gl_Position = vec4((position * vec3(meshDraw.scale, 1) + vec3(meshDraw.offset, 0)) * vec3(2, 2, 0.5) + vec3(-1, -1, 0.5), 1.0);
         
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
 
@@ -73,7 +93,8 @@ void main()
 
     for (uint i = ti; i < triangleCount; i += 32)
     {
-        gl_PrimitiveTriangleIndicesEXT[i] = uvec3(meshlets[mi].indices[i * 3 + 0], meshlets[mi].indices[i * 3 + 1], meshlets[mi].indices[i * 3 + 2]);
+        uint offset = indexOffset + i * 3;
+        gl_PrimitiveTriangleIndicesEXT[i] = uvec3(meshletData8[offset + 0], meshletData8[offset + 1], meshletData8[offset + 2]);
     }
 
     if (ti == 0)
