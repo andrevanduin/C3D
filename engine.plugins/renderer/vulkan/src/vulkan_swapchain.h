@@ -20,7 +20,7 @@ namespace C3D
          * @param window The window that you want to create a swapchain for
          * @return True if successful; false otherwise
          */
-        bool Create(VulkanContext* context, Window& window);
+        bool Create(VulkanContext* context, const Window& window);
 
         /**
          * @brief Resize the existing swapchain (for example when the window size changes)
@@ -28,7 +28,7 @@ namespace C3D
          * @param window The window that has (potentially) resized
          * @return True if successful; false otherwise
          */
-        bool Resize(Window& window);
+        bool Resize(const Window& window);
 
         void Destroy();
 
@@ -49,7 +49,7 @@ namespace C3D
          * @brief Internal create method. Can be called for the first creation call or for resizing.
          * If the method is called after we already have a swapchain this method will recreate and destroy the old one
          */
-        void Create(Window& window);
+        void Create(const Window& window);
 
         VkPresentModeKHR GetPresentMode() const;
         VkSurfaceFormatKHR GetSurfaceFormat() const;

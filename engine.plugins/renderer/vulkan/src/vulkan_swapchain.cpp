@@ -9,7 +9,7 @@
 
 namespace C3D
 {
-    bool VulkanSwapchain::Create(VulkanContext* context, Window& window)
+    bool VulkanSwapchain::Create(VulkanContext* context, const Window& window)
     {
         INFO_LOG("Creating Vulkan Swapchain.");
 
@@ -22,7 +22,7 @@ namespace C3D
         return true;
     }
 
-    bool VulkanSwapchain::Resize(Window& window)
+    bool VulkanSwapchain::Resize(const Window& window)
     {
         // Take a copy of the old swapchain handle (since it will be overridden by the Create() call)
         auto old = m_handle;
@@ -88,7 +88,7 @@ namespace C3D
         return true;
     }
 
-    void VulkanSwapchain::Create(Window& window)
+    void VulkanSwapchain::Create(const Window& window)
     {
         WindowRendererState* windowState               = window.rendererState;
         WindowRendererBackendState* windowBackendState = window.rendererState->backendState;

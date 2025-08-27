@@ -16,20 +16,19 @@ namespace C3D
         m_context = createInfo.context;
         m_name    = createInfo.name;
 
-        if (createInfo.numModules == 0)
+        // Ensure the user provided at least 1 module
+        if (createInfo.modules.size() == 0)
         {
             ERROR_LOG("A VulkanShader needs at least one module.");
             return false;
         }
 
-        if (!createInfo.modules)
+        // Take over the modules provided by the user
+        m_shaderModules.Reserve(createInfo.modules.size());
+        for (auto module : createInfo.modules)
         {
-            ERROR_LOG("No valid ShaderModules provided.");
-            return false;
+            m_shaderModules.PushBack(module);
         }
-
-        // Copy over the pointers to the shader modules we are going to be using
-        m_shaderModules.Copy(createInfo.modules, createInfo.numModules);
 
         // Parse the provided Shader Modules
         for (auto shader : m_shaderModules)

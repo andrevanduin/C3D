@@ -9,10 +9,8 @@ namespace C3D::MeshUtils
 {
     struct Meshlet
     {
-        /** @brief An index into the MeshletVertices array where the vertex data for this meshlet starts. */
-        u32 vertexOffset = 0;
-        /** @brief An index into the MeshletTriangles array where the triangle data for this meshlet starts. */
-        u32 triangleOffset = 0;
+        u32 vertices[MESHLET_MAX_VERTICES];
+        u8 indices[MESHLET_MAX_TRIANGLES][3];
         /** @brief The number of triangles in this Meshlet. */
         u8 triangleCount = 0;
         /** @brief The number of vertices in this Meshlet. */
@@ -34,8 +32,7 @@ namespace C3D::MeshUtils
      * @param coneWeight The cone weight used to prioritize how meshlets are generated
      * @return The number of meshlets actually generated (will be <= DetermineMaxMeshlets())
      */
-    u32 C3D_API GenerateMeshlets(const Mesh& mesh, DynamicArray<Meshlet>& meshlets, DynamicArray<u32>& meshletVertices, DynamicArray<u8>& meshletTriangles,
-                                 f32 coneWeight = 0.25f);
+    u32 C3D_API GenerateMeshlets(const Mesh& mesh, DynamicArray<Meshlet>& meshlets, f32 coneWeight = 0.25f);
 
     /**
      * @brief Generate bounds for the provided Meshlet.
@@ -44,8 +41,7 @@ namespace C3D::MeshUtils
      *
      * @return The bounds of the provided Meshlet
      */
-    MeshletBounds C3D_API GenerateMeshletBounds(const Mesh& mesh, const Meshlet& meshlet, const DynamicArray<u32>& meshletVertices,
-                                                const DynamicArray<u8>& meshletTriangles);
+    MeshletBounds C3D_API GenerateMeshletBounds(const Mesh& mesh, const Meshlet& meshlet);
 
     /**
      * @brief Generates a remap containing only indices to unique vertices

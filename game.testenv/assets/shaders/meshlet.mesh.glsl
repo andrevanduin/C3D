@@ -32,7 +32,7 @@ layout(binding = 2) readonly buffer MeshletData
 	uint meshletData[];
 };
 
-// Same binding as before but now interpret as u8 data
+// Same binding as before but now interpret it as u8 data
 layout(binding = 2) readonly buffer MeshletData8
 {
 	uint8_t meshletData8[];

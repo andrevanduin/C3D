@@ -5,6 +5,7 @@
 #include <volk.h>
 
 #include "vulkan_swapchain.h"
+#include "vulkan_texture.h"
 
 namespace C3D
 {
@@ -49,6 +50,11 @@ namespace C3D
         u32 imageIndex = 0;
         /** @brief The current frame index. */
         u64 frameIndex = 0;
+
+        /** @brief The color target of our window. */
+        VulkanTexture colorTarget;
+        /** @brief The depth target of our window. */
+        VulkanTexture depthTarget;
 
         VkSemaphore GetAcquireSemaphore() const { return acquireSemaphores[frameIndex % MAX_FRAMES]; }
         VkSemaphore GetPresentSemaphore() const { return presentSemaphores[imageIndex]; }

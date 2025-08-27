@@ -111,12 +111,12 @@ namespace C3D
             u32 maxMeshlets = MeshUtils::DetermineMaxMeshlets(m_mesh.indices.Size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
             // Preallocate enough memory for the maximum number of meshlets
             DynamicArray<MeshUtils::Meshlet> meshlets(maxMeshlets);
-            DynamicArray<u32> meshletVertices(maxMeshlets * MESHLET_MAX_VERTICES);
-            DynamicArray<u8> meshletTriangles(maxMeshlets * MESHLET_MAX_TRIANGLES * 3);
             // Generate our meshlets
-            u32 numMeshlets = MeshUtils::GenerateMeshlets(m_mesh, meshlets, meshletVertices, meshletTriangles, 0.25f);
+            u32 numMeshlets = MeshUtils::GenerateMeshlets(m_mesh, meshlets, 0.25f);
             // Resize our meshlet array to the actual number of meshlets
             meshlets.Resize(numMeshlets);
+            // TODO: we don't really need this but this makes sure we can assume that we need all 32 meshlets in task shader
+            while (meshlets.Size() % 32) meshlets.EmplaceBack();
 
             // Reserve enough space for all meshlets
             m_mesh.meshlets.Reserve(meshlets.Size());
@@ -131,13 +131,13 @@ namespace C3D
                 // Populate the vertex indices
                 for (u32 i = 0; i < meshlet.vertexCount; ++i)
                 {
-                    m_mesh.meshletData.PushBack(meshletVertices[meshlet.vertexOffset + i]);
+                    m_mesh.meshletData.PushBack(meshlet.vertices[i]);
                 }
 
                 if (meshlet.triangleCount > 0)
                 {
                     // Get a pointer to the triangle data as u32
-                    u32* triangleData = reinterpret_cast<u32*>(meshletTriangles.GetData() + meshlet.triangleOffset);
+                    const u32* triangleData = reinterpret_cast<const u32*>(meshlet.indices);
                     // Count the number of indices (triangles * 3) and add 3 to ensure that rounded down we always have enough room
                     u32 packedTriangleCount = (meshlet.triangleCount * 3 + 3) / 4;
 
@@ -148,7 +148,7 @@ namespace C3D
                     }
                 }
 
-                MeshletBounds bounds = MeshUtils::GenerateMeshletBounds(m_mesh, meshlet, meshletVertices, meshletTriangles);
+                MeshletBounds bounds = MeshUtils::GenerateMeshletBounds(m_mesh, meshlet);
 
                 m.cone.x = bounds.coneAxis.x;
                 m.cone.y = bounds.coneAxis.y;
@@ -164,8 +164,7 @@ namespace C3D
 
             for (auto& meshlet : m_mesh.meshlets)
             {
-                vec3 cone = { meshlet.cone.x, meshlet.cone.y, meshlet.cone.z };
-                if (glm::dot(cone, view) > meshlet.cone.w)
+                if (meshlet.cone[2] > meshlet.cone[3])
                 {
                     numCulled++;
                 }
@@ -371,12 +370,13 @@ namespace C3D
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
             draws.resize(m_drawCount);
+            u32 c = Sqrt(m_drawCount);
             for (u32 i = 0; i < m_drawCount; ++i)
             {
-                draws[i].offset.x = static_cast<f32>(i % 10) * 0.1f + 0.05f;
-                draws[i].offset.y = static_cast<f32>(i / 10) * 0.1f + 0.05f;
-                draws[i].scale.x  = 0.1f;
-                draws[i].scale.y  = 0.1f;
+                draws[i].offset.x = static_cast<f32>(i % c) * (1.f / c) + (0.5f / c);
+                draws[i].offset.y = static_cast<f32>(i / c) * (1.f / c) + (0.5f / c);
+                draws[i].scale.x  = 1.f / c;
+                draws[i].scale.y  = 1.f / c;
             }
 
             if (m_meshShadingEnabled)
@@ -529,6 +529,31 @@ namespace C3D
             return false;
         }
 
+        VulkanTextureCreateInfo createInfo;
+        createInfo.name    = "COLOR_TARGET";
+        createInfo.context = &m_context;
+        createInfo.width   = window.width;
+        createInfo.height  = window.height;
+        createInfo.format  = VK_FORMAT_R8G8B8A8_UNORM;
+        createInfo.usage   = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+        // Create color and depth target for this window
+        if (!backend->colorTarget.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create Color target for window: '{}'.", window.name);
+            return false;
+        }
+
+        createInfo.name   = "DEPTH_TARGET";
+        createInfo.format = VK_FORMAT_D32_SFLOAT;
+        createInfo.usage  = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+        if (!backend->depthTarget.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create Depth target for window: '{}'.", window.name);
+            return false;
+        }
+
         auto device = m_context.device.GetLogical();
 
         INFO_LOG("Creating semaphores.");
@@ -604,11 +629,7 @@ namespace C3D
             createInfo.cache             = VK_NULL_HANDLE;
             createInfo.swapchain         = &backend->swapchain;
             createInfo.pushConstantsSize = sizeof(MeshDraw);
-
-            const VulkanShaderModule* meshModules[] = { &m_meshShaderModule, &m_fragmentShaderModule };
-
-            createInfo.modules    = meshModules;
-            createInfo.numModules = ARRAY_SIZE(meshModules);
+            createInfo.modules           = { &m_meshShaderModule, &m_fragmentShaderModule };
 
             if (!m_meshShader.Create(createInfo))
             {
@@ -630,13 +651,9 @@ namespace C3D
                     return false;
                 }
 
-                // For the meshlet shader only the name and one of the modules changes
-                createInfo.name = "MESHLET_SHADER";
-
-                const VulkanShaderModule* meshletModules[] = { &m_meshletTaskShaderModule, &m_meshletShaderModule, &m_fragmentShaderModule };
-
-                createInfo.modules    = meshletModules;
-                createInfo.numModules = ARRAY_SIZE(meshletModules);
+                // For the meshlet shader only the name and and modules change
+                createInfo.name    = "MESHLET_SHADER";
+                createInfo.modules = { &m_meshletTaskShaderModule, &m_meshletShaderModule, &m_fragmentShaderModule };
 
                 if (!m_meshletShader.Create(createInfo))
                 {
@@ -672,7 +689,25 @@ namespace C3D
     bool VulkanRendererPlugin::OnResizeWindow(Window& window)
     {
         INFO_LOG("Window resized. The size is now: {}x{}", window.width, window.height);
-        return window.rendererState->backendState->swapchain.Resize(window);
+
+        auto backend = window.rendererState->backendState;
+
+        bool resizeResult = backend->swapchain.Resize(window);
+        if (resizeResult)
+        {
+            if (backend->colorTarget.Resize(window))
+            {
+                ERROR_LOG("Failed to resize Color target.");
+                return false;
+            }
+
+            if (backend->depthTarget.Resize(window))
+            {
+                ERROR_LOG("Failed to resize Depth target.");
+                return false;
+            }
+        }
+        return resizeResult;
     }
 
     void VulkanRendererPlugin::OnDestroyWindow(Window& window)
@@ -725,6 +760,10 @@ namespace C3D
                 vkDestroySemaphore(device, semaphore, m_context.allocator);
             }
             backend->presentSemaphores.Destroy();
+
+            // Destroy the color and depth target
+            backend->colorTarget.Destroy();
+            backend->depthTarget.Destroy();
 
             // Destroy the swapchain
             backend->swapchain.Destroy();

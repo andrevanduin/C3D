@@ -43,10 +43,8 @@ namespace C3D
     {
         /** @brief The name of the Shader. Used for logging and debugging purposes. */
         const char* name = nullptr;
-        /** @brief The number of ShaderModules in the provided array. */
-        u32 numModules = 0;
-        /** @brief An array of ShaderModules that should be used by this Shader. */
-        const VulkanShaderModule** modules = nullptr;
+        /** @brief An initializer list containing all ShaderModules that should be used by this Shader. */
+        std::initializer_list<VulkanShaderModule*> modules;
         /** @brief A pointer to the Vulkan context. */
         VulkanContext* context = nullptr;
         /** @brief A pointer to the swapchain. */
