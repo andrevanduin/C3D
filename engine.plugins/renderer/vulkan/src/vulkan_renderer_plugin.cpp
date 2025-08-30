@@ -9,6 +9,7 @@
 #include <metrics/metrics.h>
 #include <platform/platform.h>
 #include <platform/platform_types.h>
+#include <random/random.h>
 #include <renderer/utils/mesh_utils.h>
 #include <shaderc/shaderc.h>
 #include <system/system_manager.h>
@@ -150,29 +151,14 @@ namespace C3D
 
                 MeshletBounds bounds = MeshUtils::GenerateMeshletBounds(m_mesh, meshlet);
 
-                m.cone.x = bounds.coneAxis.x;
-                m.cone.y = bounds.coneAxis.y;
-                m.cone.z = bounds.coneAxis.z;
-                m.cone.w = bounds.coneCutoff;
+                m.center = bounds.center;
+                m.radius = bounds.radius;
+
+                m.coneAxis   = bounds.coneAxis;
+                m.coneCutoff = bounds.coneCutoff;
 
                 m_mesh.meshlets.PushBack(m);
             }
-
-#if 1
-            constexpr vec3 view = vec3(0, 0, 1);
-            u32 numCulled       = 0;
-
-            for (auto& meshlet : m_mesh.meshlets)
-            {
-                if (meshlet.cone[2] > meshlet.cone[3])
-                {
-                    numCulled++;
-                }
-            }
-
-            INFO_LOG("Number of meshlets culled with view (0, 0, 1): {}/{} ({:.2f}%)", numCulled, m_mesh.meshlets.Size(),
-                     (static_cast<f32>(numCulled) / m_mesh.meshlets.Size()) * 100.f);
-#endif
         }
 
         // Create our buffers
@@ -227,6 +213,24 @@ namespace C3D
             return true;
         });
 
+        // TODO: Remove this temp code
+        {
+            m_drawCount = 3000;
+            m_draws.Resize(m_drawCount);
+
+            for (auto& draw : m_draws)
+            {
+                draw.position.x = Random.Generate(-20.f, 20.f);
+                draw.position.y = Random.Generate(-20.f, 20.f);
+                draw.position.z = Random.Generate(-20.f, 20.f);
+                draw.scale      = Random.Generate(1.f, 2.f);
+
+                vec3 axis        = vec3(Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f));
+                f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));
+                draw.orientation = glm::rotate(glm::quat(1, 0, 0, 0), angle, axis);
+            }
+        }
+
         INFO_LOG("Initialized successfully.");
         return true;
     }
@@ -238,6 +242,8 @@ namespace C3D
         Event.UnregisterAll(EventCodeDebug0);
 
         MeshManager::Cleanup(m_mesh);
+
+        m_draws.Destroy();
 
         if (m_context.shaderCompiler)
         {
@@ -279,39 +285,16 @@ namespace C3D
         INFO_LOG("Shutdown successful.");
     }
 
-    void TransitionLayout(VulkanContext& context, VkCommandBuffer commandBuffer, VkImage image, VkImageLayout fromLayout, VkImageLayout toLayout,
-                          VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
+    mat4 MakePerspectiveProjection(f32 fovY, f32 aspect, f32 zNear)
     {
-        auto graphicsQueueIndex = context.device.GetGraphicsFamilyIndex();
-
-        VkImageMemoryBarrier barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-        barrier.oldLayout            = fromLayout;
-        barrier.newLayout            = toLayout;
-        barrier.image                = image;
-        barrier.srcQueueFamilyIndex  = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex  = VK_QUEUE_FAMILY_IGNORED;
-        // TODO: Only works for color images
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        // Mips
-        barrier.subresourceRange.baseMipLevel = 0;
-        // Transition all mip levels
-        barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-        // Start at the first layer
-        barrier.subresourceRange.baseArrayLayer = 0;
-        // Transition all layers at once
-        barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
-        // Source and destination access masks
-        barrier.srcAccessMask = srcAccessMask;
-        barrier.dstAccessMask = dstAccessMask;
-
-        // Use a pipeline barrier to transition to the new layout
-        vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        f32 f = 1.0f / Tan(fovY / 2.0f);
+        return mat4(f / aspect, 0.0f, 0.0f, 0.0f, 0.0f, f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, zNear, 0.0f);
     }
 
     bool VulkanRendererPlugin::Begin(Window& window)
     {
-        constexpr VkClearColorValue clearColor = { 30.f / 255.f, 54.f / 255.f, 42.f / 255.f, 1 };
-        static std::vector<MeshDraw> draws;
+        constexpr VkClearColorValue clearColor               = { 30.f / 255.f, 54.f / 255.f, 42.f / 255.f, 1 };
+        constexpr VkClearDepthStencilValue clearDepthStencil = { 0.f, 0 };
 
         auto backendState = window.rendererState->backendState;
 
@@ -342,19 +325,34 @@ namespace C3D
 
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
 
-        TransitionLayout(m_context, commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
-                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        // Our color and depth target need to be in ATTACHMENT OPTIMAL layout before we can start rendering
+        VkImageMemoryBarrier renderBeginBarriers[] = {
+            backendState->colorTarget.CreateBarrier(0, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+            backendState->depthTarget.CreateBarrier(0, 0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+        };
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0,
+                             0, ARRAY_SIZE(renderBeginBarriers), renderBeginBarriers);
 
         VkRenderingAttachmentInfo colorAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-        colorAttachmentInfo.imageView                 = backendState->swapchain.GetImageView(backendState->imageIndex);
+        colorAttachmentInfo.imageView                 = backendState->colorTarget.GetView();
         colorAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         colorAttachmentInfo.loadOp                    = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachmentInfo.storeOp                   = VK_ATTACHMENT_STORE_OP_STORE;
         colorAttachmentInfo.clearValue.color          = clearColor;
 
+        VkRenderingAttachmentInfo depthAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+        depthAttachmentInfo.clearValue.depthStencil   = clearDepthStencil;
+        depthAttachmentInfo.imageView                 = backendState->depthTarget.GetView();
+        depthAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        depthAttachmentInfo.loadOp                    = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachmentInfo.storeOp                   = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
         VkRenderingInfo renderInfo      = { VK_STRUCTURE_TYPE_RENDERING_INFO };
         renderInfo.colorAttachmentCount = 1;
         renderInfo.pColorAttachments    = &colorAttachmentInfo;
+        renderInfo.pDepthAttachment     = &depthAttachmentInfo;
         renderInfo.layerCount           = 1;
         renderInfo.renderArea.offset    = { 0, 0 };
         renderInfo.renderArea.extent    = { window.width, window.height };
@@ -369,14 +367,10 @@ namespace C3D
             vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            draws.resize(m_drawCount);
-            u32 c = Sqrt(m_drawCount);
-            for (u32 i = 0; i < m_drawCount; ++i)
+            mat4 projection = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), 0.01f);
+            for (auto& draw : m_draws)
             {
-                draws[i].offset.x = static_cast<f32>(i % c) * (1.f / c) + (0.5f / c);
-                draws[i].offset.y = static_cast<f32>(i / c) * (1.f / c) + (0.5f / c);
-                draws[i].scale.x  = 1.f / c;
-                draws[i].scale.y  = 1.f / c;
+                draw.projection = projection;
             }
 
             if (m_meshShadingEnabled)
@@ -386,7 +380,7 @@ namespace C3D
                 DescriptorInfo descriptors[] = { m_vertexBuffer.GetHandle(), m_meshletBuffer.GetHandle(), m_meshletDataBuffer.GetHandle() };
                 m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
 
-                for (auto& draw : draws)
+                for (const auto& draw : m_draws)
                 {
                     m_meshletShader.PushConstants(commandBuffer, &draw, sizeof(draw));
                     vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size() / 32, 1, 1);
@@ -401,7 +395,7 @@ namespace C3D
 
                 vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
 
-                for (auto& draw : draws)
+                for (const auto& draw : m_draws)
                 {
                     m_meshShader.PushConstants(commandBuffer, &draw, sizeof(draw));
                     vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
@@ -418,14 +412,42 @@ namespace C3D
         auto commandBuffer  = backendState->GetCommandBuffer();
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
 
+        // End our rendering
         vkCmdEndRendering(commandBuffer);
 
-        TransitionLayout(m_context, commandBuffer, swapchainImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+        // Setup some copy barriers
+        VkImageMemoryBarrier copyBarriers[] = {
+            backendState->colorTarget.CreateBarrier(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
+            VulkanUtils::CreateImageBarrier(swapchainImage, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                            VK_IMAGE_ASPECT_COLOR_BIT),
+        };
 
+        // Wait for color target to be in TRANSFER_SRC_OPTIMAL and wait for swapchain image to be in TRANSFER_DST_OPTIMAL
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0,
+                             0, ARRAY_SIZE(copyBarriers), copyBarriers);
+
+        // Copy the contents of our color target to the current swapchain image
+        backendState->colorTarget.CopyTo(commandBuffer, swapchainImage, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        // Setup a present barrier
+        VkImageMemoryBarrier presentBarrier = VulkanUtils::CreateImageBarrier(
+            swapchainImage, VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        // Wait for the swapchain image to go from TRANSFER_DST_OPTIMAL to PRESENT_SRC_KHR
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1,
+                             &presentBarrier);
+
+        // Keep track of the renderer End() timestamp
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 1);
 
-        VK_CHECK(vkEndCommandBuffer(commandBuffer));
+        // Finally we end our command buffer
+        auto result = vkEndCommandBuffer(commandBuffer);
+        if (!VulkanUtils::IsSuccess(result))
+        {
+            ERROR_LOG("vkEndCommandBuffer failed with error: '{}'.", VulkanUtils::ResultString(result));
+            return false;
+        }
+
         return true;
     }
 
@@ -449,7 +471,12 @@ namespace C3D
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores    = &presentSemaphore;
 
-        VK_CHECK(vkQueueSubmit(queue, 1, &submitInfo, frameFence));
+        auto result = vkQueueSubmit(queue, 1, &submitInfo, frameFence);
+        if (!VulkanUtils::IsSuccess(result))
+        {
+            ERROR_LOG("vkQueueSubmit failed with error: '{}'.", VulkanUtils::ResultString(result));
+            return false;
+        }
 
         return true;
     }
@@ -459,9 +486,8 @@ namespace C3D
         static String titleText;
 
         auto backendState = window.rendererState->backendState;
-        auto queue        = m_context.device.GetDeviceQueue();
 
-        auto result = backendState->swapchain.Present(queue, backendState);
+        auto result = backendState->swapchain.Present(backendState);
 
         auto device = m_context.device.GetLogical();
         auto fence  = backendState->GetFence();
@@ -534,7 +560,7 @@ namespace C3D
         createInfo.context = &m_context;
         createInfo.width   = window.width;
         createInfo.height  = window.height;
-        createInfo.format  = VK_FORMAT_R8G8B8A8_UNORM;
+        createInfo.format  = backend->swapchain.GetImageFormat();
         createInfo.usage   = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
         // Create color and depth target for this window
@@ -695,13 +721,13 @@ namespace C3D
         bool resizeResult = backend->swapchain.Resize(window);
         if (resizeResult)
         {
-            if (backend->colorTarget.Resize(window))
+            if (!backend->colorTarget.Resize(window.width, window.height))
             {
                 ERROR_LOG("Failed to resize Color target.");
                 return false;
             }
 
-            if (backend->depthTarget.Resize(window))
+            if (!backend->depthTarget.Resize(window.width, window.height))
             {
                 ERROR_LOG("Failed to resize Depth target.");
                 return false;

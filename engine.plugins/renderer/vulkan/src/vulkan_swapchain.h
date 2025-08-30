@@ -33,12 +33,11 @@ namespace C3D
         void Destroy();
 
         bool AcquireNextImageIndex(u64 timeoutNs, WindowRendererBackendState* backendState);
-        bool Present(VkQueue presentQueue, WindowRendererBackendState* backendState);
+        bool Present(WindowRendererBackendState* backendState);
 
         VkSwapchainKHR GetHandle() const { return m_handle; }
 
         VkImage GetImage(u32 index) const { return m_images[index]; }
-        VkImageView GetImageView(u32 index) const { return m_views[index]; }
 
         u32 GetImageCount() const { return m_imageCount; }
 
@@ -46,10 +45,12 @@ namespace C3D
 
     private:
         /**
-         * @brief Internal create method. Can be called for the first creation call or for resizing.
-         * If the method is called after we already have a swapchain this method will recreate and destroy the old one
+         * @brief Internal create method. Creates a new swapchain with the width and height of the provided window.
+         *
+         * @param window A const reference to the window we need to create the swapchain for.
+         * @return True if successful; false otherwise
          */
-        void Create(const Window& window);
+        bool Create(const Window& window);
 
         VkPresentModeKHR GetPresentMode() const;
         VkSurfaceFormatKHR GetSurfaceFormat() const;
@@ -66,8 +67,6 @@ namespace C3D
         u32 m_imageCount = 0;
         /** @brief The swapchain images. */
         DynamicArray<VkImage> m_images;
-        /** @brief The swapchain image views. */
-        DynamicArray<VkImageView> m_views;
         /** @brief The currently used surface format. */
         VkSurfaceFormatKHR m_surfaceFormat;
         /** @brief A handle to the Vulkan swapchain. */

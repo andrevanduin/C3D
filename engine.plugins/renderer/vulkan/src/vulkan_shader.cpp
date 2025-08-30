@@ -74,7 +74,7 @@ namespace C3D
         vkCmdPushDescriptorSetWithTemplateKHR(commandBuffer, m_updateTemplate, m_layout, 0, descriptors);
     }
 
-    void VulkanShader::PushConstants(VkCommandBuffer commandBuffer, void* data, u64 size) const
+    void VulkanShader::PushConstants(VkCommandBuffer commandBuffer, const void* data, u64 size) const
     {
         vkCmdPushConstants(commandBuffer, m_layout, m_pushConstantStages, 0, size, data);
     }
@@ -247,6 +247,8 @@ namespace C3D
         // NOTE: Because we are using dynamic rendering we need to provide this structure to pNext of createInfo
         VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
         pipelineRenderingCreateInfo.colorAttachmentCount          = 1;
+        // TODO: We are hardcoding the depth format here which we might want to make configurable later
+        pipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
 
         // TODO: Quite bad since this assumes we will always have the same single format as was intially picked for the provided swapchain
         auto format                                         = swapchain.GetImageFormat();

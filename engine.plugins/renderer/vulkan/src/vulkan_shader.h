@@ -62,7 +62,7 @@ namespace C3D
 
         void Bind(VkCommandBuffer commandBuffer) const;
         void PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const;
-        void PushConstants(VkCommandBuffer commandBuffer, void* data, u64 size) const;
+        void PushConstants(VkCommandBuffer commandBuffer, const void* data, u64 size) const;
 
         void Destroy();
 

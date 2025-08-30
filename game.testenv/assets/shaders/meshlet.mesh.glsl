@@ -6,6 +6,7 @@
 #extension GL_EXT_mesh_shader : require
 
 #include "definitions.h"
+#include "math_utils.h"
 
 #define DEBUG 0
 
@@ -82,7 +83,7 @@ void main()
         vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
         vec2 texCoord = vec2(v.u, v.v);
 
-        gl_MeshVerticesEXT[i].gl_Position = vec4((position * vec3(meshDraw.scale, 1) + vec3(meshDraw.offset, 0)) * vec3(2, 2, 0.5) + vec3(-1, -1, 0.5), 1.0);
+        gl_MeshVerticesEXT[i].gl_Position = meshDraw.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
         
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
 

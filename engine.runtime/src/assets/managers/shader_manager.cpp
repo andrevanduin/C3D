@@ -11,24 +11,6 @@ namespace C3D
 {
     constexpr const char* INCLUDE_DIRECTIVE = "#include";
 
-    void ImportShader::Cleanup()
-    {
-        name.Destroy();
-        path.Destroy();
-
-        if (source)
-        {
-            Memory.Free(source);
-            source = nullptr;
-        }
-
-        for (auto& include : includes)
-        {
-            include.asset.Cleanup();
-        }
-        includes.Destroy();
-    }
-
     ShaderManager::ShaderManager() : IAssetManager(MemoryType::Array, AssetType::Binary, "shaders") {}
 
     bool ShaderManager::Read(const String& name, ShaderAsset& asset)
@@ -63,7 +45,7 @@ namespace C3D
             return false;
         }
 
-        ImportShader import;
+        ShaderAsset import;
         if (!LoadShaderSource(name, fullPath, import))
         {
             return false;
@@ -75,9 +57,6 @@ namespace C3D
         asset.size   = import.size;
         asset.source = Memory.Allocate<char>(MemoryType::Shader, asset.size);
         std::memcpy(asset.source, import.source, import.size);
-
-        // Cleanup our import
-        import.Cleanup();
 
         return true;
     }
@@ -94,7 +73,7 @@ namespace C3D
         asset.path.Destroy();
     }
 
-    bool ShaderManager::LoadShaderSource(const String& name, const String& path, ImportShader& import)
+    bool ShaderManager::LoadShaderSource(const String& name, const String& path, ShaderAsset& asset)
     {
         File file;
         if (!file.Open(path, FileModeRead | FileModeBinary))
@@ -103,7 +82,7 @@ namespace C3D
             return false;
         }
 
-        import.path = path;
+        asset.path = path;
 
         u64 fileSize = 0;
         if (!file.Size(&fileSize))
@@ -113,29 +92,27 @@ namespace C3D
             return false;
         }
 
-        import.source = Memory.Allocate<char>(MemoryType::Array, fileSize);
-        import.name   = name;
+        asset.source = Memory.Allocate<char>(MemoryType::Array, fileSize);
+        asset.name   = name;
 
-        if (!file.ReadAll(import.source, &import.size))
+        if (!file.ReadAll(asset.source, &asset.size))
         {
             ERROR_LOG("Unable to read data from file: '{}'.", path);
             file.Close();
             return false;
         }
 
-        // Find all #include statements
-        FindIncludes(import);
-        // Resolved them by replacing them with the content of the file specified in the #include
-        ResolveIncludes(import);
+        // Find and resolve all #include statements
+        FindAndResolveIncludes(asset);
 
         file.Close();
 
         return true;
     }
 
-    void ShaderManager::FindIncludes(ImportShader& import)
+    void ShaderManager::FindAndResolveIncludes(ShaderAsset& asset)
     {
-        const char* s = import.source;
+        const char* s = asset.source;
         while (s)
         {
             // Find the next #include
@@ -150,44 +127,45 @@ namespace C3D
             // Skip the '#include "'
             s += 10;
             // Find the closing '"'
-            const char* end = static_cast<const char*>(std::memchr(s, '"', s - import.source));
+            const char* end = static_cast<const char*>(std::memchr(s, '"', s - asset.source));
             // Keep track of the name of the file we need to include and the position of the #include
             ShaderInclude include;
             include.asset.name = String(s, end - s);
-            include.start      = inc - import.source;
-            include.end        = end - import.source;
-            import.includes.PushBack(include);
-            // Move s to just after the previous #include
-            s = end;
+            include.start      = inc - asset.source;
+            include.end        = end - asset.source;
+            // Resolve this include before proceeding
+            u64 afterIncludePos = ResolveInclude(asset, include);
+            // Set s to point to right after the include
+            s = asset.source + afterIncludePos;
         }
     }
 
-    void ShaderManager::ResolveIncludes(ImportShader& import)
+    u64 ShaderManager::ResolveInclude(ShaderAsset& asset, ShaderInclude& include)
     {
-        for (auto& include : import.includes)
-        {
-            LoadShaderSource(include.asset.name, String::FromFormat("{}/{}/{}", m_assetPath, m_subFolder, include.asset.name), include.asset);
+        LoadShaderSource(include.asset.name, String::FromFormat("{}/{}/{}", m_assetPath, m_subFolder, include.asset.name), include.asset);
 
-            // Length of the #include statement
-            u64 includeLength = include.end - include.start;
-            // Extra length will be include_length - (#include statement length)
-            u64 extraLength = include.asset.size - includeLength - 1;
-            // The new size will be the old size + extraLength
-            u64 newSize = import.size + extraLength;
+        // Length of the #include statement
+        u64 includeLength = include.end - include.start;
+        // Extra length will be include_length - (#include statement length)
+        u64 extraLength = include.asset.size - includeLength - 1;
+        // The new size will be the old size + extraLength
+        u64 newSize = asset.size + extraLength;
 
-            // Allocate enough space for the asset + the extra stuff from the include
-            char* newSource = Memory.Allocate<char>(MemoryType::Array, import.size + extraLength);
-            // Copy everything before #include into the new source
-            std::memcpy(newSource, import.source, include.start);
-            // Copy the include
-            std::memcpy(newSource + include.start, include.asset.source, include.asset.size);
-            // Copy everything after the #include
-            std::memcpy(newSource + include.start + include.asset.size, import.source + include.end + 1, import.size - include.end - 1);
+        // Allocate enough space for the asset + the extra stuff from the include
+        char* newSource = Memory.Allocate<char>(MemoryType::Array, asset.size + extraLength);
+        // Copy everything before #include into the new source
+        std::memcpy(newSource, asset.source, include.start);
+        // Copy the include
+        std::memcpy(newSource + include.start, include.asset.source, include.asset.size);
+        // Copy everything after the #include
+        std::memcpy(newSource + include.start + include.asset.size, asset.source + include.end + 1, asset.size - include.end - 1);
 
-            Memory.Free(import.source);
-            import.source = newSource;
-            import.size   = newSize;
-        }
+        Memory.Free(asset.source);
+        asset.source = newSource;
+        asset.size   = newSize;
+
+        // Finally we return the point where the parser should continue
+        return include.asset.size + include.start;
     }
 
 }  // namespace C3D

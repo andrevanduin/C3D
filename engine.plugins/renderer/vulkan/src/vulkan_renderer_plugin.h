@@ -46,11 +46,13 @@ namespace C3D
         VulkanShader m_meshShader;
         VulkanShader m_meshletShader;
 
+        DynamicArray<MeshDraw> m_draws;
+
         VkQueryPool m_queryPool;
 
         f64 m_frameCpuAvg = 0, m_frameGpuAvg = 0, m_frameCpuBegin = 0;
 
-        u32 m_drawCount = 100;
+        u32 m_drawCount = 0;
 
         VulkanBuffer m_scratchBuffer;
         VulkanBuffer m_vertexBuffer;

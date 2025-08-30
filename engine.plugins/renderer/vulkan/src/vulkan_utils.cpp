@@ -205,22 +205,33 @@ namespace C3D
         return static_cast<u32>(gpuMemory);
     }
 
-    VkImageView VulkanUtils::CreateImageView(VulkanContext* context, VkImage image, VkFormat format)
+    VkImageMemoryBarrier VulkanUtils::CreateImageBarrier(VkImage image, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout oldLayout,
+                                                         VkImageLayout newLayout, VkImageAspectFlags aspectMask)
     {
-        VkImageViewCreateInfo createInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        createInfo.image                 = image;
-        createInfo.format                = format;
-        // TODO: Make this configurable?
-        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        // TODO: Make this configurable?
-        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.layerCount = 1;
+        VkImageMemoryBarrier barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 
-        VkImageView view = VK_NULL_HANDLE;
-        VK_CHECK(vkCreateImageView(context->device.GetLogical(), &createInfo, context->allocator, &view));
+        barrier.image = image;
+        // Source and destination access masks
+        barrier.srcAccessMask = srcAccessMask;
+        barrier.dstAccessMask = dstAccessMask;
+        // Layouts
+        barrier.oldLayout = oldLayout;
+        barrier.newLayout = newLayout;
+        // NOTE: family index is currently ignored since we only use 1 shared queue
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        // Aspect mask (color or depth etc.)
+        barrier.subresourceRange.aspectMask = aspectMask;
+        // Start with mip 0
+        barrier.subresourceRange.baseMipLevel = 0;
+        // Transition all remaining mip levels
+        barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+        // Start at the first layer
+        barrier.subresourceRange.baseArrayLayer = 0;
+        // Transition all layers at once
+        barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
-        return view;
+        return barrier;
     }
 
 #if defined(_DEBUG)

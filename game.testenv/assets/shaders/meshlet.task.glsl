@@ -9,8 +9,14 @@
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 #include "definitions.h"
+#include "math_utils.h"
 
 #define CULL 1
+
+layout (push_constant) uniform block
+{
+    MeshDraw meshDraw;
+};
 
 layout (binding = 1) readonly buffer Meshlets
 {
@@ -23,11 +29,6 @@ struct Task
 };
 taskPayloadSharedEXT Task OUT;
 
-bool ConeCull(vec4 cone, vec3 view)
-{
-    return dot(cone.xyz, view) > cone.w;
-}
-
 void main()
 {
     uint ti = gl_LocalInvocationID.x;
@@ -35,7 +36,13 @@ void main()
     uint mi = mgi * 32 + ti;
 
 #if CULL
-    bool accept = !ConeCull(meshlets[mi].cone, vec3(0, 0, 1));
+    vec3 center = RotateVecByQuat(meshlets[mi].center, meshDraw.orientation) * meshDraw.scale + meshDraw.position;
+    float radius = meshlets[mi].radius * meshDraw.scale;
+    vec3 coneAxis = RotateVecByQuat(meshlets[mi].coneAxis, meshDraw.orientation);
+    float coneCutoff = meshlets[mi].coneCutoff;
+
+    bool accept = !ConeCull(center, radius, coneAxis, coneCutoff, vec3(0, 0, 0));
+
     uvec4 ballot = subgroupBallot(accept);
 
     uint index = subgroupBallotExclusiveBitCount(ballot);

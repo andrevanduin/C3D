@@ -44,15 +44,6 @@ namespace C3D
         INFO_LOG("Destroying Vulkan Swapchain.");
         auto device = m_context->device.GetLogical();
 
-        // Destroy the views if needed
-        for (u32 i = 0; i < m_imageCount; ++i)
-        {
-            if (m_views[i])
-            {
-                vkDestroyImageView(device, m_views[i], m_context->allocator);
-            }
-        }
-
         // Destroy the swapchain itself
         vkDestroySwapchainKHR(device, m_handle, m_context->allocator);
     }
@@ -72,7 +63,7 @@ namespace C3D
         return true;
     }
 
-    bool VulkanSwapchain::Present(VkQueue presentQueue, WindowRendererBackendState* backendState)
+    bool VulkanSwapchain::Present(WindowRendererBackendState* backendState)
     {
         auto presentSemaphore = backendState->GetPresentSemaphore();
 
@@ -84,11 +75,12 @@ namespace C3D
         presentInfo.pSwapchains        = &m_handle;
         presentInfo.pImageIndices      = &backendState->imageIndex;
 
+        auto presentQueue = m_context->device.GetDeviceQueue();
         VK_CHECK_SWAPCHAIN(vkQueuePresentKHR(presentQueue, &presentInfo), "vkQueuePresentKHR returned an unexpected result.");
         return true;
     }
 
-    void VulkanSwapchain::Create(const Window& window)
+    bool VulkanSwapchain::Create(const Window& window)
     {
         WindowRendererState* windowState               = window.rendererState;
         WindowRendererBackendState* windowBackendState = window.rendererState->backendState;
@@ -110,7 +102,7 @@ namespace C3D
         createInfo.imageExtent.width     = window.width;
         createInfo.imageExtent.height    = window.height;
         createInfo.imageArrayLayers      = 1;
-        createInfo.imageUsage            = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        createInfo.imageUsage            = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         createInfo.queueFamilyIndexCount = 1;
         auto familyIndex                 = m_context->device.GetGraphicsFamilyIndex();
         createInfo.pQueueFamilyIndices   = &familyIndex;
@@ -125,36 +117,42 @@ namespace C3D
         auto device = m_context->device.GetLogical();
 
         // Create our swapchain
-        VK_CHECK(vkCreateSwapchainKHR(device, &createInfo, m_context->allocator, &m_handle));
+        auto result = vkCreateSwapchainKHR(device, &createInfo, m_context->allocator, &m_handle);
+        if (!VulkanUtils::IsSuccess(result))
+        {
+            ERROR_LOG("vkCreateSwapchainKHR failed with error: '{}'.", VulkanUtils::ResultString(result));
+            return false;
+        }
+
+        // Set the debug name for the swapchain handle
+        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_SWAPCHAIN_KHR, m_handle, String::FromFormat("{}_SWAPCHAIN", window.name));
 
         // Obtain the number of images in our swapchain
-        VK_CHECK(vkGetSwapchainImagesKHR(device, m_handle, &m_imageCount, nullptr));
+        result = vkGetSwapchainImagesKHR(device, m_handle, &m_imageCount, nullptr);
+        if (!VulkanUtils::IsSuccess(result))
+        {
+            ERROR_LOG("vkGetSwapchainImagesKHR(1) failed with error: '{}'.", VulkanUtils::ResultString(result));
+            return false;
+        }
 
         // Resize our array to hold all the images
         m_images.Resize(m_imageCount);
-        m_views.Resize(m_imageCount);
 
         // Obtain the actual images from our swapchain
-        VK_CHECK(vkGetSwapchainImagesKHR(device, m_handle, &m_imageCount, m_images.GetData()));
-
-        // Obtain image views
-        for (u32 i = 0; i < m_imageCount; ++i)
+        result = vkGetSwapchainImagesKHR(device, m_handle, &m_imageCount, m_images.GetData());
+        if (!VulkanUtils::IsSuccess(result))
         {
-            if (m_views[i])
-            {
-                // We already have old image views which we should destroy
-                vkDestroyImageView(device, m_views[i], m_context->allocator);
-            }
-
-            m_views[i] = VulkanUtils::CreateImageView(m_context, m_images[i], createInfo.imageFormat);
+            ERROR_LOG("vkGetSwapchainImagesKHR(2) failed with error: '{}'.", VulkanUtils::ResultString(result));
+            return false;
         }
 
-        // Set some debug object names for easier debugging down the line
+        // Set some debug object names for each image
         for (u32 i = 0; i < m_imageCount; i++)
         {
-            VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_IMAGE, m_images[i], String::FromFormat("SWAPCHAIN_IMAGE_{}", i));
-            VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_IMAGE_VIEW, m_views[i], String::FromFormat("SWAPCHAIN_IMAGE_VIEW_{}", i));
+            VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_IMAGE, m_images[i], String::FromFormat("{}_SWAPCHAIN_IMAGE_{}", window.name, i));
         }
+
+        return true;
     }
 
     VkSurfaceFormatKHR VulkanSwapchain::GetSurfaceFormat() const

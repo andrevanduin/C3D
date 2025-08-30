@@ -134,8 +134,8 @@ namespace C3D
 
         MetricsFree(Memory.GetId(), MemoryType::Vulkan, m_size, m_requiredSize, m_memory);
 
-        vkFreeMemory(device, m_memory, m_context->allocator);
         vkDestroyBuffer(device, m_handle, m_context->allocator);
+        vkFreeMemory(device, m_memory, m_context->allocator);
     }
 
 }  // namespace C3D

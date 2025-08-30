@@ -23,9 +23,19 @@ namespace C3D
         /** @brief Calculate the available GPU memory in MebiBytes. */
         u32 GetAvailableGPUMemoryInMB(VkPhysicalDeviceMemoryProperties properties);
 
-        /** @brief Creates an image view. */
-        // TODO: Make VulkanImage class that encapsulates this
-        VkImageView CreateImageView(VulkanContext* context, VkImage image, VkFormat format);
+        /**
+         * @brief Creates an image barrier structure.
+         *
+         * @param image A hanlde to the Vulkan image
+         * @param srcAccessMask The
+         * @param dstAccessMask
+         * @param oldLayout
+         * @param newLayout
+         * @param aspectMask
+         * @return VkImageMemoryBarrier
+         */
+        VkImageMemoryBarrier CreateImageBarrier(VkImage image, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout oldLayout,
+                                                VkImageLayout newLayout, VkImageAspectFlags aspectMask);
 
         /** @brief Helper method to enable easier loading of vulkan extension functions. */
         template <typename T>

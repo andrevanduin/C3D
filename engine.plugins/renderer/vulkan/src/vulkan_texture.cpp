@@ -9,12 +9,24 @@
 
 namespace C3D
 {
+    static VkImageAspectFlags FormatToAspectMask(VkFormat format)
+    {
+        switch (format)
+        {
+            case VK_FORMAT_D32_SFLOAT:
+                return VK_IMAGE_ASPECT_DEPTH_BIT;
+            default:
+                return VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+    }
+
     bool VulkanTexture::Create(const VulkanTextureCreateInfo& createInfo)
     {
-        m_name    = createInfo.name;
-        m_context = createInfo.context;
-        m_format  = createInfo.format;
-        m_usage   = createInfo.usage;
+        m_context    = createInfo.context;
+        m_name       = createInfo.name;
+        m_format     = createInfo.format;
+        m_usage      = createInfo.usage;
+        m_aspectMask = FormatToAspectMask(createInfo.format);
 
         INFO_LOG("Creating: '{}'", m_name);
 
@@ -27,19 +39,51 @@ namespace C3D
         return CreateInternal(createInfo.width, createInfo.height);
     }
 
-    bool VulkanTexture::Resize(const Window& window)
+    bool VulkanTexture::Resize(u32 width, u32 height)
     {
+        INFO_LOG("Resizing: '{}'.", m_name);
+
         if (m_image)
         {
             Destroy();
         }
 
-        return CreateInternal(window.width, window.height);
+        return CreateInternal(width, height);
+    }
+
+    VkImageMemoryBarrier VulkanTexture::CreateBarrier(VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout newLayout)
+    {
+        // Create our barrier
+        auto barrier = VulkanUtils::CreateImageBarrier(m_image, srcAccessMask, dstAccessMask, m_currentLayout, newLayout, m_aspectMask);
+        // Our new layout will be the current one after the barrier command has executed
+        m_currentLayout = newLayout;
+
+        return barrier;
+    }
+
+    void VulkanTexture::CopyTo(VkCommandBuffer commandBuffer, VkImage target, VkImageAspectFlags targetAspectMask, VkImageLayout targetLayout)
+    {
+        VkImageCopy copyRegion               = {};
+        copyRegion.srcSubresource.aspectMask = m_aspectMask;
+        copyRegion.srcSubresource.layerCount = 1;
+        copyRegion.dstSubresource.aspectMask = targetAspectMask;
+        copyRegion.dstSubresource.layerCount = 1;
+        copyRegion.extent                    = { m_width, m_height, 1 };
+
+        vkCmdCopyImage(commandBuffer, m_image, m_currentLayout, target, targetLayout, 1, &copyRegion);
     }
 
     bool VulkanTexture::CreateInternal(u32 width, u32 height)
     {
-        if (!CreateImage(width, height))
+        INFO_LOG("Creating: '{}'.", m_name);
+
+        // After creation we start the image as VK_IMAGE_LAYOUT_UNDEFINED
+        m_currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        // Keep track of the width and height of the image
+        m_width  = width;
+        m_height = height;
+
+        if (!CreateImage())
         {
             ERROR_LOG("Failed to create VulkanTexture: '{}'.", m_name);
             return false;
@@ -60,14 +104,14 @@ namespace C3D
         return true;
     }
 
-    bool VulkanTexture::CreateImage(u32 width, u32 height)
+    bool VulkanTexture::CreateImage()
     {
         VkImageCreateInfo createInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
 
         // TODO: Quite some assumptions here for now
         createInfo.imageType     = VK_IMAGE_TYPE_2D;
         createInfo.format        = m_format;
-        createInfo.extent        = { width, height, 1 };
+        createInfo.extent        = { m_width, m_height, 1 };
         createInfo.mipLevels     = 1;
         createInfo.arrayLayers   = 1;
         createInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
@@ -78,22 +122,11 @@ namespace C3D
         auto result = vkCreateImage(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_image);
         if (!VulkanUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to create Image with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("vkCreateImage failed with error: '{}'.", VulkanUtils::ResultString(result));
             return false;
         }
 
         return true;
-    }
-
-    static VkImageAspectFlags FormatToAspectMask(VkFormat format)
-    {
-        switch (format)
-        {
-            case VK_FORMAT_D32_SFLOAT:
-                return VK_IMAGE_ASPECT_DEPTH_BIT;
-            default:
-                return VK_IMAGE_ASPECT_COLOR_BIT;
-        }
     }
 
     bool VulkanTexture::CreateImageView()
@@ -102,7 +135,7 @@ namespace C3D
         createInfo.image                       = m_image;
         createInfo.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
         createInfo.format                      = m_format;
-        createInfo.subresourceRange.aspectMask = FormatToAspectMask(m_format);
+        createInfo.subresourceRange.aspectMask = m_aspectMask;
         createInfo.subresourceRange.levelCount = 1;
         createInfo.subresourceRange.layerCount = 1;
 
@@ -153,7 +186,7 @@ namespace C3D
 
     void VulkanTexture::Destroy()
     {
-        INFO_LOG("Destroying: '{}'", m_name);
+        INFO_LOG("Destroying: '{}'.", m_name);
 
         auto device = m_context->device.GetLogical();
 

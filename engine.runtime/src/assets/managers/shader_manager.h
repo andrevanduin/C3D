@@ -4,33 +4,19 @@
 
 namespace C3D
 {
-    struct ShaderInclude;
-
-    struct ImportShader
-    {
-        char* source = nullptr;
-        u64 size     = 0;
-        String name;
-        String path;
-
-        DynamicArray<ShaderInclude> includes;
-
-        void Cleanup();
-    };
-
-    struct ShaderInclude
-    {
-        ImportShader asset;
-        u64 start = 0;
-        u64 end   = 0;
-    };
-
     struct ShaderAsset final : IAsset
     {
         ShaderAsset() : IAsset(AssetType::ShaderSource) {}
 
         char* source = nullptr;
         u64 size     = 0;
+    };
+
+    struct ShaderInclude
+    {
+        ShaderAsset asset;
+        u64 start = 0;
+        u64 end   = 0;
     };
 
     class C3D_API ShaderManager final : public IAssetManager
@@ -42,17 +28,20 @@ namespace C3D
         static void Cleanup(ShaderAsset& resource);
 
     private:
-        bool LoadShaderSource(const String& path, const String& name, ImportShader& import);
+        bool LoadShaderSource(const String& path, const String& name, ShaderAsset& import);
 
         /** @brief Finds all #include statements in the source.
          * Then it fills the m_includes array with those #include filenames.
          */
-        void FindIncludes(ImportShader& import);
+        void FindAndResolveIncludes(ShaderAsset& import);
 
         /**
-         * @brief Resolves all #include statements in current source
-         * by replace the #include with the source of that particular file.
+         * @brief Resolves the provided include for the asset.
+         *
+         * @param asset The asset which needs it's #include resolved
+         * @param include The information about the #include
+         * @return The size of the include source in bytes (used to skip ahead before parsing the rest of the asset)
          */
-        void ResolveIncludes(ImportShader& import);
+        u64 ResolveInclude(ShaderAsset& asset, ShaderInclude& include);
     };
 }  // namespace C3D

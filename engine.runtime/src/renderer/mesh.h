@@ -24,8 +24,14 @@ namespace C3D
 
     struct alignas(16) Meshlet
     {
-        /** @brief A cone used to determine if this meshlet can be backface culled on the GPU. */
-        vec4 cone;
+        /** @brief The center of the meshlet. Used for culling. */
+        vec3 center;
+        /** @brief The radius of the meshlet. Used for culling. */
+        f32 radius;
+        /** @brief The Cone axis, used for backface culling in the task shader. */
+        vec3 coneAxis;
+        /** @brief The cone cutoff. Used in the backface culling test in the task shader. */
+        f32 coneCutoff;
         /** @brief An index into the MeshletData array where the data for this meshlet starts.
          * The first elements will be the vertex indices. Then at dataOffset + vertexCount the triangle indices are stored */
         u32 dataOffset = 0;
@@ -55,7 +61,9 @@ namespace C3D
 
     struct alignas(16) MeshDraw
     {
-        vec2 offset;
-        vec2 scale;
+        mat4 projection;
+        vec3 position;
+        f32 scale;
+        quat orientation;
     };
 }  // namespace C3D

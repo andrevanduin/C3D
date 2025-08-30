@@ -7,7 +7,12 @@ struct Vertex
 
 struct Meshlet
 {
-    vec4 cone;
+    vec3 center;
+    float radius;
+
+    vec3 coneAxis;
+    float coneCutoff;
+
     uint dataOffset;
     uint8_t triangleCount;
     uint8_t vertexCount;
@@ -15,6 +20,8 @@ struct Meshlet
 
 struct MeshDraw
 {
-    vec2 offset;
-    vec2 scale;
+    mat4 projection;
+    vec3 position;
+    float scale;
+    vec4 orientation;
 };
