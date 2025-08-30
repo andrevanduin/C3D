@@ -58,6 +58,8 @@ namespace C3D
         asset.source = Memory.Allocate<char>(MemoryType::Shader, asset.size);
         std::memcpy(asset.source, import.source, import.size);
 
+        Cleanup(import);
+
         return true;
     }
 
@@ -163,6 +165,9 @@ namespace C3D
         Memory.Free(asset.source);
         asset.source = newSource;
         asset.size   = newSize;
+
+        // Cleanup the asset for loading the include
+        Cleanup(include.asset);
 
         // Finally we return the point where the parser should continue
         return include.asset.size + include.start;

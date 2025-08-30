@@ -1263,15 +1263,27 @@ namespace C3D
             maxt = Max(t, maxt);
         }
 
-        // Cone apex should be in the negative half-space of all cluster triangles by construction
-        bounds.coneApex = center - (axis * maxt);
-
         // Note: this axis is the axis of the normal cone, but our test for perspective camera effectively negates the axis
         bounds.coneAxis = axis;
 
-        // cos(a) for normal cone is mindp; we need to add 90 degrees on both sides and invert the cone
+        // Cos(a) for normal cone is mindp; we need to add 90 degrees on both sides and invert the cone
         // which gives us -cos(a+90) = -(-sin(a)) = sin(a) = sqrt(1 - cos^2(a))
         bounds.coneCutoff = Sqrt(1 - mindp * mindp);
+
+        // Quantize axis & cutoff to 8-bit SNORM format
+        bounds.coneAxisS8[0] = static_cast<i8>(QuantizeSnorm(bounds.coneAxis.x, 8));
+        bounds.coneAxisS8[1] = static_cast<i8>(QuantizeSnorm(bounds.coneAxis.y, 8));
+        bounds.coneAxisS8[2] = static_cast<i8>(QuantizeSnorm(bounds.coneAxis.z, 8));
+
+        // For the 8-bit test to be conservative, we need to adjust the cutoff by measuring the max. error
+        f32 coneAxisS8E0 = Abs(bounds.coneAxisS8[0] / 127.f - bounds.coneAxis.x);
+        f32 coneAxisS8E1 = Abs(bounds.coneAxisS8[1] / 127.f - bounds.coneAxis.y);
+        f32 coneAxisS8E2 = Abs(bounds.coneAxisS8[2] / 127.f - bounds.coneAxis.z);
+
+        // Note that we need to round this up instead of rounding to nearest, hence +1
+        i32 coneCutoffS8 = static_cast<i32>(127 * (bounds.coneCutoff + coneAxisS8E0 + coneAxisS8E1 + coneAxisS8E2) + 1);
+
+        bounds.coneCutoffS8 = (coneCutoffS8 > 127) ? 127 : static_cast<i8>(coneCutoffS8);
 
         return bounds;
 

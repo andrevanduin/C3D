@@ -339,6 +339,18 @@ namespace C3D
         };
     }  // namespace
 
+    C3D_API C3D_INLINE i32 QuantizeSnorm(f32 v, i32 N)
+    {
+        const f32 scale = static_cast<f32>((1 << (N - 1)) - 1);
+
+        f32 round = (v >= 0 ? 0.5f : -0.5f);
+
+        v = (v >= -1) ? v : -1;
+        v = (v <= +1) ? v : +1;
+
+        return static_cast<i32>(v * scale + round);
+    }
+
     /**
      * @brief Quantize a f32 into half-precision (as defined by IEEE-754 fp16) floating point value
      * Generates +-inf for overflow, preserves NaN, flushes denormals to zero, rounds to nearest

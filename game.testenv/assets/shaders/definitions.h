@@ -10,8 +10,8 @@ struct Meshlet
     vec3 center;
     float radius;
 
-    vec3 coneAxis;
-    float coneCutoff;
+    int8_t coneAxis[3];
+    int8_t coneCutoff;
 
     uint dataOffset;
     uint8_t triangleCount;

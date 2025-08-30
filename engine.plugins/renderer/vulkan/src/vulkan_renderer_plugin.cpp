@@ -154,8 +154,10 @@ namespace C3D
                 m.center = bounds.center;
                 m.radius = bounds.radius;
 
-                m.coneAxis   = bounds.coneAxis;
-                m.coneCutoff = bounds.coneCutoff;
+                m.coneAxis[0] = bounds.coneAxisS8[0];
+                m.coneAxis[1] = bounds.coneAxisS8[1];
+                m.coneAxis[2] = bounds.coneAxisS8[2];
+                m.coneCutoff  = bounds.coneCutoffS8;
 
                 m_mesh.meshlets.PushBack(m);
             }

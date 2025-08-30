@@ -38,8 +38,8 @@ void main()
 #if CULL
     vec3 center = RotateVecByQuat(meshlets[mi].center, meshDraw.orientation) * meshDraw.scale + meshDraw.position;
     float radius = meshlets[mi].radius * meshDraw.scale;
-    vec3 coneAxis = RotateVecByQuat(meshlets[mi].coneAxis, meshDraw.orientation);
-    float coneCutoff = meshlets[mi].coneCutoff;
+    vec3 coneAxis = RotateVecByQuat(vec3(meshlets[mi].coneAxis[0] / 127.0, meshlets[mi].coneAxis[1] / 127.0, meshlets[mi].coneAxis[2] / 127.0), meshDraw.orientation);
+    float coneCutoff = int(meshlets[mi].coneCutoff) / 127.0;
 
     bool accept = !ConeCull(center, radius, coneAxis, coneCutoff, vec3(0, 0, 0));
 

@@ -17,9 +17,11 @@ namespace C3D
         f32 radius;
 
         /* Normal cone, useful for backface culling */
-        vec3 coneApex;
         vec3 coneAxis;
+        i8 coneAxisS8[3];
+
         f32 coneCutoff; /* = cos(angle/2) */
+        i8 coneCutoffS8;
     };
 
     struct alignas(16) Meshlet
@@ -29,9 +31,9 @@ namespace C3D
         /** @brief The radius of the meshlet. Used for culling. */
         f32 radius;
         /** @brief The Cone axis, used for backface culling in the task shader. */
-        vec3 coneAxis;
+        i8 coneAxis[3];
         /** @brief The cone cutoff. Used in the backface culling test in the task shader. */
-        f32 coneCutoff;
+        i8 coneCutoff;
         /** @brief An index into the MeshletData array where the data for this meshlet starts.
          * The first elements will be the vertex indices. Then at dataOffset + vertexCount the triangle indices are stored */
         u32 dataOffset = 0;
