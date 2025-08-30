@@ -4,6 +4,7 @@
 
 #extension GL_EXT_shader_explicit_arithmetic_types : require
 #extension GL_EXT_mesh_shader : require
+#extension GL_ARB_shader_draw_parameters : require
 
 #include "definitions.h"
 #include "math_utils.h"
@@ -15,12 +16,12 @@ layout (triangles, max_vertices = 64, max_primitives = 124) out;
 
 layout (push_constant) uniform block
 {
-    MeshDraw meshDraw;
+    Globals globals;
 };
 
-layout (binding = 0) readonly buffer Vertices 
+layout (binding = 0) readonly buffer Draws 
 {
-    Vertex vertices[];
+    MeshDraw draws[];
 };
 
 layout (binding = 1) readonly buffer Meshlets
@@ -38,6 +39,12 @@ layout(binding = 2) readonly buffer MeshletData8
 {
 	uint8_t meshletData8[];
 };
+
+layout (binding = 3) readonly buffer Vertices 
+{
+    Vertex vertices[];
+};
+
 
 struct Task
 {
@@ -61,6 +68,8 @@ void main()
     uint ti = gl_LocalInvocationID.x;
     uint mi = IN.meshletIndices[gl_WorkGroupID.x];
     
+    MeshDraw meshDraw = draws[gl_DrawIDARB];
+
     uint vertexCount = meshlets[mi].vertexCount;
     uint triangleCount = meshlets[mi].triangleCount;
 
@@ -83,7 +92,7 @@ void main()
         vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
         vec2 texCoord = vec2(v.u, v.v);
 
-        gl_MeshVerticesEXT[i].gl_Position = meshDraw.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
+        gl_MeshVerticesEXT[i].gl_Position = globals.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
         
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
 

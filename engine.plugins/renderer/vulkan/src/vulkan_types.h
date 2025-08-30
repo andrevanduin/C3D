@@ -63,4 +63,21 @@ namespace C3D
         VkCommandPool GetCommandPool() const { return commandPools[frameIndex % MAX_FRAMES]; }
         VkCommandBuffer GetCommandBuffer() const { return commandBuffers[frameIndex % MAX_FRAMES]; }
     };
+
+    struct alignas(16) MeshDraw
+    {
+        vec3 position;
+        f32 scale;
+        quat orientation;
+
+        union {
+            u32 commandData[8];
+
+            struct
+            {
+                VkDrawIndexedIndirectCommand commandIndirect;         // 5 u32's
+                VkDrawMeshTasksIndirectCommandEXT commandIndirectMS;  // 3 u32's
+            };
+        };
+    };
 }  // namespace C3D

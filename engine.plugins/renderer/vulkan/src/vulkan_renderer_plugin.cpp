@@ -185,6 +185,14 @@ namespace C3D
             return false;
         }
 
+        if (!m_drawBuffer.Create(&m_context, "DRAW", MebiBytes(8),
+                                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        {
+            ERROR_LOG("Failed to create draw buffer.");
+            return false;
+        }
+
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
             if (!m_meshletBuffer.Create(&m_context, "MESHLET", MebiBytes(32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -230,6 +238,13 @@ namespace C3D
                 vec3 axis        = vec3(Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f));
                 f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));
                 draw.orientation = glm::rotate(glm::quat(1, 0, 0, 0), angle, axis);
+
+                std::memset(draw.commandData, 0, sizeof(draw.commandData));
+                draw.commandIndirect.indexCount    = static_cast<u32>(m_mesh.indices.Size());
+                draw.commandIndirect.instanceCount = 1;
+                draw.commandIndirectMS.groupCountX = static_cast<u32>(m_mesh.meshlets.Size() / 32);
+                draw.commandIndirectMS.groupCountY = 1;
+                draw.commandIndirectMS.groupCountZ = 1;
             }
         }
 
@@ -256,6 +271,7 @@ namespace C3D
         INFO_LOG("Destroying Vulkan buffers.");
         m_vertexBuffer.Destroy();
         m_indexBuffer.Destroy();
+        m_drawBuffer.Destroy();
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
@@ -369,39 +385,37 @@ namespace C3D
             vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            mat4 projection = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), 0.01f);
-            for (auto& draw : m_draws)
-            {
-                draw.projection = projection;
-            }
+            Globals globals    = {};
+            globals.projection = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), 0.01f);
 
             if (m_meshShadingEnabled)
             {
                 m_meshletShader.Bind(commandBuffer);
 
-                DescriptorInfo descriptors[] = { m_vertexBuffer.GetHandle(), m_meshletBuffer.GetHandle(), m_meshletDataBuffer.GetHandle() };
+                DescriptorInfo descriptors[] = {
+                    m_drawBuffer.GetHandle(),
+                    m_meshletBuffer.GetHandle(),
+                    m_meshletDataBuffer.GetHandle(),
+                    m_vertexBuffer.GetHandle(),
+                };
                 m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
+                m_meshletShader.PushConstants(commandBuffer, &globals, sizeof(globals));
 
-                for (const auto& draw : m_draws)
-                {
-                    m_meshletShader.PushConstants(commandBuffer, &draw, sizeof(draw));
-                    vkCmdDrawMeshTasksEXT(commandBuffer, m_mesh.meshlets.Size() / 32, 1, 1);
-                }
+                vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_drawBuffer.GetHandle(), offsetof(MeshDraw, commandIndirectMS), static_cast<u32>(m_draws.Size()),
+                                              sizeof(MeshDraw));
             }
             else
             {
                 m_meshShader.Bind(commandBuffer);
 
-                DescriptorInfo descriptors[] = { m_vertexBuffer.GetHandle() };
+                DescriptorInfo descriptors[] = { m_drawBuffer.GetHandle(), m_vertexBuffer.GetHandle() };
                 m_meshShader.PushDescriptorSet(commandBuffer, descriptors);
 
                 vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
 
-                for (const auto& draw : m_draws)
-                {
-                    m_meshShader.PushConstants(commandBuffer, &draw, sizeof(draw));
-                    vkCmdDrawIndexed(commandBuffer, static_cast<u32>(m_mesh.indices.Size()), 1, 0, 0, 0);
-                }
+                m_meshShader.PushConstants(commandBuffer, &globals, sizeof(globals));
+                vkCmdDrawIndexedIndirect(commandBuffer, m_drawBuffer.GetHandle(), offsetof(MeshDraw, commandIndirect), static_cast<u32>(m_draws.Size()),
+                                         sizeof(MeshDraw));
             }
         }
 
@@ -656,7 +670,7 @@ namespace C3D
             createInfo.name              = "MESH_SHADER";
             createInfo.cache             = VK_NULL_HANDLE;
             createInfo.swapchain         = &backend->swapchain;
-            createInfo.pushConstantsSize = sizeof(MeshDraw);
+            createInfo.pushConstantsSize = sizeof(Globals);
             createInfo.modules           = { &m_meshShaderModule, &m_fragmentShaderModule };
 
             if (!m_meshShader.Create(createInfo))
@@ -695,6 +709,7 @@ namespace C3D
 
             m_vertexBuffer.Upload(commandBuffer, commandPool, m_mesh.vertices.GetData(), sizeof(Vertex) * m_mesh.vertices.Size());
             m_indexBuffer.Upload(commandBuffer, commandPool, m_mesh.indices.GetData(), sizeof(u32) * m_mesh.indices.Size());
+            m_drawBuffer.Upload(commandBuffer, commandPool, m_draws.GetData(), sizeof(MeshDraw) * m_draws.Size());
 
             if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
             {

@@ -60,12 +60,4 @@ namespace C3D
          */
         DynamicArray<u32> meshletData;
     };
-
-    struct alignas(16) MeshDraw
-    {
-        mat4 projection;
-        vec3 position;
-        f32 scale;
-        quat orientation;
-    };
 }  // namespace C3D

@@ -54,11 +54,11 @@ namespace C3D
 
         u32 m_drawCount = 0;
 
-        VulkanBuffer m_scratchBuffer;
         VulkanBuffer m_vertexBuffer;
         VulkanBuffer m_indexBuffer;
         VulkanBuffer m_meshletBuffer;
         VulkanBuffer m_meshletDataBuffer;
+        VulkanBuffer m_drawBuffer;
 
         Mesh m_mesh;
 

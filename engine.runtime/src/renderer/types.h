@@ -49,4 +49,9 @@ namespace C3D
         /** @brief A pointer to the renderer backend state. */
         WindowRendererBackendState* backendState = nullptr;
     };
+
+    struct alignas(16) Globals
+    {
+        mat4 projection;
+    };
 }

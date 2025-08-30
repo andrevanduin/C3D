@@ -51,14 +51,19 @@ namespace C3D
         createInfo.ppEnabledExtensionNames = requiredExtensions.GetData();
 
         // Fill in all the structures for our extensions
+        VkPhysicalDeviceFeatures2 deviceFeatures2  = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+        deviceFeatures2.features.multiDrawIndirect = VK_TRUE;
+
+        createInfo.pNext = &deviceFeatures2;
 
         // 16-Bit storage
         VkPhysicalDeviceVulkan11Features device11Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 
         device11Features.storageBuffer16BitAccess           = VK_TRUE;
         device11Features.uniformAndStorageBuffer16BitAccess = VK_TRUE;
+        device11Features.shaderDrawParameters               = VK_TRUE;
 
-        createInfo.pNext = &device11Features;
+        deviceFeatures2.pNext = &device11Features;
 
         // 8-Bit storage and shader float16
         VkPhysicalDeviceVulkan12Features device12Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };

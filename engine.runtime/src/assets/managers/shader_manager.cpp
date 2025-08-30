@@ -11,7 +11,7 @@ namespace C3D
 {
     constexpr const char* INCLUDE_DIRECTIVE = "#include";
 
-    ShaderManager::ShaderManager() : IAssetManager(MemoryType::Array, AssetType::Binary, "shaders") {}
+    ShaderManager::ShaderManager() : IAssetManager(MemoryType::Array, AssetType::ShaderSource, "shaders") {}
 
     bool ShaderManager::Read(const String& name, ShaderAsset& asset)
     {
