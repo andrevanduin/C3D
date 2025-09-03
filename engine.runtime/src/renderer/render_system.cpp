@@ -162,14 +162,14 @@ namespace C3D
             mesh.center = center;
             mesh.radius = radius;
 
-            mesh.meshletOffset = meshletOffset;
-            mesh.meshletCount  = meshletCount;
-
             mesh.vertexOffset = vertexOffset;
             mesh.vertexCount  = static_cast<u32>(asset.vertices.Size());
 
             mesh.indexOffset = indexOffset;
             mesh.indexCount  = static_cast<u32>(asset.indices.Size());
+
+            mesh.meshletOffset = meshletOffset;
+            mesh.meshletCount  = meshletCount;
 
             m_geometry.meshes.PushBack(mesh);
         }

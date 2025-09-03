@@ -23,20 +23,29 @@ struct Globals
     mat4 projection;
 };
 
+struct Mesh
+{
+    vec3 center;
+    float radius;
+
+    uint vertexOffset;
+    uint vertexCount;
+
+    uint indexOffset;
+    uint indexCount;
+
+    uint meshletOffset;
+    uint meshletCount;
+};
+
 struct MeshDraw
 {
     vec3 position;
     float scale;
     vec4 orientation;
 
-    vec3 center;
-    float radius;
-
-    uint vertexOffset;
-    uint indexOffset;
-    uint indexCount;
-    uint meshletOffset;
-    uint meshletCount;
+    uint meshIndex;
+    uint vertexOffset;  // == meshes[meshIndex].vertexOffset, improves data locality in the mesh shader
 };
 
 struct MeshDrawCommand

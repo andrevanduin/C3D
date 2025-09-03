@@ -114,6 +114,13 @@ namespace C3D
             return false;
         }
 
+        if (!m_meshBuffer.Create(&m_context, "MESH", MebiBytes(32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        {
+            ERROR_LOG("Failed to create mesh buffer.");
+            return false;
+        }
+
         if (!m_drawBuffer.Create(&m_context, "DRAW", MebiBytes(8), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
@@ -191,6 +198,7 @@ namespace C3D
         INFO_LOG("Destroying Vulkan buffers.");
         m_vertexBuffer.Destroy();
         m_indexBuffer.Destroy();
+        m_meshBuffer.Destroy();
         m_drawBuffer.Destroy();
         m_drawCommandBuffer.Destroy();
         m_drawCommandCountBuffer.Destroy();
@@ -294,7 +302,12 @@ namespace C3D
 
             m_drawCommandShader.Bind(commandBuffer);
 
-            DescriptorInfo descriptors[] = { m_drawBuffer.GetHandle(), m_drawCommandBuffer.GetHandle(), m_drawCommandCountBuffer.GetHandle() };
+            DescriptorInfo descriptors[] = {
+                m_drawBuffer.GetHandle(),
+                m_meshBuffer.GetHandle(),
+                m_drawCommandBuffer.GetHandle(),
+                m_drawCommandCountBuffer.GetHandle(),
+            };
             m_drawCommandShader.PushDescriptorSet(commandBuffer, descriptors);
 
             m_drawCommandShader.PushConstants(commandBuffer, frustum, sizeof(frustum));
@@ -810,6 +823,12 @@ namespace C3D
             return false;
         }
 
+        if (!m_meshBuffer.Upload(commandBuffer, commandPool, geometry.meshes.GetData(), sizeof(Mesh) * geometry.meshes.Size()))
+        {
+            ERROR_LOG("Failed to upload meshes.");
+            return false;
+        }
+
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
             if (!m_meshletBuffer.Upload(commandBuffer, commandPool, geometry.meshlets.GetData(), sizeof(Meshlet) * geometry.meshlets.Size()))
@@ -842,7 +861,8 @@ namespace C3D
 
         for (u32 i = 0; i < m_drawCount; ++i)
         {
-            const auto& mesh = geometry.meshes[Random.Generate(static_cast<u64>(0), geometry.meshes.Size() - 1)];
+            u64 meshIndex    = Random.Generate(static_cast<u64>(0), geometry.meshes.Size() - 1);
+            const auto& mesh = geometry.meshes[meshIndex];
             auto& draw       = m_draws[i];
 
             draw.position.x = Random.Generate(-50.f, 50.f);
@@ -854,14 +874,8 @@ namespace C3D
             f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));
             draw.orientation = glm::rotate(glm::quat(1, 0, 0, 0), angle, axis);
 
-            draw.center = mesh.center;
-            draw.radius = mesh.radius;
-
-            draw.vertexOffset  = mesh.vertexOffset;
-            draw.indexOffset   = mesh.indexOffset;
-            draw.indexCount    = mesh.indexCount;
-            draw.meshletOffset = mesh.meshletOffset;
-            draw.meshletCount  = mesh.meshletCount;
+            draw.meshIndex    = static_cast<u32>(meshIndex);
+            draw.vertexOffset = mesh.vertexOffset;
 
             m_triangleCount += mesh.indexCount / 3;
         }

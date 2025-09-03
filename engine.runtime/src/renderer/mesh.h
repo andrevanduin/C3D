@@ -54,23 +54,26 @@ namespace C3D
         DynamicArray<u32> indices;
     };
 
-    struct Mesh
+    struct alignas(16) Mesh
     {
         /** @brief Bounding sphere used for culling in the compute shader. */
         vec3 center;
         f32 radius;
-        /** @brief The offset into the meshlet array of the geometry struct for this mesh. */
-        u32 meshletOffset = 0;
-        /** @brief The number of meshlets in this mesh. */
-        u32 meshletCount = 0;
+
         /** @brief The offset into the vertex array of the geometry struct for this mesh. */
         u32 vertexOffset = 0;
         /** @brief The number of vertices in this mesh. */
         u32 vertexCount = 0;
+
         /** @brief The offset into the index array of the geometry struct for this mesh. */
         u32 indexOffset = 0;
         /** @brief The number of indices in this mesh. */
         u32 indexCount = 0;
+
+        /** @brief The offset into the meshlet array of the geometry struct for this mesh. */
+        u32 meshletOffset = 0;
+        /** @brief The number of meshlets in this mesh. */
+        u32 meshletCount = 0;
     };
 
     struct alignas(16) MeshDraw
@@ -79,15 +82,8 @@ namespace C3D
         f32 scale;
         quat orientation;
 
-        /** @brief Bounding sphere used for culling in the compute shader. */
-        vec3 center;
-        f32 radius;
-
+        u32 meshIndex;
         u32 vertexOffset;
-        u32 indexOffset;
-        u32 indexCount;
-        u32 meshletOffset;
-        u32 meshletCount;
     };
 
     /** @brief A collection of vertices and indices for all meshes that we can render. */

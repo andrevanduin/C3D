@@ -68,6 +68,7 @@ namespace C3D
 
         VulkanBuffer m_vertexBuffer;
         VulkanBuffer m_indexBuffer;
+        VulkanBuffer m_meshBuffer;
         VulkanBuffer m_meshletBuffer;
         VulkanBuffer m_meshletDataBuffer;
         VulkanBuffer m_drawBuffer;
