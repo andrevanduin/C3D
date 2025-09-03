@@ -43,6 +43,8 @@ namespace C3D
     {
         /** @brief The name of the Shader. Used for logging and debugging purposes. */
         const char* name = nullptr;
+        /** @brief The bindpoint of the Shader. This defaults to GRAPHICS. */
+        VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         /** @brief An initializer list containing all ShaderModules that should be used by this Shader. */
         std::initializer_list<VulkanShaderModule*> modules;
         /** @brief A pointer to the Vulkan context. */
@@ -61,6 +63,8 @@ namespace C3D
         bool Create(const VulkanShaderCreateInfo& createInfo);
 
         void Bind(VkCommandBuffer commandBuffer) const;
+        void Dispatch(VkCommandBuffer commandBuffer, u32 count) const;
+
         void PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const;
         void PushConstants(VkCommandBuffer commandBuffer, const void* data, u64 size) const;
 
@@ -72,6 +76,8 @@ namespace C3D
         bool CreateSetLayout();
         bool CreatePipelineLayout(u64 pushConstantsSize);
         bool CreateGraphicsPipeline(VkPipelineCache pipelineCache, VulkanSwapchain& swapchain);
+        bool CreateComputePipeline(VkPipelineCache pipelineCache);
+
         bool CreateDescriptorUpdateTemplate();
 
         /** @brief The user-provided name of this Shader. Used for debugging purposes. */

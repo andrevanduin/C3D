@@ -6,6 +6,7 @@
 namespace C3D
 {
     struct Window;
+    struct Geometry;
 
     class RendererPlugin
     {
@@ -72,6 +73,40 @@ namespace C3D
          * @param window The window that needs to be destroyed
          */
         virtual void OnDestroyWindow(Window& window) = 0;
+
+        virtual bool UploadGeometry(const Window& window, const Geometry& geometry) = 0;
+
+        virtual bool GenerateDrawCommands(const Window& window, const Geometry& geometry) = 0;
+
+        /**
+         * @brief Sets the viewport.
+         *
+         * @param x The x coordinate
+         * @param y The y coordinate
+         * @param width The width of the viewport
+         * @param height The height of the viewport
+         * @param minDepth The minimum depth of the viewport
+         * @param maxDepth The maximum depth of the viewport
+         */
+        virtual void SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth) = 0;
+
+        /**
+         * @brief Sets the scissor.
+         *
+         * @param offsetX The x offset of the scissor
+         * @param offsetY The y offset of the scissor
+         * @param width The width of the scissor
+         * @param height The height of the scissor
+         */
+        virtual void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) = 0;
+
+        /**
+         * @brief Method that returns if the requested feature is supported by the current renderer backend.
+         *
+         * @param feature The feature you want to query
+         * @return True if supported; false otherwise
+         */
+        virtual bool SupportsFeature(RendererSupportFlag feature) = 0;
 
     protected:
         RendererPluginType m_type;

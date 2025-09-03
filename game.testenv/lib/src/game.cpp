@@ -1,6 +1,8 @@
 
 #include "game.h"
 
+#include <assets/managers/mesh_manager.h>
+#include <config/config_system.h>
 #include <engine.h>
 #include <events/event_system.h>
 #include <frame_data.h>
@@ -8,10 +10,9 @@
 #include <logger/logger.h>
 #include <math/ray.h>
 #include <metrics/metrics.h>
+#include <renderer/render_system.h>
 #include <string/cstring.h>
 #include <system/system_manager.h>
-
-#include <glm/gtx/matrix_decompose.hpp>
 
 TestEnv::TestEnv(void* state) : m_state(reinterpret_cast<GameState*>(state)) {}
 
@@ -21,7 +22,54 @@ bool TestEnv::OnBoot()
     return true;
 }
 
-bool TestEnv::OnRun(C3D::FrameData& frameData) { return true; }
+bool TestEnv::OnRun(C3D::FrameData& frameData)
+{
+    // Get the names of the meshes we want to use
+    C3D::DynamicArray<C3D::String> meshNames;
+    if (!Config.GetProperty("Meshes", meshNames))
+    {
+        ERROR_LOG("Failed to read list of Meshes from configuration.");
+        return false;
+    }
+
+    // Prepare an array for all the mesh assets
+    C3D::DynamicArray<C3D::MeshAsset> meshes(meshNames.Size());
+    // Load/read in all the mesh assets
+    C3D::MeshManager meshManager;
+    for (u32 i = 0; i < meshNames.Size(); ++i)
+    {
+        auto& name  = meshNames[i];
+        auto& asset = meshes[i];
+
+        if (!meshManager.Read(name, asset))
+        {
+            INFO_LOG("Failed to read: '{}' mesh.", name);
+        }
+    }
+
+    auto window = C3D::Engine::GetCurrentWindow();
+
+    // Upload our mesh assets to the renderer
+    if (!Renderer.UploadMeshes(window, meshes))
+    {
+        ERROR_LOG("Failed to upload meshes.");
+        return false;
+    }
+
+    if (!Renderer.GenerateDrawCommands(window))
+    {
+        ERROR_LOG("Failed to generate draw commands.");
+        return false;
+    }
+
+    // Cleanup our assets since we no longer need them
+    for (auto& mesh : meshes)
+    {
+        meshManager.Cleanup(mesh);
+    }
+
+    return true;
+}
 
 void TestEnv::OnUpdate(C3D::FrameData& frameData)
 {

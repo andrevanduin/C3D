@@ -70,14 +70,16 @@ namespace C3D
         f32 scale;
         quat orientation;
 
-        union {
-            u32 commandData[8];
+        u32 vertexOffset;
+        u32 indexOffset;
+        u32 indexCount;
+        u32 meshletOffset;
+        u32 meshletCount;
+    };
 
-            struct
-            {
-                VkDrawIndexedIndirectCommand commandIndirect;         // 5 u32's
-                VkDrawMeshTasksIndirectCommandEXT commandIndirectMS;  // 3 u32's
-            };
-        };
+    struct MeshDrawCommand
+    {
+        VkDrawIndexedIndirectCommand indirect;
+        VkDrawMeshTasksIndirectCommandEXT indirectMS;
     };
 }  // namespace C3D

@@ -84,7 +84,7 @@ void main()
 
     for (uint i = ti; i < vertexCount; i += 32) 
     {
-        uint vi = meshletData[vertexOffset + i];
+        uint vi = meshletData[vertexOffset + i] + meshDraw.vertexOffset;
         
         Vertex v = vertices[vi];
 

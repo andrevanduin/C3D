@@ -7,14 +7,13 @@
 
 namespace C3D
 {
-    void Jandino(const VulkanShaderModule** const elements, u64 num) { INFO_LOG("je moeder"); }
-
     bool VulkanShader::Create(const VulkanShaderCreateInfo& createInfo)
     {
         INFO_LOG("Creating: '{}'.", createInfo.name);
 
-        m_context = createInfo.context;
-        m_name    = createInfo.name;
+        m_context   = createInfo.context;
+        m_name      = createInfo.name;
+        m_bindPoint = createInfo.bindPoint;
 
         // Ensure the user provided at least 1 module
         if (createInfo.modules.size() == 0)
@@ -52,10 +51,25 @@ namespace C3D
             return false;
         }
 
-        if (!CreateGraphicsPipeline(createInfo.cache, *createInfo.swapchain))
+        switch (m_bindPoint)
         {
-            ERROR_LOG("Failed to create Graphics Pipeline.");
-            return false;
+            case VK_PIPELINE_BIND_POINT_GRAPHICS:
+                if (!CreateGraphicsPipeline(createInfo.cache, *createInfo.swapchain))
+                {
+                    ERROR_LOG("Failed to create Graphics Pipeline.");
+                    return false;
+                }
+                break;
+            case VK_PIPELINE_BIND_POINT_COMPUTE:
+                if (!CreateComputePipeline(createInfo.cache))
+                {
+                    ERROR_LOG("Failed to create Compute Pipeline.");
+                    return false;
+                }
+                break;
+            default:
+                ERROR_LOG("Unknown bindpoint specified.");
+                return false;
         }
 
         if (!CreateDescriptorUpdateTemplate())
@@ -68,6 +82,8 @@ namespace C3D
     }
 
     void VulkanShader::Bind(VkCommandBuffer commandBuffer) const { vkCmdBindPipeline(commandBuffer, m_bindPoint, m_pipeline); }
+
+    void VulkanShader::Dispatch(VkCommandBuffer commandBuffer, u32 count) const { vkCmdDispatch(commandBuffer, count, 1, 1); }
 
     void VulkanShader::PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const
     {
@@ -93,6 +109,8 @@ namespace C3D
             vkDestroyPipeline(device, m_pipeline, m_context->allocator);
 
             m_shaderModules.Destroy();
+
+            m_name.Destroy();
         }
     }
 
@@ -263,6 +281,30 @@ namespace C3D
         }
 
         VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_PIPELINE, m_pipeline, String::FromFormat("PIPELINE_{}", m_name));
+
+        return true;
+    }
+
+    bool VulkanShader::CreateComputePipeline(VkPipelineCache pipelineCache)
+    {
+        C3D_ASSERT_MSG(m_shaderModules.Size() == 1, "Expected only a single ShaderModule for a Compute pipeline");
+
+        VkComputePipelineCreateInfo createInfo    = { VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+        VkPipelineShaderStageCreateInfo stageInfo = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+
+        stageInfo.stage  = m_shaderModules[0]->GetShaderStage();
+        stageInfo.module = m_shaderModules[0]->GetHandle();
+        stageInfo.pName  = "main";
+
+        createInfo.stage  = stageInfo;
+        createInfo.layout = m_layout;
+
+        auto result = vkCreateComputePipelines(m_context->device.GetLogical(), pipelineCache, 1, &createInfo, m_context->allocator, &m_pipeline);
+        if (!VulkanUtils::IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create Compute Pipeline with error: '{}'.", VulkanUtils::ResultString(result));
+            return false;
+        }
 
         return true;
     }

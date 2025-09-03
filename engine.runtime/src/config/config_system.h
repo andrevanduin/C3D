@@ -13,6 +13,7 @@ namespace C3D
 
         bool GetProperty(const String& name, u64& value);
         bool GetProperty(const String& name, String& value);
+        bool GetProperty(const String& name, DynamicArray<String>& value);
 
     private:
         CSONObject m_config;

@@ -13,7 +13,7 @@ namespace C3D
 {
     MeshManager::MeshManager() : IAssetManager(MemoryType::Mesh, AssetType::Mesh, "models") {}
 
-    bool MeshManager::Read(const String& name, Mesh& asset)
+    bool MeshManager::Read(const String& name, MeshAsset& asset)
     {
         if (name.Empty())
         {
@@ -44,19 +44,17 @@ namespace C3D
         return result;
     }
 
-    void MeshManager::Cleanup(Mesh& asset)
+    void MeshManager::Cleanup(MeshAsset& asset)
     {
         asset.name.Destroy();
         asset.path.Destroy();
         asset.vertices.Destroy();
         asset.indices.Destroy();
-        asset.meshlets.Destroy();
-        asset.meshletData.Destroy();
     }
 
     i32 MeshManager::FixIndex(i32 index, u32 size) { return (index >= 0) ? index - 1 : i32(size) + index; }
 
-    bool MeshManager::ImportObjFile(Mesh& asset)
+    bool MeshManager::ImportObjFile(MeshAsset& asset)
     {
         INFO_LOG("Importing obj file: '{}'", asset.path);
 

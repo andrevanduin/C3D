@@ -9,7 +9,7 @@ Current focus is on improving the Vulkan renderer to be super fast and support t
     - Supports small string optimization (SSO)
     - Automatically handles dynamic memory allocation for you
     - Supports the use of custom alloctors (dynamic, linear, malloc etc.)
-    - Supports lot's of convience functions (Split, Join, Substring etc.)
+    - Lot's of convience functions (Split, Join, Substring etc.)
 - Vector/dynamic array
     - Automatically handles dynamic memory allocation for you
     - Supports the use of custom alloctors (dynamic, linear, malloc etc.)
@@ -34,6 +34,20 @@ Current focus is on improving the Vulkan renderer to be super fast and support t
 
 ## Platform layer
 Interface that Abstracts away the platform-specific methods. Currently supports Windows and Linux (X11).
+- Supports file watching that sends you an event whenever a watched file is changed
+- Dynamic loading of plugins (for example the renderer)
+- Abstraction over the file system to make file IO easier
+- Multi-window support
+- Abstraction over platform-specific input (see Input system)
+
+## General systems
+- Event system that supports sending out events to multiple listeners. 
+- Job system that supports scheduling jobs on multiple threads
+- Input system to handle keyboard and mouse inputs
+
+## Custom testing framework
+A testing framework written from scratch to make sure that custom implementations of, for example, containers are working as expected.
+Runs all provided tests automatically and provides an overview of the results (pass, fail, not ran) with corresponding error messages.
 
 ## Asset loading features
 - Loading of .OBJ files
@@ -43,8 +57,9 @@ Interface that Abstracts away the platform-specific methods. Currently supports 
 
 ## Vulkan Renderer features
 - Custom vulkan allocator written from scratch
+- Automatic detection of best GPU based on the required functionality
 - Runtime shader compilation from glsl to SPIR-V
+- Double or Triple buffering support for smooth image output
 - Mesh and Task Shaders
     - Used for cone culling to get rid of meshlets that are back-facing before rasterization
-
 

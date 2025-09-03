@@ -26,6 +26,12 @@ namespace C3D
         FlagPCF = 0x8,
     };
 
+    enum RendererSupportFlag : u8
+    {
+        RENDERER_SUPPORT_FLAG_NONE         = 0x0,
+        RENDERER_SUPPORT_FLAG_MESH_SHADING = 0x1,
+    };
+
     using RendererConfigFlags = u8;
 
     struct RendererPluginConfig
@@ -50,8 +56,9 @@ namespace C3D
         WindowRendererBackendState* backendState = nullptr;
     };
 
+    /** @brief The globals structure that is uploaded to the GPU once per frame.  */
     struct alignas(16) Globals
     {
         mat4 projection;
     };
-}
+}  // namespace C3D

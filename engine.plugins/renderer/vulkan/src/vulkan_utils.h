@@ -37,6 +37,8 @@ namespace C3D
         VkImageMemoryBarrier CreateImageBarrier(VkImage image, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout oldLayout,
                                                 VkImageLayout newLayout, VkImageAspectFlags aspectMask);
 
+        VkBufferMemoryBarrier CreateBufferBarrier(VkBuffer buffer, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask);
+
         /** @brief Helper method to enable easier loading of vulkan extension functions. */
         template <typename T>
         T LoadExtensionFunction(VkInstance instance, const char* name)

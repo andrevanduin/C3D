@@ -19,6 +19,14 @@ namespace C3D
             m_generator.seed(seedSeq);
         }
 
+        /**
+         * @brief Generates a random number in the range of [low, high].
+         *
+         * @tparam T The type of number
+         * @param low The lower (inclusive) bound
+         * @param high The upper (inclusive) bound
+         * @return A number in the range [low, high]
+         */
         template <typename T>
         [[nodiscard]] std::enable_if_t<std::is_integral_v<T>, T> Generate(const T low, const T high)
         {
@@ -26,16 +34,33 @@ namespace C3D
             return distribution(m_generator);
         }
 
+        /**
+         * @brief Generates n random numbers in the range of [low, high].
+         *
+         * @tparam T The type of number
+         * @param n The amount of random numbers you want to generate
+         * @param low The lower (inclusive) bound
+         * @param high The upper (inclusive) bound
+         * @return A number in the range [low, high]
+         */
         template <typename T>
-        [[nodiscard]] std::enable_if_t<std::is_integral_v<T>, DynamicArray<T>> GenerateMultiple(const int amount, const T low, const T high)
+        [[nodiscard]] std::enable_if_t<std::is_integral_v<T>, DynamicArray<T>> GenerateMultiple(const int n, const T low, const T high)
         {
             std::uniform_int_distribution distribution(low, high);
             DynamicArray<T> values;
-            values.Resize(amount);
+            values.Resize(n);
             std::generate(values.begin(), values.end(), [&] { return distribution(m_generator); });
             return values;
         }
 
+        /**
+         * @brief Generates a random number in the range of [low, high].
+         *
+         * @tparam T The type of number
+         * @param low The lower (inclusive) bound
+         * @param high The upper (inclusive) bound
+         * @return A number in the range [low, high]
+         */
         template <typename T>
         [[nodiscard]] std::enable_if_t<std::is_floating_point_v<T>, T> Generate(const T low, const T high)
         {
@@ -43,11 +68,20 @@ namespace C3D
             return distribution(m_generator);
         }
 
+        /**
+         * @brief Generates n random numbers in the range of [low, high].
+         *
+         * @tparam T The type of number
+         * @param n The amount of random numbers you want to generate
+         * @param low The lower (inclusive) bound
+         * @param high The upper (inclusive) bound
+         * @return A number in the range [low, high]
+         */
         template <typename T>
-        [[nodiscard]] std::enable_if_t<std::is_floating_point_v<T>, DynamicArray<T>> GenerateMultiple(const int amount, const T low, const T high)
+        [[nodiscard]] std::enable_if_t<std::is_floating_point_v<T>, DynamicArray<T>> GenerateMultiple(const int n, const T low, const T high)
         {
             std::uniform_real_distribution distribution(low, high);
-            DynamicArray<float> values(amount);
+            DynamicArray<float> values(n);
             std::generate(values.begin(), values.end(), [&] { return distribution(m_generator); });
             return values;
         }

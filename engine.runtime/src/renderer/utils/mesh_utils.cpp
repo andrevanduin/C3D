@@ -886,7 +886,7 @@ namespace C3D
         return Max(meshletLimitVertices, meshletLimitTriangles);
     }
 
-    u32 MeshUtils::GenerateMeshlets(const Mesh& mesh, DynamicArray<MeshUtils::Meshlet>& meshlets, f32 coneWeight)
+    u32 MeshUtils::GenerateMeshlets(const MeshAsset& mesh, DynamicArray<MeshUtils::Meshlet>& meshlets, f32 coneWeight)
     {
         ScopedTimer timer(String::FromFormat("Generating meshlets for: {}", mesh.name));
 
@@ -1153,7 +1153,7 @@ namespace C3D
 #endif
     }
 
-    MeshletBounds MeshUtils::GenerateMeshletBounds(const Mesh& mesh, const Meshlet& meshlet)
+    MeshletBounds MeshUtils::GenerateMeshletBounds(const MeshAsset& mesh, const Meshlet& meshlet)
     {
         u32 indices[MESHLET_MAX_TRIANGLES * 3];
 
@@ -1453,7 +1453,7 @@ namespace C3D
         return nextVertex;
     }
 
-    void MeshUtils::RemapVertices(Mesh& mesh, u32 indexCount, const DynamicArray<Vertex>& vertices, const DynamicArray<u32>& remap)
+    void MeshUtils::RemapVertices(MeshAsset& mesh, u32 indexCount, const DynamicArray<Vertex>& vertices, const DynamicArray<u32>& remap)
     {
         for (u32 i = 0; i < indexCount; ++i)
         {
@@ -1465,7 +1465,7 @@ namespace C3D
         }
     }
 
-    void MeshUtils::RemapIndices(Mesh& mesh, u32 indexCount, const DynamicArray<u32>& remap)
+    void MeshUtils::RemapIndices(MeshAsset& mesh, u32 indexCount, const DynamicArray<u32>& remap)
     {
         for (u32 i = 0; i < indexCount; ++i)
         {
@@ -1475,7 +1475,7 @@ namespace C3D
         }
     }
 
-    void MeshUtils::OptimizeForVertexCache(Mesh& mesh)
+    void MeshUtils::OptimizeForVertexCache(MeshAsset& mesh)
     {
         C3D_ASSERT(mesh.indices.Size() % 3 == 0);
 
@@ -1648,7 +1648,7 @@ namespace C3D
         adjacency.Destroy();
     }
 
-    void MeshUtils::OptimizeForVertexFetch(Mesh& mesh)
+    void MeshUtils::OptimizeForVertexFetch(MeshAsset& mesh)
     {
         u64 indexCount  = mesh.indices.Size();
         u64 vertexCount = mesh.vertices.Size();

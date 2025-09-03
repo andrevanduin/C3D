@@ -243,6 +243,8 @@ namespace C3D
                 return VK_SHADER_STAGE_TASK_BIT_EXT;
             case SpvExecutionModelMeshEXT:
                 return VK_SHADER_STAGE_MESH_BIT_EXT;
+            case SpvExecutionModelGLCompute:
+                return VK_SHADER_STAGE_COMPUTE_BIT;
             default:
                 C3D_ASSERT_MSG(false, "Unsupported exection model!");
                 return VkShaderStageFlagBits(0);

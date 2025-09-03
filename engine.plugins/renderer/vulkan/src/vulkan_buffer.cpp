@@ -6,21 +6,6 @@
 
 namespace C3D
 {
-    VkBufferMemoryBarrier CreateBufferBarrier(VkBuffer buffer, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask)
-    {
-        VkBufferMemoryBarrier result = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
-
-        result.srcAccessMask       = srcAccessMask;
-        result.dstAccessMask       = dstAccessMask;
-        result.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        result.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        result.buffer              = buffer;
-        result.offset              = 0;
-        result.size                = VK_WHOLE_SIZE;
-
-        return result;
-    }
-
     bool VulkanBuffer::Create(VulkanContext* context, const char* name, u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryFlags)
     {
         m_context     = context;
@@ -91,7 +76,7 @@ namespace C3D
         vkCmdCopyBuffer(commandBuffer, m_context->stagingBuffer.GetHandle(), m_handle, 1, &region);
 
         // Create a barrier that will ensure the copy is done before we start reading the buffer in the shader
-        VkBufferMemoryBarrier copyBarrier = CreateBufferBarrier(m_handle, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+        VkBufferMemoryBarrier copyBarrier = VulkanUtils::CreateBufferBarrier(m_handle, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
         vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1,
                              &copyBarrier, 0, 0);
 

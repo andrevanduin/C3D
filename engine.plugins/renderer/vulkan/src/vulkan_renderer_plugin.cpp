@@ -92,77 +92,6 @@ namespace C3D
         // Create our query pool
         m_queryPool = CreateQueryPool(m_context, 128);
 
-        MeshManager meshManager;
-        String meshName;
-        if (!Config.GetProperty("TestMesh", meshName))
-        {
-            ERROR_LOG("Failed to get the name of the test mesh.");
-            return false;
-        }
-
-        if (!meshManager.Read(meshName, m_mesh))
-        {
-            ERROR_LOG("Failed to load mesh.");
-            return false;
-        }
-
-        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
-        {
-            // Determine our upper bound of meshlets
-            u32 maxMeshlets = MeshUtils::DetermineMaxMeshlets(m_mesh.indices.Size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
-            // Preallocate enough memory for the maximum number of meshlets
-            DynamicArray<MeshUtils::Meshlet> meshlets(maxMeshlets);
-            // Generate our meshlets
-            u32 numMeshlets = MeshUtils::GenerateMeshlets(m_mesh, meshlets, 0.25f);
-            // Resize our meshlet array to the actual number of meshlets
-            meshlets.Resize(numMeshlets);
-            // TODO: we don't really need this but this makes sure we can assume that we need all 32 meshlets in task shader
-            while (meshlets.Size() % 32) meshlets.EmplaceBack();
-
-            // Reserve enough space for all meshlets
-            m_mesh.meshlets.Reserve(meshlets.Size());
-
-            for (const auto& meshlet : meshlets)
-            {
-                Meshlet m       = {};
-                m.vertexCount   = meshlet.vertexCount;
-                m.triangleCount = meshlet.triangleCount;
-                m.dataOffset    = m_mesh.meshletData.Size();
-
-                // Populate the vertex indices
-                for (u32 i = 0; i < meshlet.vertexCount; ++i)
-                {
-                    m_mesh.meshletData.PushBack(meshlet.vertices[i]);
-                }
-
-                if (meshlet.triangleCount > 0)
-                {
-                    // Get a pointer to the triangle data as u32
-                    const u32* triangleData = reinterpret_cast<const u32*>(meshlet.indices);
-                    // Count the number of indices (triangles * 3) and add 3 to ensure that rounded down we always have enough room
-                    u32 packedTriangleCount = (meshlet.triangleCount * 3 + 3) / 4;
-
-                    // Populate the triangle indices
-                    for (u32 i = 0; i < packedTriangleCount; ++i)
-                    {
-                        m_mesh.meshletData.PushBack(triangleData[i]);
-                    }
-                }
-
-                MeshletBounds bounds = MeshUtils::GenerateMeshletBounds(m_mesh, meshlet);
-
-                m.center = bounds.center;
-                m.radius = bounds.radius;
-
-                m.coneAxis[0] = bounds.coneAxisS8[0];
-                m.coneAxis[1] = bounds.coneAxisS8[1];
-                m.coneAxis[2] = bounds.coneAxisS8[2];
-                m.coneCutoff  = bounds.coneCutoffS8;
-
-                m_mesh.meshlets.PushBack(m);
-            }
-        }
-
         // Create our buffers
         if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(64), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
@@ -185,9 +114,15 @@ namespace C3D
             return false;
         }
 
-        if (!m_drawBuffer.Create(&m_context, "DRAW", MebiBytes(8),
-                                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        if (!m_drawBuffer.Create(&m_context, "DRAW", MebiBytes(8), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        {
+            ERROR_LOG("Failed to create draw buffer.");
+            return false;
+        }
+
+        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMANDS", MebiBytes(8), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create draw buffer.");
             return false;
@@ -223,31 +158,6 @@ namespace C3D
             return true;
         });
 
-        // TODO: Remove this temp code
-        {
-            m_drawCount = 3000;
-            m_draws.Resize(m_drawCount);
-
-            for (auto& draw : m_draws)
-            {
-                draw.position.x = Random.Generate(-20.f, 20.f);
-                draw.position.y = Random.Generate(-20.f, 20.f);
-                draw.position.z = Random.Generate(-20.f, 20.f);
-                draw.scale      = Random.Generate(1.f, 2.f);
-
-                vec3 axis        = vec3(Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f));
-                f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));
-                draw.orientation = glm::rotate(glm::quat(1, 0, 0, 0), angle, axis);
-
-                std::memset(draw.commandData, 0, sizeof(draw.commandData));
-                draw.commandIndirect.indexCount    = static_cast<u32>(m_mesh.indices.Size());
-                draw.commandIndirect.instanceCount = 1;
-                draw.commandIndirectMS.groupCountX = static_cast<u32>(m_mesh.meshlets.Size() / 32);
-                draw.commandIndirectMS.groupCountY = 1;
-                draw.commandIndirectMS.groupCountZ = 1;
-            }
-        }
-
         INFO_LOG("Initialized successfully.");
         return true;
     }
@@ -257,8 +167,6 @@ namespace C3D
         INFO_LOG("Shutting down.");
 
         Event.UnregisterAll(EventCodeDebug0);
-
-        MeshManager::Cleanup(m_mesh);
 
         m_draws.Destroy();
 
@@ -272,6 +180,7 @@ namespace C3D
         m_vertexBuffer.Destroy();
         m_indexBuffer.Destroy();
         m_drawBuffer.Destroy();
+        m_drawCommandBuffer.Destroy();
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
@@ -341,6 +250,22 @@ namespace C3D
         vkCmdResetQueryPool(commandBuffer, m_queryPool, 0, 128);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 0);
 
+        // Bind, push our descriptors and then dispatch our compute shader
+        {
+            m_drawCommandShader.Bind(commandBuffer);
+
+            DescriptorInfo descriptors[] = { m_drawBuffer.GetHandle(), m_drawCommandBuffer.GetHandle() };
+            m_drawCommandShader.PushDescriptorSet(commandBuffer, descriptors);
+
+            m_drawCommandShader.Dispatch(commandBuffer, static_cast<u32>((m_draws.Size() + 31) / 32));
+
+            VkBufferMemoryBarrier drawCommandEndBarrier =
+                VulkanUtils::CreateBufferBarrier(m_drawCommandBuffer.GetHandle(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
+
+            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1,
+                                 &drawCommandEndBarrier, 0, nullptr);
+        }
+
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
 
         // Our color and depth target need to be in ATTACHMENT OPTIMAL layout before we can start rendering
@@ -377,14 +302,12 @@ namespace C3D
 
         vkCmdBeginRendering(commandBuffer, &renderInfo);
 
+        // First commands are to set the viewport and scissor
+        vkCmdSetViewport(commandBuffer, 0, 1, &m_viewport);
+        vkCmdSetScissor(commandBuffer, 0, 1, &m_scissor);
+
         // TODO: move the actual rendering somewhere else
         {
-            VkViewport viewport = { 0, static_cast<f32>(window.height), static_cast<f32>(window.width), -static_cast<f32>(window.height), 0.f, 1.0f };
-            VkRect2D scissor    = { { 0, 0 }, { window.width, window.height } };
-
-            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
             Globals globals    = {};
             globals.projection = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), 0.01f);
 
@@ -401,8 +324,8 @@ namespace C3D
                 m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
                 m_meshletShader.PushConstants(commandBuffer, &globals, sizeof(globals));
 
-                vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_drawBuffer.GetHandle(), offsetof(MeshDraw, commandIndirectMS), static_cast<u32>(m_draws.Size()),
-                                              sizeof(MeshDraw));
+                vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirectMS),
+                                              static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
             }
             else
             {
@@ -414,8 +337,8 @@ namespace C3D
                 vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
 
                 m_meshShader.PushConstants(commandBuffer, &globals, sizeof(globals));
-                vkCmdDrawIndexedIndirect(commandBuffer, m_drawBuffer.GetHandle(), offsetof(MeshDraw, commandIndirect), static_cast<u32>(m_draws.Size()),
-                                         sizeof(MeshDraw));
+                vkCmdDrawIndexedIndirect(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect), static_cast<u32>(m_draws.Size()),
+                                         sizeof(MeshDrawCommand));
             }
         }
 
@@ -525,21 +448,20 @@ namespace C3D
         m_frameCpuAvg = m_frameCpuAvg * 0.95 + (frameCpuEnd - m_frameCpuBegin) * 0.05;
         m_frameGpuAvg = m_frameGpuAvg * 0.95 + (frameGpuEnd - frameGpuBegin) * 0.05;
 
-        f64 trianglesPerSecond = static_cast<f64>(m_drawCount) * static_cast<f64>(m_mesh.indices.Size() / 3) / (m_frameGpuAvg * 1e-3);
+        f64 trianglesPerSecond = static_cast<f64>(m_triangleCount) / (m_frameGpuAvg * 1e-3);
+        f64 drawsPerSecond     = static_cast<f64>(m_drawCount) / (m_frameGpuAvg * 1e-3);
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) && m_meshShadingEnabled)
         {
             titleText.Clear();
-            titleText.Format("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; meshlets: {}; Mesh Shading: ON; {:.1f}B tri/sec",
-                             m_frameCpuAvg, m_frameGpuAvg, m_mesh.indices.Size() / 3, m_mesh.vertices.Size(), m_mesh.indices.Size(), m_mesh.meshlets.Size(),
-                             trianglesPerSecond * 1e-9);
+            titleText.Format("Mesh Shading: ON; cpu: {:.2f} ms; gpu: {:.2f} ms; {:.1f}B tri/sec; {:.1f}M draws/sec;", m_frameCpuAvg, m_frameGpuAvg,
+                             trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
         }
         else
         {
             titleText.Clear();
-            titleText.Format("cpu: {:.2f} ms; gpu: {:.2f} ms; triangles: {}; vertices: {}; indices: {}; meshlets: {}; Mesh Shading: OFF; {:.1f}B tri/sec",
-                             m_frameCpuAvg, m_frameGpuAvg, m_mesh.indices.Size() / 3, m_mesh.vertices.Size(), m_mesh.indices.Size(), 0,
-                             trianglesPerSecond * 1e-9);
+            titleText.Format("Mesh Shading: OFF; cpu: {:.2f} ms; gpu: {:.2f} ms; {:.1f}B tri/sec; {:.1f}M draws/sec;", m_frameCpuAvg, m_frameGpuAvg,
+                             trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
         }
 
         Platform::SetWindowTitle(window, titleText);
@@ -653,6 +575,12 @@ namespace C3D
         {
             // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
 
+            if (!m_drawCommandShaderModule.Create(&m_context, "drawcmd.comp"))
+            {
+                ERROR_LOG("Failed to create ShaderModule");
+                return false;
+            }
+
             if (!m_meshShaderModule.Create(&m_context, "mesh.vert"))
             {
                 ERROR_LOG("Failed to create ShaderModule.");
@@ -666,10 +594,21 @@ namespace C3D
             }
 
             VulkanShaderCreateInfo createInfo;
-            createInfo.context           = &m_context;
+            createInfo.context   = &m_context;
+            createInfo.name      = "DRAW_COMMAND_SHADER";
+            createInfo.bindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
+            createInfo.cache     = VK_NULL_HANDLE;
+            createInfo.swapchain = &backend->swapchain;
+            createInfo.modules   = { &m_drawCommandShaderModule };
+
+            if (!m_drawCommandShader.Create(createInfo))
+            {
+                ERROR_LOG("Failed to create DrawCommandShader.");
+                return false;
+            }
+
             createInfo.name              = "MESH_SHADER";
-            createInfo.cache             = VK_NULL_HANDLE;
-            createInfo.swapchain         = &backend->swapchain;
+            createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_GRAPHICS;
             createInfo.pushConstantsSize = sizeof(Globals);
             createInfo.modules           = { &m_meshShaderModule, &m_fragmentShaderModule };
 
@@ -703,27 +642,6 @@ namespace C3D
                     return false;
                 }
             }
-
-            auto commandBuffer = backend->GetCommandBuffer();
-            auto commandPool   = backend->GetCommandPool();
-
-            m_vertexBuffer.Upload(commandBuffer, commandPool, m_mesh.vertices.GetData(), sizeof(Vertex) * m_mesh.vertices.Size());
-            m_indexBuffer.Upload(commandBuffer, commandPool, m_mesh.indices.GetData(), sizeof(u32) * m_mesh.indices.Size());
-            m_drawBuffer.Upload(commandBuffer, commandPool, m_draws.GetData(), sizeof(MeshDraw) * m_draws.Size());
-
-            if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
-            {
-                if (!m_meshletBuffer.Upload(commandBuffer, commandPool, m_mesh.meshlets.GetData(), sizeof(Meshlet) * m_mesh.meshlets.Size()))
-                {
-                    ERROR_LOG("Failed to upload meshlets.");
-                    return false;
-                }
-                if (!m_meshletDataBuffer.Upload(commandBuffer, commandPool, m_mesh.meshletData.GetData(), sizeof(u32) * m_mesh.meshletData.Size()))
-                {
-                    ERROR_LOG("Failed to upload meshlet data.");
-                    return false;
-                }
-            }
         }
 
         return true;
@@ -749,6 +667,10 @@ namespace C3D
                 ERROR_LOG("Failed to resize Depth target.");
                 return false;
             }
+
+            // TODO: For now we assume scissor and viewport are always the size of the full window
+            SetViewport(0, static_cast<f32>(window.height), static_cast<f32>(window.width), -static_cast<f32>(window.height), 0.f, 1.f);
+            SetScissor(0, 0, window.width, window.height);
         }
         return resizeResult;
     }
@@ -769,6 +691,10 @@ namespace C3D
                 // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
                 m_meshShader.Destroy();
                 m_meshShaderModule.Destroy();
+                m_fragmentShaderModule.Destroy();
+
+                m_drawCommandShader.Destroy();
+                m_drawCommandShaderModule.Destroy();
 
                 if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
                 {
@@ -776,8 +702,6 @@ namespace C3D
                     m_meshletShaderModule.Destroy();
                     m_meshletTaskShaderModule.Destroy();
                 }
-
-                m_fragmentShaderModule.Destroy();
             }
 
             INFO_LOG("Destoying Command Pools")
@@ -822,6 +746,102 @@ namespace C3D
             Memory.Delete(backend);
             internal->backendState = nullptr;
         }
+    }
+
+    bool VulkanRendererPlugin::UploadGeometry(const Window& window, const Geometry& geometry)
+    {
+        auto backend = window.rendererState->backendState;
+
+        auto commandBuffer = backend->GetCommandBuffer();
+        auto commandPool   = backend->GetCommandPool();
+
+        if (!m_vertexBuffer.Upload(commandBuffer, commandPool, geometry.vertices.GetData(), sizeof(Vertex) * geometry.vertices.Size()))
+        {
+            ERROR_LOG("Failed to upload vertices.");
+            return false;
+        }
+
+        if (!m_indexBuffer.Upload(commandBuffer, commandPool, geometry.indices.GetData(), sizeof(u32) * geometry.indices.Size()))
+        {
+            ERROR_LOG("Failed to upload indices.");
+            return false;
+        }
+
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+        {
+            if (!m_meshletBuffer.Upload(commandBuffer, commandPool, geometry.meshlets.GetData(), sizeof(Meshlet) * geometry.meshlets.Size()))
+            {
+                ERROR_LOG("Failed to upload meshlets.");
+                return false;
+            }
+            if (!m_meshletDataBuffer.Upload(commandBuffer, commandPool, geometry.meshletData.GetData(), sizeof(u32) * geometry.meshletData.Size()))
+            {
+                ERROR_LOG("Failed to upload meshlet data.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool VulkanRendererPlugin::GenerateDrawCommands(const Window& window, const Geometry& geometry)
+    {
+        auto backend = window.rendererState->backendState;
+
+        auto commandBuffer = backend->GetCommandBuffer();
+        auto commandPool   = backend->GetCommandPool();
+
+        m_drawCount = 3000;
+        m_draws.Resize(m_drawCount);
+
+        for (u32 i = 0; i < m_drawCount; ++i)
+        {
+            const auto& mesh = geometry.meshes[Random.Generate(static_cast<u64>(0), geometry.meshes.Size() - 1)];
+            auto& draw       = m_draws[i];
+
+            draw.position.x = Random.Generate(-20.f, 20.f);
+            draw.position.y = Random.Generate(-20.f, 20.f);
+            draw.position.z = Random.Generate(-20.f, 20.f);
+            draw.scale      = Random.Generate(0.8f, 1.5f);
+
+            vec3 axis        = vec3(Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f));
+            f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));
+            draw.orientation = glm::rotate(glm::quat(1, 0, 0, 0), angle, axis);
+
+            draw.vertexOffset  = mesh.vertexOffset;
+            draw.indexOffset   = mesh.indexOffset;
+            draw.indexCount    = mesh.indexCount;
+            draw.meshletOffset = mesh.meshletOffset;
+            draw.meshletCount  = mesh.meshletCount;
+
+            m_triangleCount += mesh.indexCount / 3;
+        }
+
+        return m_drawBuffer.Upload(commandBuffer, commandPool, m_draws.GetData(), sizeof(MeshDraw) * m_draws.Size());
+    }
+
+    void VulkanRendererPlugin::SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth)
+    {
+        m_viewport = { x, y, width, height, minDepth, maxDepth };
+    }
+
+    void VulkanRendererPlugin::SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height)
+    {
+        VkOffset2D offset = { offsetX, offsetY };
+        VkExtent2D extent = { width, height };
+        m_scissor         = { offset, extent };
+    }
+
+    bool VulkanRendererPlugin::SupportsFeature(RendererSupportFlag feature)
+    {
+        switch (feature)
+        {
+            case RENDERER_SUPPORT_FLAG_MESH_SHADING:
+                return m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING);
+            default:
+                C3D_ASSERT_MSG(false, "Unsupported RendererSupportFlag");
+        }
+        return false;
     }
 
     RendererPlugin* CreatePlugin() { return Memory.New<VulkanRendererPlugin>(MemoryType::RenderSystem); }

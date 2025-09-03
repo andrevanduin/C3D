@@ -291,7 +291,7 @@ namespace C3D
             return m_elements[m_size++];
         }
 
-        /*
+        /**
          * @brief Adds an element at the provided iterator
          * This will cause a resize if size + 1 >= capacity
          */
@@ -314,7 +314,7 @@ namespace C3D
             m_elements[index] = element;
         }
 
-        /*
+        /**
          * @brief Adds a range of elements at the provided iterator
          * This will cause a resize if size + range.Size() >= capacity
          */
@@ -337,6 +337,35 @@ namespace C3D
             std::move_backward(begin() + index, end(), end() + rangeSize);
             // Finally insert the range at index
             std::move(first, last, begin() + index);
+            // Update our size
+            m_size += rangeSize;
+        }
+
+        /**
+         * @brief Adds a range of elements at the provided iterator
+         * This will cause a resize if size + range.Size() >= capacity
+         */
+        void Insert(const_iterator it, const_iterator first, const_iterator last)
+        {
+            // Get the index at which we want to insert
+            // We have to do this before resizing because that will invalidate our iterator
+            const auto index = it - begin();
+            // Get the size of our range
+            const auto rangeSize = last - first;
+            // Get the minimum size we need for our array with the range inserted
+            const auto newMinSize = m_size + rangeSize;
+            // Grow our array if it is not yet initialized or if it's too small
+            if (!m_elements || newMinSize > m_capacity)
+            {
+                GrowthFactorReAlloc(m_capacity + rangeSize);
+            }
+
+            // Move all elements from index to end(), one spot to the right
+            std::move_backward(begin() + index, end(), end() + rangeSize);
+            // Finally insert the range at index
+            std::move(first, last, begin() + index);
+            // Update our size
+            m_size += rangeSize;
         }
 
         /**

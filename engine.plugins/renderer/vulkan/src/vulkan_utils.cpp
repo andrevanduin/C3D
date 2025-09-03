@@ -234,6 +234,21 @@ namespace C3D
         return barrier;
     }
 
+    VkBufferMemoryBarrier VulkanUtils::CreateBufferBarrier(VkBuffer buffer, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask)
+    {
+        VkBufferMemoryBarrier result = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+
+        result.srcAccessMask       = srcAccessMask;
+        result.dstAccessMask       = dstAccessMask;
+        result.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        result.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        result.buffer              = buffer;
+        result.offset              = 0;
+        result.size                = VK_WHOLE_SIZE;
+
+        return result;
+    }
+
 #if defined(_DEBUG)
     const char* VulkanUtils::VkMessageTypeToString(const VkDebugUtilsMessageTypeFlagsEXT s)
     {

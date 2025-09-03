@@ -43,21 +43,50 @@ namespace C3D
         u8 vertexCount = 0;
     };
 
-    /** @brief A collection of vertices and indices that together make up some renderable geometry. */
-    struct Mesh final : IAsset
+    /** @brief A collection of vertices and indices that together make up a loaded mesh asset. */
+    struct MeshAsset final : IAsset
     {
-        Mesh() : IAsset(AssetType::Mesh) {}
+        MeshAsset() : IAsset(AssetType::Mesh) {}
 
+        /** @brief An array containing the vertices in this mesh. */
         DynamicArray<Vertex> vertices;
+        /** @brief An array containing the indices in this mesh. */
         DynamicArray<u32> indices;
-        DynamicArray<Meshlet> meshlets;
+    };
 
-        /** @brief This array hold the data need for the meshlets corresponding to this mesh.
+    struct Mesh
+    {
+        /** @brief The offset into the meshlet array of the geometry struct for this mesh. */
+        u32 meshletOffset = 0;
+        /** @brief The number of meshlets in this mesh. */
+        u32 meshletCount = 0;
+        /** @brief The offset into the vertex array of the geometry struct for this mesh. */
+        u32 vertexOffset = 0;
+        /** @brief The number of vertices in this mesh. */
+        u32 vertexCount = 0;
+        /** @brief The offset into the index array of the geometry struct for this mesh. */
+        u32 indexOffset = 0;
+        /** @brief The number of indices in this mesh. */
+        u32 indexCount = 0;
+    };
+
+    /** @brief A collection of vertices and indices for all meshes that we can render. */
+    struct Geometry
+    {
+        /** @brief This array holds all renderable vertices (of all meshes) */
+        DynamicArray<Vertex> vertices;
+        /** @brief This array holds all renderable indices (of all meshes) */
+        DynamicArray<u32> indices;
+        /** @brief This array holds all meshlets (of all meshes) */
+        DynamicArray<Meshlet> meshlets;
+        /** @brief This array holds the data needed for all the meshlets.
          * The data is laid out as follows for each meshlet:
-         * meshlet.vertexCount       * u32 for the vertex indices
-         * meshlet.triangleCount / 4 * u32 for the triangle indices
-         * Since our array is u32's and our triangle indices are all u8's we have to divide by 4
+         * meshlet.vertexCount       x u32 for the vertex indices
+         * meshlet.triangleCount / 4 x u32 for the triangle indices
+         * Note: since our array contains u32's and our triangle indices are all u8's we have to divide the number of triangles by 4
          */
         DynamicArray<u32> meshletData;
+        /** @brief This array holds all the meshes that are part of the renderable geometry. */
+        DynamicArray<Mesh> meshes;
     };
 }  // namespace C3D
