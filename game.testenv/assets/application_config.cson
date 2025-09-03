@@ -26,7 +26,6 @@
                 "Vsync": false,
                 "PowerSaving": true,
                 "ValidationLayers": true,
-                "PCF": true
             }
         },
         {

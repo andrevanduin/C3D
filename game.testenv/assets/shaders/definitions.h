@@ -41,12 +41,14 @@ struct MeshDraw
 
 struct MeshDrawCommand
 {
+    uint drawId;
     uint indexCount;
     uint instanceCount;
     uint firstIndex;
     uint vertexOffset;
     uint firstInstance;
 
+    uint taskOffset;
     uint groupCountX;
     uint groupCountY;
     uint groupCountZ;

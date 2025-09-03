@@ -66,7 +66,10 @@ namespace C3D
 
     struct MeshDrawCommand
     {
+        u32 drawId;
         VkDrawIndexedIndirectCommand indirect;
+        u32 taskOffset;
         VkDrawMeshTasksIndirectCommandEXT indirectMS;
     };
+
 }  // namespace C3D

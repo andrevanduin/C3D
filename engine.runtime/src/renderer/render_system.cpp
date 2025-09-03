@@ -137,6 +137,11 @@ namespace C3D
                     m_geometry.meshlets.PushBack(m);
                 }
 
+                while (m_geometry.meshlets.Size() % 32)
+                {
+                    m_geometry.meshlets.EmplaceBack();
+                }
+
                 meshletCount = meshlets.Size();
             }
 

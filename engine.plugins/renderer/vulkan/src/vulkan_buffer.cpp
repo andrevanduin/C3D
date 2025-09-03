@@ -113,6 +113,11 @@ namespace C3D
         return false;
     }
 
+    void VulkanBuffer::Fill(VkCommandBuffer commandBuffer, u64 offset, u64 size, u32 data) const
+    {
+        vkCmdFillBuffer(commandBuffer, m_handle, offset, size, data);
+    }
+
     void VulkanBuffer::Destroy()
     {
         auto device = m_context->device.GetLogical();

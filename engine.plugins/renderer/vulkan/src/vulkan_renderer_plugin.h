@@ -72,6 +72,7 @@ namespace C3D
         VulkanBuffer m_meshletDataBuffer;
         VulkanBuffer m_drawBuffer;
         VulkanBuffer m_drawCommandBuffer;
+        VulkanBuffer m_drawCommandCountBuffer;
 
         VkViewport m_viewport;
         VkRect2D m_scissor;

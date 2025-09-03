@@ -14,49 +14,46 @@ layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 #define CULL 1
 
-layout (binding = 0) readonly buffer Draws
+layout (binding = 0) readonly buffer DrawCommands
+{
+    MeshDrawCommand drawCommands[];
+};
+
+layout (binding = 1) readonly buffer Draws
 {
     MeshDraw draws[];
 };
 
-layout (binding = 1) readonly buffer Meshlets
+layout (binding = 2) readonly buffer Meshlets
 {
     Meshlet meshlets[];
 };
 
-struct Task
-{
-    uint meshletIndices[32];
-};
-taskPayloadSharedEXT Task OUT;
+taskPayloadSharedEXT uint meshletIndices[32];
 
 void main()
 {
     uint ti = gl_LocalInvocationID.x;
     uint mgi = gl_WorkGroupID.x;
 
-    MeshDraw meshDraw = draws[gl_DrawIDARB];
+    MeshDraw meshDraw = draws[drawCommands[gl_DrawIDARB].drawId];
 
-    uint mi = mgi * 32 + ti + meshDraw.meshletOffset;
+    uint mi = mgi * 32 + ti + drawCommands[gl_DrawIDARB].taskOffset;
 
 #if CULL
-    bool accept = false;
-    if (mi < meshDraw.meshletOffset + meshDraw.meshletCount)
-    {
-        vec3 center = RotateVecByQuat(meshlets[mi].center, meshDraw.orientation) * meshDraw.scale + meshDraw.position;
-        float radius = meshlets[mi].radius * meshDraw.scale;
-        vec3 coneAxis = RotateVecByQuat(vec3(meshlets[mi].coneAxis[0] / 127.0, meshlets[mi].coneAxis[1] / 127.0, meshlets[mi].coneAxis[2] / 127.0), meshDraw.orientation);
-        float coneCutoff = int(meshlets[mi].coneCutoff) / 127.0;
+    vec3 center = RotateVecByQuat(meshlets[mi].center, meshDraw.orientation) * meshDraw.scale + meshDraw.position;
+    float radius = meshlets[mi].radius * meshDraw.scale;
+    vec3 coneAxis = RotateVecByQuat(vec3(meshlets[mi].coneAxis[0] / 127.0, meshlets[mi].coneAxis[1] / 127.0, meshlets[mi].coneAxis[2] / 127.0), meshDraw.orientation);
+    float coneCutoff = int(meshlets[mi].coneCutoff) / 127.0;
 
-        accept = !ConeCull(center, radius, coneAxis, coneCutoff, vec3(0, 0, 0));
-    }
+    bool accept = !ConeCull(center, radius, coneAxis, coneCutoff, vec3(0, 0, 0));
 
     uvec4 ballot = subgroupBallot(accept);
 
     if (accept)
     {
         uint index = subgroupBallotExclusiveBitCount(ballot);
-        OUT.meshletIndices[index] = mi;
+        meshletIndices[index] = mi;
     }
 
     if (ti == 0)
@@ -66,11 +63,11 @@ void main()
     }
 
 #else
-    OUT.meshletIndices[ti] = mi;
+    meshletIndices[ti] = mi;
 
     if (ti == 0)
     {
-        EmitMeshTasksEXT(min(32, meshDraw.meshletOffset + meshDraw.meshletCount - mi), 1, 1);
+        EmitMeshTasksEXT(32, 1, 1);
     }
 #endif
 }

@@ -121,10 +121,18 @@ namespace C3D
             return false;
         }
 
-        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMANDS", MebiBytes(8), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", MebiBytes(8), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
-            ERROR_LOG("Failed to create draw buffer.");
+            ERROR_LOG("Failed to create draw command buffer.");
+            return false;
+        }
+
+        if (!m_drawCommandCountBuffer.Create(&m_context, "DRAW_COMMAND_COUNT", 4,
+                                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        {
+            ERROR_LOG("Failed to create draw command count buffer.");
             return false;
         }
 
@@ -185,6 +193,7 @@ namespace C3D
         m_indexBuffer.Destroy();
         m_drawBuffer.Destroy();
         m_drawCommandBuffer.Destroy();
+        m_drawCommandCountBuffer.Destroy();
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
@@ -275,19 +284,27 @@ namespace C3D
                 frustum[5] = vec4(0, 0, -1, drawDistance);                     // reverse z, infinite far plane
             }
 
+            // Zero initialize our draw command count buffer
+            m_drawCommandCountBuffer.Fill(commandBuffer, 0, 4, 0);
+
+            VkBufferMemoryBarrier fillBarrier = VulkanUtils::CreateBufferBarrier(m_drawCommandCountBuffer.GetHandle(), VK_ACCESS_TRANSFER_WRITE_BIT,
+                                                                                 VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &fillBarrier, 0,
+                                 nullptr);
+
             m_drawCommandShader.Bind(commandBuffer);
 
-            DescriptorInfo descriptors[] = { m_drawBuffer.GetHandle(), m_drawCommandBuffer.GetHandle() };
+            DescriptorInfo descriptors[] = { m_drawBuffer.GetHandle(), m_drawCommandBuffer.GetHandle(), m_drawCommandCountBuffer.GetHandle() };
             m_drawCommandShader.PushDescriptorSet(commandBuffer, descriptors);
 
             m_drawCommandShader.PushConstants(commandBuffer, frustum, sizeof(frustum));
             m_drawCommandShader.Dispatch(commandBuffer, static_cast<u32>((m_draws.Size() + 31) / 32));
 
-            VkBufferMemoryBarrier drawCommandEndBarrier =
+            VkBufferMemoryBarrier cullBarrier =
                 VulkanUtils::CreateBufferBarrier(m_drawCommandBuffer.GetHandle(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
 
-            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1,
-                                 &drawCommandEndBarrier, 0, nullptr);
+            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1, &cullBarrier, 0,
+                                 nullptr);
 
             vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 3);
         }
@@ -342,29 +359,27 @@ namespace C3D
                 m_meshletShader.Bind(commandBuffer);
 
                 DescriptorInfo descriptors[] = {
-                    m_drawBuffer.GetHandle(),
-                    m_meshletBuffer.GetHandle(),
-                    m_meshletDataBuffer.GetHandle(),
-                    m_vertexBuffer.GetHandle(),
+                    m_drawCommandBuffer.GetHandle(), m_drawBuffer.GetHandle(),   m_meshletBuffer.GetHandle(),
+                    m_meshletDataBuffer.GetHandle(), m_vertexBuffer.GetHandle(),
                 };
                 m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
                 m_meshletShader.PushConstants(commandBuffer, &globals, sizeof(globals));
 
-                vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirectMS),
-                                              static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
+                vkCmdDrawMeshTasksIndirectCountEXT(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirectMS),
+                                                   m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
             }
             else
             {
                 m_meshShader.Bind(commandBuffer);
 
-                DescriptorInfo descriptors[] = { m_drawBuffer.GetHandle(), m_vertexBuffer.GetHandle() };
+                DescriptorInfo descriptors[] = { m_drawCommandBuffer.GetHandle(), m_drawBuffer.GetHandle(), m_vertexBuffer.GetHandle() };
                 m_meshShader.PushDescriptorSet(commandBuffer, descriptors);
 
                 vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
 
                 m_meshShader.PushConstants(commandBuffer, &globals, sizeof(globals));
-                vkCmdDrawIndexedIndirect(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect), static_cast<u32>(m_draws.Size()),
-                                         sizeof(MeshDrawCommand));
+                vkCmdDrawIndexedIndirectCountKHR(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect),
+                                                 m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
             }
         }
 
@@ -602,7 +617,7 @@ namespace C3D
         {
             // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
 
-            if (!m_drawCommandShaderModule.Create(&m_context, "drawcmd.comp"))
+            if (!m_drawCommandShaderModule.Create(&m_context, "drawcull.comp"))
             {
                 ERROR_LOG("Failed to create ShaderModule");
                 return false;
@@ -820,6 +835,9 @@ namespace C3D
         auto commandPool   = backend->GetCommandPool();
 
         m_drawCount = 25000;
+        // TODO: Remove the need for padding to a number divisble by 32
+        m_drawCount = (m_drawCount + 31) & ~31;
+
         m_draws.Resize(m_drawCount);
 
         for (u32 i = 0; i < m_drawCount; ++i)

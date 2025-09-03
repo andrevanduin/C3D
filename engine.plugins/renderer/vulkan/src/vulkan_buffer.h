@@ -17,6 +17,16 @@ namespace C3D
 
         bool CopyInto(void* source, u64 size);
 
+        /**
+         * @brief Fills the buffer starting at offset for size bytes with the provided value
+         *
+         * @param commandBuffer The command buffer to submit the command to
+         * @param offset The offset into the buffer at which to start filling
+         * @param size The number of bytes to fill
+         * @param value The value to use for filling
+         */
+        void Fill(VkCommandBuffer commandBuffer, u64 offset, u64 size, u32 value) const;
+
         void Destroy();
 
         VkBuffer GetHandle() const { return m_handle; }

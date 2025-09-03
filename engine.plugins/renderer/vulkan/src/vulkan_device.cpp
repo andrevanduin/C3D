@@ -21,6 +21,8 @@ namespace C3D
             VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
             // We always want to use 8-Bit storage
             VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
+            // We always want to use draw indirect count
+            VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME,
         };
 
         // First we select the ideal phyiscal device
