@@ -2,6 +2,7 @@
 #include "render_system.h"
 
 #include "cson/cson_types.h"
+#include "math/c3d_math.h"
 #include "mesh.h"
 #include "renderer_plugin.h"
 #include "utils/mesh_utils.h"
@@ -139,7 +140,23 @@ namespace C3D
                 meshletCount = meshlets.Size();
             }
 
-            Mesh mesh          = {};
+            vec3 center = vec3(0);
+            for (const auto& v : asset.vertices)
+            {
+                center += v.pos;
+            }
+            center /= static_cast<f32>(asset.vertices.Size());
+
+            f32 radius = 0.f;
+            for (const auto& v : asset.vertices)
+            {
+                radius = Max(radius, glm::distance(center, v.pos));
+            }
+
+            Mesh mesh   = {};
+            mesh.center = center;
+            mesh.radius = radius;
+
             mesh.meshletOffset = meshletOffset;
             mesh.meshletCount  = meshletCount;
 

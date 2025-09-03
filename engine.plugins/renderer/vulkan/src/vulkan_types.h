@@ -64,19 +64,6 @@ namespace C3D
         VkCommandBuffer GetCommandBuffer() const { return commandBuffers[frameIndex % MAX_FRAMES]; }
     };
 
-    struct alignas(16) MeshDraw
-    {
-        vec3 position;
-        f32 scale;
-        quat orientation;
-
-        u32 vertexOffset;
-        u32 indexOffset;
-        u32 indexCount;
-        u32 meshletOffset;
-        u32 meshletCount;
-    };
-
     struct MeshDrawCommand
     {
         VkDrawIndexedIndirectCommand indirect;

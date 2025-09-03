@@ -443,4 +443,6 @@ namespace C3D
         return magnitude / glm::length(lineDirection);
     }
 
+    C3D_API C3D_INLINE vec4 NormalizePlane(const vec4& plane) { return plane / glm::length(vec3(plane)); }
+
 }  // namespace C3D

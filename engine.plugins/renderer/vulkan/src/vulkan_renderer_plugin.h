@@ -46,6 +46,7 @@ namespace C3D
 
     private:
         bool m_meshShadingEnabled = false;
+        bool m_cullingEnabled     = true;
 
         VulkanShaderModule m_drawCommandShaderModule;
         VulkanShaderModule m_meshShaderModule;

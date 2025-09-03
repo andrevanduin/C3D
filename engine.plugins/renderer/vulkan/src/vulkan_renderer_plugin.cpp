@@ -149,12 +149,15 @@ namespace C3D
             if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
             {
                 m_meshShadingEnabled ^= true;
-                INFO_LOG("Mesh shading is now {}.", m_meshShadingEnabled ? "enabled" : "disabled");
             }
             else
             {
                 WARN_LOG("Mesh shading is not support by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
             }
+            return true;
+        });
+        Event.Register(EventCodeDebug1, [this](const u16 code, void* sender, const EventContext& context) {
+            m_cullingEnabled ^= true;
             return true;
         });
 
@@ -167,6 +170,7 @@ namespace C3D
         INFO_LOG("Shutting down.");
 
         Event.UnregisterAll(EventCodeDebug0);
+        Event.UnregisterAll(EventCodeDebug1);
 
         m_draws.Destroy();
 
@@ -250,13 +254,33 @@ namespace C3D
         vkCmdResetQueryPool(commandBuffer, m_queryPool, 0, 128);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 0);
 
+        auto projection  = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), 0.01f);
+        f32 drawDistance = 100;
+
         // Bind, push our descriptors and then dispatch our compute shader
         {
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 2);
+
+            vec4 frustum[6] = {};
+
+            if (m_cullingEnabled)
+            {
+                glm::mat4 projectionT = glm::transpose(projection);
+
+                frustum[0] = NormalizePlane(projectionT[3] + projectionT[0]);  // x + w < 0
+                frustum[1] = NormalizePlane(projectionT[3] - projectionT[0]);  // x - w > 0
+                frustum[2] = NormalizePlane(projectionT[3] + projectionT[1]);  // y + w < 0
+                frustum[3] = NormalizePlane(projectionT[3] - projectionT[1]);  // y - w > 0
+                frustum[4] = NormalizePlane(projectionT[3] - projectionT[2]);  // z - w > 0 -- reverse z
+                frustum[5] = vec4(0, 0, -1, drawDistance);                     // reverse z, infinite far plane
+            }
+
             m_drawCommandShader.Bind(commandBuffer);
 
             DescriptorInfo descriptors[] = { m_drawBuffer.GetHandle(), m_drawCommandBuffer.GetHandle() };
             m_drawCommandShader.PushDescriptorSet(commandBuffer, descriptors);
 
+            m_drawCommandShader.PushConstants(commandBuffer, frustum, sizeof(frustum));
             m_drawCommandShader.Dispatch(commandBuffer, static_cast<u32>((m_draws.Size() + 31) / 32));
 
             VkBufferMemoryBarrier drawCommandEndBarrier =
@@ -264,6 +288,8 @@ namespace C3D
 
             vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1,
                                  &drawCommandEndBarrier, 0, nullptr);
+
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 3);
         }
 
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
@@ -309,7 +335,7 @@ namespace C3D
         // TODO: move the actual rendering somewhere else
         {
             Globals globals    = {};
-            globals.projection = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), 0.01f);
+            globals.projection = projection;
 
             if (m_meshShadingEnabled)
             {
@@ -434,14 +460,15 @@ namespace C3D
         VK_CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX));
         VK_CHECK(vkResetFences(device, 1, &fence));
 
-        u64 queryResults[2];
+        u64 queryResults[4];
         VK_CHECK(vkGetQueryPoolResults(device, m_queryPool, 0, ARRAY_SIZE(queryResults), sizeof(queryResults), queryResults, sizeof(queryResults[0]),
                                        VK_QUERY_RESULT_64_BIT));
 
         auto props = m_context.device.GetProperties();
 
-        f64 frameGpuBegin = f64(queryResults[0]) * props.limits.timestampPeriod * 1e-6;
-        f64 frameGpuEnd   = f64(queryResults[1]) * props.limits.timestampPeriod * 1e-6;
+        f64 frameGpuBegin = static_cast<f64>(queryResults[0]) * props.limits.timestampPeriod * 1e-6;
+        f64 frameGpuEnd   = static_cast<f64>(queryResults[1]) * props.limits.timestampPeriod * 1e-6;
+        f64 cullGpuTime   = static_cast<f64>(queryResults[3] - queryResults[2]) * props.limits.timestampPeriod * 1e-6;
 
         f64 frameCpuEnd = Platform::GetAbsoluteTime() * 1000;
 
@@ -454,14 +481,14 @@ namespace C3D
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) && m_meshShadingEnabled)
         {
             titleText.Clear();
-            titleText.Format("Mesh Shading: ON; cpu: {:.2f} ms; gpu: {:.2f} ms; {:.1f}B tri/sec; {:.1f}M draws/sec;", m_frameCpuAvg, m_frameGpuAvg,
-                             trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
+            titleText.Format("Mesh Shading: ON; Culling: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); {:.1f}B tri/sec; {:.1f}M draws/sec;",
+                             m_cullingEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
         }
         else
         {
             titleText.Clear();
-            titleText.Format("Mesh Shading: OFF; cpu: {:.2f} ms; gpu: {:.2f} ms; {:.1f}B tri/sec; {:.1f}M draws/sec;", m_frameCpuAvg, m_frameGpuAvg,
-                             trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
+            titleText.Format("Mesh Shading: OFF; Culling: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); {:.1f}B tri/sec; {:.1f}M draws/sec;",
+                             m_cullingEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
         }
 
         Platform::SetWindowTitle(window, titleText);
@@ -594,12 +621,13 @@ namespace C3D
             }
 
             VulkanShaderCreateInfo createInfo;
-            createInfo.context   = &m_context;
-            createInfo.name      = "DRAW_COMMAND_SHADER";
-            createInfo.bindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
-            createInfo.cache     = VK_NULL_HANDLE;
-            createInfo.swapchain = &backend->swapchain;
-            createInfo.modules   = { &m_drawCommandShaderModule };
+            createInfo.context           = &m_context;
+            createInfo.name              = "DRAW_COMMAND_SHADER";
+            createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_COMPUTE;
+            createInfo.pushConstantsSize = 6 * sizeof(vec4);
+            createInfo.cache             = VK_NULL_HANDLE;
+            createInfo.swapchain         = &backend->swapchain;
+            createInfo.modules           = { &m_drawCommandShaderModule };
 
             if (!m_drawCommandShader.Create(createInfo))
             {
@@ -791,7 +819,7 @@ namespace C3D
         auto commandBuffer = backend->GetCommandBuffer();
         auto commandPool   = backend->GetCommandPool();
 
-        m_drawCount = 3000;
+        m_drawCount = 25000;
         m_draws.Resize(m_drawCount);
 
         for (u32 i = 0; i < m_drawCount; ++i)
@@ -799,14 +827,17 @@ namespace C3D
             const auto& mesh = geometry.meshes[Random.Generate(static_cast<u64>(0), geometry.meshes.Size() - 1)];
             auto& draw       = m_draws[i];
 
-            draw.position.x = Random.Generate(-20.f, 20.f);
-            draw.position.y = Random.Generate(-20.f, 20.f);
-            draw.position.z = Random.Generate(-20.f, 20.f);
+            draw.position.x = Random.Generate(-50.f, 50.f);
+            draw.position.y = Random.Generate(-50.f, 50.f);
+            draw.position.z = Random.Generate(-50.f, 50.f);
             draw.scale      = Random.Generate(0.8f, 1.5f);
 
             vec3 axis        = vec3(Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f));
             f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));
             draw.orientation = glm::rotate(glm::quat(1, 0, 0, 0), angle, axis);
+
+            draw.center = mesh.center;
+            draw.radius = mesh.radius;
 
             draw.vertexOffset  = mesh.vertexOffset;
             draw.indexOffset   = mesh.indexOffset;
