@@ -179,27 +179,26 @@ namespace C3D
 
             ERROR_LOG("Compilation failed with {} error(s).", errorCount);
 
-            // const char* s = source;
+            String totalErrorMsg = "1.";
+            u32 lineNumber       = 1;
 
-            /*
-            String line, errorSource;
-            u32 index = 0, lineNumber = 1;
-            line.Reserve(256);
-            errorSource.Reserve(4096);
-
-            while (s != '\0')
+            u32 index = 0;
+            while (index < sourceSize)
             {
-                const void* eol = std::memchr(s, '\n', sourceSize);
-                if (eol == nullptr)
+                if (source[index] == '\n')
                 {
-                    // We could not find another \n
-                    break;
+                    lineNumber++;
+                    totalErrorMsg += String::FromFormat("\n{}.", lineNumber);
+                }
+                else
+                {
+                    totalErrorMsg += source[index];
                 }
 
+                index++;
+            }
 
-            }*/
-
-            ERROR_LOG("Source:\n{}", fmt::string_view(source, sourceSize));
+            ERROR_LOG("Source:\n{}", totalErrorMsg);
             ERROR_LOG("Errors:\n{}", errorMessage);
 
             shaderc_result_release(compilationResult);

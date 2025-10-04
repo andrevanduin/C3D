@@ -1,3 +1,6 @@
+#define TASK_WGSIZE 64
+#define MESH_WGSIZE 64
+
 struct Vertex
 {
     float x, y, z;
@@ -14,13 +17,22 @@ struct Meshlet
     int8_t coneCutoff;
 
     uint dataOffset;
-    uint8_t triangleCount;
     uint8_t vertexCount;
+    uint8_t triangleCount;
 };
 
 struct Globals
 {
     mat4 projection;
+};
+
+struct MeshLod
+{
+    uint indexOffset;
+    uint indexCount;
+
+    uint meshletOffset;
+    uint meshletCount;
 };
 
 struct Mesh
@@ -31,11 +43,8 @@ struct Mesh
     uint vertexOffset;
     uint vertexCount;
 
-    uint indexOffset;
-    uint indexCount;
-
-    uint meshletOffset;
-    uint meshletCount;
+    uint lodCount;
+    MeshLod lods[8];
 };
 
 struct MeshDraw
@@ -51,14 +60,24 @@ struct MeshDraw
 struct MeshDrawCommand
 {
     uint drawId;
+
+    // Traditional rasterizer
     uint indexCount;
     uint instanceCount;
     uint firstIndex;
     uint vertexOffset;
     uint firstInstance;
 
+    // Mesh shading
     uint taskOffset;
+    uint taskCount;
     uint groupCountX;
     uint groupCountY;
     uint groupCountZ;
+};
+
+struct MeshTaskPayload
+{
+    uint drawId;
+    uint meshletIndices[TASK_WGSIZE];
 };

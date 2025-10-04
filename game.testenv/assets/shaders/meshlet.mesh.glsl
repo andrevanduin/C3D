@@ -11,7 +11,7 @@
 
 #define DEBUG 0
 
-layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = MESH_WGSIZE, local_size_y = 1, local_size_z = 1) in;
 layout (triangles, max_vertices = 64, max_primitives = 124) out;
 
 layout (push_constant) uniform block
@@ -50,7 +50,7 @@ layout (binding = 4) readonly buffer Vertices
     Vertex vertices[];
 };
 
-taskPayloadSharedEXT uint meshletIndices[32];
+taskPayloadSharedEXT MeshTaskPayload payload;
 
 layout (location = 0) out vec4 color[];
 
@@ -66,24 +66,26 @@ uint pcg_hash(uint a)
 void main()
 {
     uint ti = gl_LocalInvocationID.x;
-    uint mi = meshletIndices[gl_WorkGroupID.x];
+    uint mi = payload.meshletIndices[gl_WorkGroupID.x];
     
     MeshDraw meshDraw = draws[drawCommands[gl_DrawIDARB].drawId];
 
     uint vertexCount = meshlets[mi].vertexCount;
     uint triangleCount = meshlets[mi].triangleCount;
 
+    SetMeshOutputsEXT(vertexCount, triangleCount);
+
     uint vertexOffset = meshlets[mi].dataOffset;
-    // Multiply by 4 to compensate for the fact that this index is based on u32's and we will index based on u8's
-    uint indexOffset = (vertexOffset + vertexCount) * 4;
+    uint indexOffset = vertexOffset + vertexCount;
 
 #if DEBUG
     uint meshletHash = pcg_hash(mi); 
     vec3 meshletColor = vec3(meshletHash & 255, (meshletHash >> 8) & 255, (meshletHash >> 16) & 225) / 255;
 #endif
 
-    for (uint i = ti; i < vertexCount; i += 32) 
+    if (ti < vertexCount)
     {
+        uint i = ti;
         uint vi = meshletData[vertexOffset + i] + meshDraw.vertexOffset;
         
         Vertex v = vertices[vi];
@@ -96,19 +98,14 @@ void main()
         
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
 
-#if DEBUG
-        color[i] = vec4(meshletColor, 1.0);
-#endif
+        #if DEBUG
+                color[i] = vec4(meshletColor, 1.0);
+        #endif
     }
 
-    for (uint i = ti; i < triangleCount; i += 32)
+    for (uint i = ti; i < triangleCount; i += MESH_WGSIZE)
     {
-        uint offset = indexOffset + i * 3;
+        uint offset = indexOffset * 4 + i * 3;
         gl_PrimitiveTriangleIndicesEXT[i] = uvec3(meshletData8[offset + 0], meshletData8[offset + 1], meshletData8[offset + 2]);
-    }
-
-    if (ti == 0)
-    {
-        SetMeshOutputsEXT(vertexCount, triangleCount);
     }
 }

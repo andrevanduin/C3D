@@ -107,7 +107,7 @@ namespace C3D
             return false;
         }
 
-        if (!m_indexBuffer.Create(&m_context, "INDEX", MebiBytes(32), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        if (!m_indexBuffer.Create(&m_context, "INDEX", MebiBytes(64), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create index buffer.");
@@ -175,6 +175,10 @@ namespace C3D
             m_cullingEnabled ^= true;
             return true;
         });
+        Event.Register(EventCodeDebug2, [this](const u16 code, void* sender, const EventContext& context) {
+            m_lodEnabled ^= true;
+            return true;
+        });
 
         INFO_LOG("Initialized successfully.");
         return true;
@@ -186,6 +190,7 @@ namespace C3D
 
         Event.UnregisterAll(EventCodeDebug0);
         Event.UnregisterAll(EventCodeDebug1);
+        Event.UnregisterAll(EventCodeDebug2);
 
         m_draws.Destroy();
 
@@ -278,19 +283,18 @@ namespace C3D
         {
             vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 2);
 
-            vec4 frustum[6] = {};
+            glm::mat4 projectionT = glm::transpose(projection);
 
-            if (m_cullingEnabled)
-            {
-                glm::mat4 projectionT = glm::transpose(projection);
-
-                frustum[0] = NormalizePlane(projectionT[3] + projectionT[0]);  // x + w < 0
-                frustum[1] = NormalizePlane(projectionT[3] - projectionT[0]);  // x - w > 0
-                frustum[2] = NormalizePlane(projectionT[3] + projectionT[1]);  // y + w < 0
-                frustum[3] = NormalizePlane(projectionT[3] - projectionT[1]);  // y - w > 0
-                frustum[4] = NormalizePlane(projectionT[3] - projectionT[2]);  // z - w > 0 -- reverse z
-                frustum[5] = vec4(0, 0, -1, drawDistance);                     // reverse z, infinite far plane
-            }
+            DrawCullData cullData   = {};
+            cullData.frustum[0]     = NormalizePlane(projectionT[3] + projectionT[0]);  // x + w < 0
+            cullData.frustum[1]     = NormalizePlane(projectionT[3] - projectionT[0]);  // x - w > 0
+            cullData.frustum[2]     = NormalizePlane(projectionT[3] + projectionT[1]);  // y + w < 0
+            cullData.frustum[3]     = NormalizePlane(projectionT[3] - projectionT[1]);  // y - w > 0
+            cullData.frustum[4]     = NormalizePlane(projectionT[3] - projectionT[2]);  // z - w > 0 -- reverse z
+            cullData.frustum[5]     = vec4(0, 0, -1, drawDistance);                     // reverse z, infinite far plane
+            cullData.drawCount      = m_drawCount;
+            cullData.cullingEnabled = m_cullingEnabled;
+            cullData.lodEnabled     = m_lodEnabled;
 
             // Zero initialize our draw command count buffer
             m_drawCommandCountBuffer.Fill(commandBuffer, 0, 4, 0);
@@ -300,7 +304,7 @@ namespace C3D
             vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &fillBarrier, 0,
                                  nullptr);
 
-            m_drawCommandShader.Bind(commandBuffer);
+            m_drawCullShader.Bind(commandBuffer);
 
             DescriptorInfo descriptors[] = {
                 m_drawBuffer.GetHandle(),
@@ -308,10 +312,10 @@ namespace C3D
                 m_drawCommandBuffer.GetHandle(),
                 m_drawCommandCountBuffer.GetHandle(),
             };
-            m_drawCommandShader.PushDescriptorSet(commandBuffer, descriptors);
+            m_drawCullShader.PushDescriptorSet(commandBuffer, descriptors);
 
-            m_drawCommandShader.PushConstants(commandBuffer, frustum, sizeof(frustum));
-            m_drawCommandShader.Dispatch(commandBuffer, static_cast<u32>((m_draws.Size() + 31) / 32));
+            m_drawCullShader.PushConstants(commandBuffer, &cullData, sizeof(DrawCullData));
+            m_drawCullShader.Dispatch(commandBuffer, static_cast<u32>((m_draws.Size() + 31) / 32));
 
             VkBufferMemoryBarrier cullBarrier =
                 VulkanUtils::CreateBufferBarrier(m_drawCommandBuffer.GetHandle(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
@@ -509,14 +513,16 @@ namespace C3D
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) && m_meshShadingEnabled)
         {
             titleText.Clear();
-            titleText.Format("Mesh Shading: ON; Culling: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); {:.1f}B tri/sec; {:.1f}M draws/sec;",
-                             m_cullingEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
+            titleText.Format("Mesh Shading: ON; Culling: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); {:.1f}B tri/sec; {:.1f}M draws/sec;",
+                             m_cullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, trianglesPerSecond * 1e-9,
+                             drawsPerSecond * 1e-6);
         }
         else
         {
             titleText.Clear();
-            titleText.Format("Mesh Shading: OFF; Culling: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); {:.1f}B tri/sec; {:.1f}M draws/sec;",
-                             m_cullingEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
+            titleText.Format("Mesh Shading: OFF; Culling: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); {:.1f}B tri/sec; {:.1f}M draws/sec;",
+                             m_cullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, trianglesPerSecond * 1e-9,
+                             drawsPerSecond * 1e-6);
         }
 
         Platform::SetWindowTitle(window, titleText);
@@ -630,7 +636,7 @@ namespace C3D
         {
             // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
 
-            if (!m_drawCommandShaderModule.Create(&m_context, "drawcull.comp"))
+            if (!m_drawCullShaderModule.Create(&m_context, "drawcull.comp"))
             {
                 ERROR_LOG("Failed to create ShaderModule");
                 return false;
@@ -652,12 +658,12 @@ namespace C3D
             createInfo.context           = &m_context;
             createInfo.name              = "DRAW_COMMAND_SHADER";
             createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_COMPUTE;
-            createInfo.pushConstantsSize = 6 * sizeof(vec4);
+            createInfo.pushConstantsSize = sizeof(DrawCullData);
             createInfo.cache             = VK_NULL_HANDLE;
             createInfo.swapchain         = &backend->swapchain;
-            createInfo.modules           = { &m_drawCommandShaderModule };
+            createInfo.modules           = { &m_drawCullShaderModule };
 
-            if (!m_drawCommandShader.Create(createInfo))
+            if (!m_drawCullShader.Create(createInfo))
             {
                 ERROR_LOG("Failed to create DrawCommandShader.");
                 return false;
@@ -749,8 +755,8 @@ namespace C3D
                 m_meshShaderModule.Destroy();
                 m_fragmentShaderModule.Destroy();
 
-                m_drawCommandShader.Destroy();
-                m_drawCommandShaderModule.Destroy();
+                m_drawCullShader.Destroy();
+                m_drawCullShaderModule.Destroy();
 
                 if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
                 {
@@ -853,7 +859,7 @@ namespace C3D
         auto commandBuffer = backend->GetCommandBuffer();
         auto commandPool   = backend->GetCommandPool();
 
-        m_drawCount = 25000;
+        m_drawCount = 32;
         // TODO: Remove the need for padding to a number divisble by 32
         m_drawCount = (m_drawCount + 31) & ~31;
 
@@ -865,10 +871,10 @@ namespace C3D
             const auto& mesh = geometry.meshes[meshIndex];
             auto& draw       = m_draws[i];
 
-            draw.position.x = Random.Generate(-50.f, 50.f);
-            draw.position.y = Random.Generate(-50.f, 50.f);
-            draw.position.z = Random.Generate(-50.f, 50.f);
-            draw.scale      = Random.Generate(0.8f, 1.5f);
+            draw.position.x = Random.Generate(-10.f, 10.f);
+            draw.position.y = Random.Generate(-10.f, 10.f);
+            draw.position.z = 15.f;
+            draw.scale      = Random.Generate(2.1f, 2.5f);
 
             vec3 axis        = vec3(Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f));
             f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));
@@ -877,7 +883,7 @@ namespace C3D
             draw.meshIndex    = static_cast<u32>(meshIndex);
             draw.vertexOffset = mesh.vertexOffset;
 
-            m_triangleCount += mesh.indexCount / 3;
+            m_triangleCount += mesh.lods[0].indexCount / 3;
         }
 
         return m_drawBuffer.Upload(commandBuffer, commandPool, m_draws.GetData(), sizeof(MeshDraw) * m_draws.Size());
@@ -895,7 +901,7 @@ namespace C3D
         m_scissor         = { offset, extent };
     }
 
-    bool VulkanRendererPlugin::SupportsFeature(RendererSupportFlag feature)
+    bool VulkanRendererPlugin::SupportsFeature(RendererSupportFlag feature) const
     {
         switch (feature)
         {

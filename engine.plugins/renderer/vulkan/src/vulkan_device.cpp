@@ -74,6 +74,7 @@ namespace C3D
         device12Features.shaderFloat16                     = VK_TRUE;
         device12Features.uniformAndStorageBuffer8BitAccess = VK_TRUE;
         device12Features.storageBuffer8BitAccess           = VK_TRUE;
+        device12Features.drawIndirectCount                 = VK_TRUE;
         device11Features.pNext                             = &device12Features;
 
         // Dynamic rendering

@@ -83,6 +83,11 @@ void TestEnv::OnUpdate(C3D::FrameData& frameData)
         C3D::EventContext context;
         Event.Fire(C3D::EventCodeDebug1, nullptr, context);
     }
+    if (Input.IsKeyPressed(C3D::KeyL))
+    {
+        C3D::EventContext context;
+        Event.Fire(C3D::EventCodeDebug2, nullptr, context);
+    }
 }
 
 bool TestEnv::OnPrepareFrame(C3D::FrameData& frameData) { return true; }

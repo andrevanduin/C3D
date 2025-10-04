@@ -35,6 +35,8 @@ namespace C3D
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) const;
 
     private:
+        u32 GenerateMeshlets(const std::vector<u32>& indices, const DynamicArray<Vertex>& vertices);
+
         /** @brief A pointer to the backend rendering plugin used to actually render things on the screen. */
         RendererPlugin* m_backendPlugin = nullptr;
         /** @brief A dynamic library object to load the rendering plugin. */

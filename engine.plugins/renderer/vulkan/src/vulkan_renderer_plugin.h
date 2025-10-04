@@ -42,13 +42,14 @@ namespace C3D
         void SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth) override;
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) override;
 
-        bool SupportsFeature(RendererSupportFlag feature) override;
+        bool SupportsFeature(RendererSupportFlag feature) const override;
 
     private:
-        bool m_meshShadingEnabled = false;
+        bool m_meshShadingEnabled = true;
         bool m_cullingEnabled     = true;
+        bool m_lodEnabled         = true;
 
-        VulkanShaderModule m_drawCommandShaderModule;
+        VulkanShaderModule m_drawCullShaderModule;
         VulkanShaderModule m_meshShaderModule;
         VulkanShaderModule m_meshletShaderModule;
         VulkanShaderModule m_fragmentShaderModule;
@@ -56,7 +57,7 @@ namespace C3D
 
         VulkanShader m_meshShader;
         VulkanShader m_meshletShader;
-        VulkanShader m_drawCommandShader;
+        VulkanShader m_drawCullShader;
 
         DynamicArray<MeshDraw> m_draws;
 

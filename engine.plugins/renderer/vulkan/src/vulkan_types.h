@@ -67,9 +67,23 @@ namespace C3D
     struct MeshDrawCommand
     {
         u32 drawId;
+
+        // Traditional rasterizer
         VkDrawIndexedIndirectCommand indirect;
+
+        // Mesh shading
         u32 taskOffset;
+        u32 taskCount;
         VkDrawMeshTasksIndirectCommandEXT indirectMS;
+    };
+
+    struct DrawCullData
+    {
+        vec4 frustum[6];
+        u32 drawCount = 0;
+
+        i32 cullingEnabled = 0;
+        i32 lodEnabled     = 0;
     };
 
 }  // namespace C3D

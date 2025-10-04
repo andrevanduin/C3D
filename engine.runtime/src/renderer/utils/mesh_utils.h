@@ -21,27 +21,23 @@ namespace C3D::MeshUtils
 
     /** @brief Generates meshlets for the provided mesh to be used in a mesh shader.
      *
-     * @param mesh The mesh you want to generate meshlets for
+     * @param indices The array of indices that make up the mesh
+     * @param vertexCount The number of vertices in the mesh
      * @param meshlets An array that will hold the generated meshlets
-     * Needs to be large enough to hold all meshlets (use DetermineMaxMeshlets() to compute a bound)
-     * @param meshletVertices An array that will hold the vertex indices for the generated meshlets
-     * Needs to be large enough to hold all vertex indices for the generated meshlets (meshlets * MAX_VERTICES_PER_MESHLET)
-     * @param meshletTriangles An array that will hold the triangle indices for the generated meshlets
-     * Needs to be large enough to hold all triangle indices for the generated meshlets (meshlets * MAX_TRIANGLES_PER_MESHLET)
-     * NOTE: This data gets padded (with 0's) upto 4b to ensure easier packing into u32's later if required
      * @param coneWeight The cone weight used to prioritize how meshlets are generated
      * @return The number of meshlets actually generated (will be <= DetermineMaxMeshlets())
      */
-    u32 C3D_API GenerateMeshlets(const MeshAsset& mesh, DynamicArray<Meshlet>& meshlets, f32 coneWeight = 0.25f);
+    u32 C3D_API GenerateMeshlets(const DynamicArray<u32>& indices, u64 vertexCount, DynamicArray<MeshUtils::Meshlet>& meshlets, f32 coneWeight = 0.25f);
 
     /**
      * @brief Generate bounds for the provided Meshlet.
      *
      * @param meshlet The meshlet we want to generate bounds for
+     * @param vertices The vertices in the original mesh
      *
      * @return The bounds of the provided Meshlet
      */
-    MeshletBounds C3D_API GenerateMeshletBounds(const MeshAsset& mesh, const Meshlet& meshlet);
+    MeshletBounds C3D_API GenerateMeshletBounds(const Meshlet& meshlet, const DynamicArray<Vertex>& vertices);
 
     /**
      * @brief Generates a remap containing only indices to unique vertices
@@ -81,10 +77,33 @@ namespace C3D::MeshUtils
     void C3D_API OptimizeForVertexCache(MeshAsset& mesh);
 
     /**
+     * @brief Optimize mesh for vertex cache. Reorders indices to reduce the number of GPU vertex shader invocations
+     *
+     * @param destination The destination array that will contain the optimized indices
+     * @param originalIndices The original index data
+     * @param vertexCount The number of vertices in the mesh
+     */
+    void C3D_API OptimizeForVertexCache(DynamicArray<u32>& destination, const DynamicArray<u32>& originalIndices, u64 vertexCount);
+
+    /**
      * @brief Vertex fetch cache optimizer. Reorders vertices and changes indices to reduce the amount of GPU memory fetches during vertex processing
      *
      * @param mesh The mesh you want to optimize
      */
     void C3D_API OptimizeForVertexFetch(MeshAsset& mesh);
+
+    /**
+     * @brief Simplify the provided indices into a more simplified mesh version. The output indices are stored in the provided destination array.
+     * The simplifier tries to get as close as possible to the target index count and will stop once the error is >= the target error.
+     *
+     * @param destination An array to store the output indices
+     * @param indices The original indices (before simplification)
+     * @param vertices The array of vertices in the mesh
+     * @param targetIndexCount The target number of indices we expect
+     * @param targetError The target maximum error
+     * @return The number of actual indices after simplification
+     */
+    u32 C3D_API Simplify(DynamicArray<u32>& destination, const DynamicArray<u32>& indices, const DynamicArray<Vertex>& vertices, u64 targetIndexCount,
+                         f32 targetError);
 
 }  // namespace C3D::MeshUtils

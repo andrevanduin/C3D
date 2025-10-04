@@ -16,7 +16,7 @@
                 "ApplicationName": "C3DEngine Testenv",
                 "FrameAllocatorSize": 16, # Size in MebiBytes
                 "AssetBasePath": "../../../game.testenv/assets",
-                "Meshes": [ "kitten" ]
+                "Meshes": [ "buddha" ]
             }
         },
         {

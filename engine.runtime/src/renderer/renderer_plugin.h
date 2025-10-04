@@ -106,7 +106,7 @@ namespace C3D
          * @param feature The feature you want to query
          * @return True if supported; false otherwise
          */
-        virtual bool SupportsFeature(RendererSupportFlag feature) = 0;
+        virtual bool SupportsFeature(RendererSupportFlag feature) const = 0;
 
     protected:
         RendererPluginType m_type;

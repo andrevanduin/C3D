@@ -14,6 +14,4 @@ namespace C3D
         /** @brief The texture coordinates (u, v) (Halfs to save space). */
         u16 tx, ty;
     };
-
-    constexpr auto jan = sizeof(Vertex);
 }  // namespace C3D

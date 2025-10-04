@@ -806,11 +806,12 @@ namespace C3D
         /** @brief Find the first occurence of the provided char. If no occurence exists end() is returned.
          *
          * @param c Char that you want to look for
+         * @param start The index at which we start searching (default == 0)
          * @return const_iterator to where the first instance of the char can be found.
          */
-        [[nodiscard]] const_iterator Find(const char c) const
+        [[nodiscard]] const_iterator Find(const char c, u64 start = 0) const
         {
-            for (i32 i = 0; i < m_size; i++)
+            for (i32 i = start; i < m_size; i++)
             {
                 if (m_data[i] == c)
                 {

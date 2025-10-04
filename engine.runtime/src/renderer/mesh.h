@@ -10,6 +10,17 @@ namespace C3D
     constexpr auto MESHLET_MAX_VERTICES  = 64;
     constexpr auto MESHLET_MAX_TRIANGLES = 124;
 
+    /** @brief A collection of vertices and indices that together make up a loaded mesh asset. */
+    struct MeshAsset final : IAsset
+    {
+        MeshAsset() : IAsset(AssetType::Mesh) {}
+
+        /** @brief An array containing the vertices in this mesh. */
+        DynamicArray<Vertex> vertices;
+        /** @brief An array containing the indices in this mesh. */
+        DynamicArray<u32> indices;
+    };
+
     struct MeshletBounds
     {
         /* Bounding sphere, useful for frustum and occlusion culling */
@@ -37,27 +48,29 @@ namespace C3D
         /** @brief An index into the MeshletData array where the data for this meshlet starts.
          * The first elements will be the vertex indices. Then at dataOffset + vertexCount the triangle indices are stored */
         u32 dataOffset = 0;
-        /** @brief The number of triangles in this Meshlet. */
-        u8 triangleCount = 0;
         /** @brief The number of vertices in this Meshlet. */
         u8 vertexCount = 0;
+        /** @brief The number of triangles in this Meshlet. */
+        u8 triangleCount = 0;
     };
 
-    /** @brief A collection of vertices and indices that together make up a loaded mesh asset. */
-    struct MeshAsset final : IAsset
+    struct MeshLod
     {
-        MeshAsset() : IAsset(AssetType::Mesh) {}
-
-        /** @brief An array containing the vertices in this mesh. */
-        DynamicArray<Vertex> vertices;
-        /** @brief An array containing the indices in this mesh. */
-        DynamicArray<u32> indices;
+        /** @brief The offset into the index array for this lod. */
+        u32 indexOffset = 0;
+        /** @brief The number of indices in this lod. */
+        u32 indexCount = 0;
+        /** @brief The offset into the meshlet array for this load. */
+        u32 meshletOffset = 0;
+        /** @brief The number of meshlets in this lod. */
+        u32 meshletCount = 0;
     };
 
     struct alignas(16) Mesh
     {
-        /** @brief Bounding sphere used for culling in the compute shader. */
+        /** @brief Bounding sphere center for culling in the compute shader. */
         vec3 center;
+        /** @brief Bounding sphere radius for culling in the compute shader. */
         f32 radius;
 
         /** @brief The offset into the vertex array of the geometry struct for this mesh. */
@@ -65,15 +78,10 @@ namespace C3D
         /** @brief The number of vertices in this mesh. */
         u32 vertexCount = 0;
 
-        /** @brief The offset into the index array of the geometry struct for this mesh. */
-        u32 indexOffset = 0;
-        /** @brief The number of indices in this mesh. */
-        u32 indexCount = 0;
-
-        /** @brief The offset into the meshlet array of the geometry struct for this mesh. */
-        u32 meshletOffset = 0;
-        /** @brief The number of meshlets in this mesh. */
-        u32 meshletCount = 0;
+        /** @brief The number of lods available for this mesh. */
+        u32 lodCount = 0;
+        /** @brief An array of lods for this mesh. */
+        MeshLod lods[8];
     };
 
     struct alignas(16) MeshDraw
