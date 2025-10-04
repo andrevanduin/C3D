@@ -3,6 +3,8 @@
 #include <defines.h>
 #include <volk.h>
 
+#include "string/string.h"
+
 namespace C3D
 {
     struct VulkanContext;
@@ -35,6 +37,8 @@ namespace C3D
         u64 GetSize() const { return m_size; }
 
     private:
+        /** @brief The name of this buffer. Useful for debugging purposes. */
+        String m_name;
         /** @brief A handle to our Vulkan buffer. */
         VkBuffer m_handle = nullptr;
         /** @brief The memory that our Vulkan buffer resides in */

@@ -4,7 +4,6 @@
 #include "cson/cson_types.h"
 #include "math/c3d_math.h"
 #include "mesh.h"
-#include "meshoptimizer.h"
 #include "renderer_plugin.h"
 #include "utils/mesh_utils.h"
 
@@ -104,9 +103,7 @@ namespace C3D
             mesh.center = center;
             mesh.radius = radius;
 
-            std::vector<u32> lodIndices = std::vector<u32>(asset.indices.begin(), asset.indices.end());
-
-            // DynamicArray<u32> lodIndices = asset.indices;
+            DynamicArray<u32> lodIndices = asset.indices;
 
             bool buildMeshlets = m_backendPlugin->SupportsFeature(RENDERER_SUPPORT_FLAG_MESH_SHADING);
 
@@ -115,37 +112,17 @@ namespace C3D
                 MeshLod& lod = mesh.lods[mesh.lodCount++];
 
                 lod.indexOffset = static_cast<u32>(m_geometry.indices.Size());
-                lod.indexCount  = static_cast<u32>(lodIndices.size());
+                lod.indexCount  = static_cast<u32>(lodIndices.Size());
 
-                for (auto index : lodIndices)
-                {
-                    m_geometry.indices.PushBack(index);
-                }
-
-                // m_geometry.indices.Insert(m_geometry.indices.end(), lodIndices.begin(), lodIndices.end());
+                m_geometry.indices.Insert(m_geometry.indices.end(), lodIndices.begin(), lodIndices.end());
 
                 lod.meshletOffset = static_cast<u32>(m_geometry.meshlets.Size());
                 lod.meshletCount  = buildMeshlets ? GenerateMeshlets(lodIndices, asset.vertices) : 0;
 
                 if (mesh.lodCount < ARRAY_SIZE(mesh.lods))
                 {
-                    size_t nextIndicesTarget = size_t(double(lodIndices.size()) * 0.75);
-                    size_t nextIndices       = meshopt_simplify(lodIndices.data(), lodIndices.data(), lodIndices.size(), &asset.vertices[0].pos.x,
-                                                                asset.vertices.Size(), sizeof(Vertex), nextIndicesTarget, 1e-4f);
-                    assert(nextIndices <= lodIndices.size());
-
-                    // we've reached the error bound
-                    if (nextIndices == lodIndices.size()) break;
-
-                    lodIndices.resize(nextIndices);
-                    meshopt_optimizeVertexCache(lodIndices.data(), lodIndices.data(), lodIndices.size(), asset.vertices.Size());
-
-                    /*
                     u64 nextIndicesSizeTarget = static_cast<u64>(static_cast<f64>(lodIndices.Size() * 0.75));
-                    u64 nextIndicesSize =
-                        meshopt_simplify(lodIndices.GetData(), lodIndices.GetData(), lodIndices.Size(), &asset.vertices[0].pos.x, asset.vertices.Size(),
-                                         sizeof(Vertex), nextIndicesSizeTarget,
-                                         1e-4f);  // MeshUtils::Simplify(lodIndices, lodIndices, asset.vertices, nextIndicesSizeTarget, 1e-4f);
+                    u64 nextIndicesSize       = MeshUtils::Simplify(lodIndices, lodIndices, asset.vertices, nextIndicesSizeTarget, 1e-4f);
 
                     if (nextIndicesSize == lodIndices.Size())
                     {
@@ -155,11 +132,8 @@ namespace C3D
 
                     lodIndices.Resize(nextIndicesSize);
                     MeshUtils::OptimizeForVertexCache(lodIndices, lodIndices, mesh.vertexCount);
-                    */
                 }
             }
-
-            // mesh.lodCount = 1;
 
             m_geometry.meshes.PushBack(mesh);
         }
@@ -210,32 +184,26 @@ namespace C3D
 
     void RenderSystem::SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) const { m_backendPlugin->SetScissor(offsetX, offsetY, width, height); }
 
-    u32 RenderSystem::GenerateMeshlets(const std::vector<u32>& indices, const DynamicArray<Vertex>& vertices)
+    u32 RenderSystem::GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<Vertex>& vertices)
     {
         // Determine our upper bound of meshlets
-        u32 maxMeshlets = MeshUtils::DetermineMaxMeshlets(indices.size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
+        u32 maxMeshlets = MeshUtils::DetermineMaxMeshlets(indices.Size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
         // Preallocate enough memory for the maximum number of meshlets
-        DynamicArray<meshopt_Meshlet> meshlets(maxMeshlets);
+        DynamicArray<MeshUtils::Meshlet> meshlets(maxMeshlets);
         // Generate our meshlets
-        u32 numMeshlets =
-            meshopt_buildMeshlets(meshlets.GetData(), indices.data(), indices.size(), vertices.Size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
-        // MeshUtils::GenerateMeshlets(indices, vertices.Size(), meshlets, 0.25f);
+        u32 numMeshlets = MeshUtils::GenerateMeshlets(indices, vertices.Size(), meshlets, 0.25f);
         //  Resize our meshlet array to the actual number of meshlets
         meshlets.Resize(numMeshlets);
 
         for (const auto& meshlet : meshlets)
         {
-            size_t dataOffset = m_geometry.meshletData.Size();
-
-            /*
             Meshlet m       = {};
             m.vertexCount   = meshlet.vertexCount;
             m.triangleCount = meshlet.triangleCount;
             m.dataOffset    = m_geometry.meshletData.Size();
-            */
 
             // Populate the vertex indices
-            for (u32 i = 0; i < meshlet.vertex_count; ++i)
+            for (u32 i = 0; i < meshlet.vertexCount; ++i)
             {
                 m_geometry.meshletData.PushBack(meshlet.vertices[i]);
             }
@@ -243,7 +211,7 @@ namespace C3D
             // Get a pointer to the triangle data as u32
             const u32* triangleData = reinterpret_cast<const u32*>(meshlet.indices);
             // Count the number of indices (triangles * 3) and add 3 to ensure that rounded down we always have enough room
-            u32 packedTriangleCount = (meshlet.triangle_count * 3 + 3) / 4;
+            u32 packedTriangleCount = (meshlet.triangleCount * 3 + 3) / 4;
 
             // Populate the triangle indices
             for (u32 i = 0; i < packedTriangleCount; ++i)
@@ -251,28 +219,15 @@ namespace C3D
                 m_geometry.meshletData.PushBack(triangleData[i]);
             }
 
-            // MeshletBounds bounds = MeshUtils::GenerateMeshletBounds(meshlet, vertices);
-            meshopt_Bounds bounds = meshopt_computeMeshletBounds(&meshlet, &vertices[0].pos.x, vertices.Size(), sizeof(Vertex));
+            MeshletBounds bounds = MeshUtils::GenerateMeshletBounds(meshlet, vertices);
 
-            Meshlet m       = {};
-            m.dataOffset    = uint32_t(dataOffset);
-            m.triangleCount = meshlet.triangle_count;
-            m.vertexCount   = meshlet.vertex_count;
+            m.center = bounds.center;
+            m.radius = bounds.radius;
 
-            m.center      = vec3(bounds.center[0], bounds.center[1], bounds.center[2]);
-            m.radius      = bounds.radius;
-            m.coneAxis[0] = bounds.cone_axis_s8[0];
-            m.coneAxis[1] = bounds.cone_axis_s8[1];
-            m.coneAxis[2] = bounds.cone_axis_s8[2];
-            m.coneCutoff  = bounds.cone_cutoff_s8;
-
-            // m.center = bounds.center;
-            // m.radius = bounds.radius;
-
-            // m.coneAxis[0] = bounds.coneAxisS8[0];
-            // m.coneAxis[1] = bounds.coneAxisS8[1];
-            // m.coneAxis[2] = bounds.coneAxisS8[2];
-            // m.coneCutoff  = bounds.coneCutoffS8;
+            m.coneAxis[0] = bounds.coneAxisS8[0];
+            m.coneAxis[1] = bounds.coneAxisS8[1];
+            m.coneAxis[2] = bounds.coneAxisS8[2];
+            m.coneCutoff  = bounds.coneCutoffS8;
 
             m_geometry.meshlets.PushBack(m);
         }

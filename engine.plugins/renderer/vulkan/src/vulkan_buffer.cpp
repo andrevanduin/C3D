@@ -11,6 +11,7 @@ namespace C3D
         m_context     = context;
         m_size        = size;
         m_memoryFlags = memoryFlags;
+        m_name        = name;
 
         VkBufferCreateInfo createInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
         createInfo.size               = size;
@@ -52,6 +53,12 @@ namespace C3D
         if (m_memoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
         {
             ERROR_LOG("The memory in the '{}' buffer is accessible from the CPU so there is no need to upload. Call CopyInto() instead.");
+            return false;
+        }
+
+        if (size >= m_size)
+        {
+            ERROR_LOG("Tried to upload data of size: {}b to buffer: '{}' which has a of size = {}b.", size, m_name, m_size);
             return false;
         }
 
@@ -126,6 +133,8 @@ namespace C3D
 
         vkDestroyBuffer(device, m_handle, m_context->allocator);
         vkFreeMemory(device, m_memory, m_context->allocator);
+
+        m_name.Destroy();
     }
 
 }  // namespace C3D

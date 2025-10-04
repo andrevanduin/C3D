@@ -1,8 +1,0 @@
-original 									23737.6ms
-efficient face parsing 						20504.4ms
-fs dynamic array to pointer and no reserve  20856.8ms
-no more double parse for array size			11880.1ms
-faster vertex line parsing					10032.4ms
-VArray for everything						9308.82ms
-c-style buffered file reading				757.074ms
-

@@ -121,14 +121,14 @@ namespace C3D
             return false;
         }
 
-        if (!m_drawBuffer.Create(&m_context, "DRAW", MebiBytes(8), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        if (!m_drawBuffer.Create(&m_context, "DRAW", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create draw buffer.");
             return false;
         }
 
-        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", MebiBytes(8), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", MebiBytes(16), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create draw command buffer.");
@@ -859,22 +859,21 @@ namespace C3D
         auto commandBuffer = backend->GetCommandBuffer();
         auto commandPool   = backend->GetCommandPool();
 
-        m_drawCount = 32;
-        // TODO: Remove the need for padding to a number divisble by 32
-        m_drawCount = (m_drawCount + 31) & ~31;
-
+        m_drawCount = 1000000;
         m_draws.Resize(m_drawCount);
 
-        for (u32 i = 0; i < m_drawCount; ++i)
+        f32 sceneRadius  = 300;
+        f32 drawDistance = 200;
+
+        for (auto& draw : m_draws)
         {
             u64 meshIndex    = Random.Generate(static_cast<u64>(0), geometry.meshes.Size() - 1);
             const auto& mesh = geometry.meshes[meshIndex];
-            auto& draw       = m_draws[i];
 
-            draw.position.x = Random.Generate(-10.f, 10.f);
-            draw.position.y = Random.Generate(-10.f, 10.f);
-            draw.position.z = 15.f;
-            draw.scale      = Random.Generate(2.1f, 2.5f);
+            draw.position.x = Random.Generate(-sceneRadius, sceneRadius);
+            draw.position.y = Random.Generate(-sceneRadius, sceneRadius);
+            draw.position.z = Random.Generate(-sceneRadius, sceneRadius);
+            draw.scale      = Random.Generate(2.f, 4.0f);
 
             vec3 axis        = vec3(Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f));
             f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));
