@@ -283,6 +283,24 @@ namespace C3D
                     m_shaderStage = ExecutionModelToShaderStage(SpvExecutionModel(instruction[1]));
                     break;
                 }
+                case SpvOpExecutionMode:
+                {
+                    C3D_ASSERT(wordCount >= 3);
+
+                    u32 mode = instruction[2];
+                    switch (mode)
+                    {
+                        case SpvExecutionModeLocalSize:
+                        {
+                            C3D_ASSERT(wordCount == 6);
+                            m_localSizeX = instruction[3];
+                            m_localSizeY = instruction[4];
+                            m_localSizeZ = instruction[5];
+                            break;
+                        }
+                    }
+                    break;
+                }
                 case SpvOpDecorate:
                 {
                     C3D_ASSERT(wordCount >= 3);

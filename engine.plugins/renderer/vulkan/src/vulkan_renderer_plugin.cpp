@@ -309,7 +309,7 @@ namespace C3D
             m_drawCullShader.PushDescriptorSet(commandBuffer, descriptors);
 
             m_drawCullShader.PushConstants(commandBuffer, &cullData, sizeof(DrawCullData));
-            m_drawCullShader.Dispatch(commandBuffer, static_cast<u32>((m_draws.Size() + 31) / 32));
+            m_drawCullShader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()));
 
             VkBufferMemoryBarrier cullBarrier =
                 VulkanUtils::CreateBufferBarrier(m_drawCommandBuffer.GetHandle(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
@@ -512,24 +512,14 @@ namespace C3D
         f64 trianglesPerSecond = triangleCount / (m_frameGpuAvg * 1e-3);
         f64 drawsPerSecond     = static_cast<f64>(m_drawCount) / (m_frameGpuAvg * 1e-3);
 
-        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) && m_meshShadingEnabled)
-        {
-            titleText.Clear();
-            titleText.Format(
-                "Mesh Shading: ON; Culling: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); triangles {:.1f}M; {:.1f}B tri/sec; {:.1f}M "
-                "draws/sec;",
-                m_cullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, triangleCount * 1e-6,
-                trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
-        }
-        else
-        {
-            titleText.Clear();
-            titleText.Format(
-                "Mesh Shading: OFF; Culling: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); triangles {:.1f}M; {:.1f}B tri/sec; {:.1f}M "
-                "draws/sec;",
-                m_cullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, triangleCount * 1e-6,
-                trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
-        }
+        auto meshShadingEnabledAndSupported = m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) && m_meshShadingEnabled;
+
+        titleText.Clear();
+        titleText.Format(
+            "Mesh Shading: {}; Culling: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); triangles {:.1f}M; {:.1f}B tri/sec; {:.1f}M "
+            "draws/sec;",
+            meshShadingEnabledAndSupported ? "ON" : "OFF", m_cullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg,
+            cullGpuTime, triangleCount * 1e-6, trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
 
         Platform::SetWindowTitle(window, titleText);
 

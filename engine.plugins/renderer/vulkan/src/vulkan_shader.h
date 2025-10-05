@@ -71,8 +71,6 @@ namespace C3D
         void Destroy();
 
     private:
-        bool LoadShaderModule(const char* name, VkShaderModule& module);
-
         bool CreateSetLayout();
         bool CreatePipelineLayout(u64 pushConstantsSize);
         bool CreateGraphicsPipeline(VkPipelineCache pipelineCache, VulkanSwapchain& swapchain);
@@ -84,6 +82,8 @@ namespace C3D
         String m_name;
         /** @brief The bind point used by this Shader. */
         VkPipelineBindPoint m_bindPoint;
+        /** @brief The local size x of the shader module. Used in Dispatch calls to calculate number of dispatches. */
+        u32 m_localSizeX = 0;
         /** @brief An array of VulkanShaderModules used by this Shader. */
         DynamicArray<const VulkanShaderModule*> m_shaderModules;
         /** @brief A handle to the set layout used by this Shader. */

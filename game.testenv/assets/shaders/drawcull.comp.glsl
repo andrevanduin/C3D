@@ -36,16 +36,15 @@ layout (binding = 3) buffer DrawCommandCount
 
 void main()
 {
-    uint ti = gl_LocalInvocationID.x;
-    uint gi = gl_WorkGroupID.x;
-    uint di = gi * 32 + ti;
+    uint di = gl_GlobalInvocationID.x;
 
     if (di >= drawCount)
     {
         return;
     }
 
-    Mesh mesh = meshes[draws[di].meshIndex];
+    uint meshIndex = draws[di].meshIndex;
+    Mesh mesh = meshes[meshIndex];
 
     vec3 center = mesh.center * draws[di].scale + draws[di].position;
     float radius = mesh.radius * draws[di].scale;
@@ -63,7 +62,7 @@ void main()
         float lodDistance = log2(max(1, (distance(center, vec3(0)) - radius)));
         uint lodIndex = lodEnabled == 1 ? clamp(int(lodDistance), 0, int(mesh.lodCount) - 1) : 0;
 
-        MeshLod lod = mesh.lods[lodIndex];
+        MeshLod lod = meshes[meshIndex].lods[lodIndex];
 
         drawCommands[dci].drawId = di;
         drawCommands[dci].indexCount = lod.indexCount;

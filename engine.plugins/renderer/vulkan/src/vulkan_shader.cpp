@@ -83,7 +83,11 @@ namespace C3D
 
     void VulkanShader::Bind(VkCommandBuffer commandBuffer) const { vkCmdBindPipeline(commandBuffer, m_bindPoint, m_pipeline); }
 
-    void VulkanShader::Dispatch(VkCommandBuffer commandBuffer, u32 count) const { vkCmdDispatch(commandBuffer, count, 1, 1); }
+    void VulkanShader::Dispatch(VkCommandBuffer commandBuffer, u32 count) const
+    {
+        const auto dispatchCount = (count + m_localSizeX - 1) / m_localSizeX;
+        vkCmdDispatch(commandBuffer, dispatchCount, 1, 1);
+    }
 
     void VulkanShader::PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const
     {
@@ -302,6 +306,8 @@ namespace C3D
 
         createInfo.stage  = stageInfo;
         createInfo.layout = m_layout;
+
+        m_localSizeX = m_shaderModules[0]->GetLocalSizeX();
 
         auto result = vkCreateComputePipelines(m_context->device.GetLogical(), pipelineCache, 1, &createInfo, m_context->allocator, &m_pipeline);
         if (!VulkanUtils::IsSuccess(result))
