@@ -249,6 +249,24 @@ namespace C3D
         return result;
     }
 
+    VkQueryPool VulkanUtils::CreateQueryPool(VulkanContext& context, u32 queryCount, VkQueryType queryType)
+    {
+        VkQueryPoolCreateInfo createInfo = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
+        createInfo.queryType             = VK_QUERY_TYPE_TIMESTAMP;
+        createInfo.queryCount            = queryCount;
+        createInfo.queryType             = queryType;
+
+        if (queryType == VK_QUERY_TYPE_PIPELINE_STATISTICS)
+        {
+            createInfo.pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT;
+        }
+
+        VkQueryPool queryPool = 0;
+        VK_CHECK(vkCreateQueryPool(context.device.GetLogical(), &createInfo, context.allocator, &queryPool));
+
+        return queryPool;
+    }
+
 #if defined(_DEBUG)
     const char* VulkanUtils::VkMessageTypeToString(const VkDebugUtilsMessageTypeFlagsEXT s)
     {

@@ -39,6 +39,16 @@ namespace C3D
 
         VkBufferMemoryBarrier CreateBufferBarrier(VkBuffer buffer, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask);
 
+        /**
+         * @brief Creates a Vulkan query pool
+         *
+         * @param context The vulkan context
+         * @param queryCount The number of queries managed by the pool
+         * @param queryType The type of queries the pool will manage
+         * @return a VkQueryPool
+         */
+        VkQueryPool CreateQueryPool(VulkanContext& context, u32 queryCount, VkQueryType queryType);
+
         /** @brief Helper method to enable easier loading of vulkan extension functions. */
         template <typename T>
         T LoadExtensionFunction(VkInstance instance, const char* name)

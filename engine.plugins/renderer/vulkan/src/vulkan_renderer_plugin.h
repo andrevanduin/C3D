@@ -61,11 +61,12 @@ namespace C3D
 
         DynamicArray<MeshDraw> m_draws;
 
-        VkQueryPool m_queryPool;
+        VkQueryPool m_queryPoolTimestamps;
+        VkQueryPool m_queryPoolStatistics;
 
         f64 m_frameCpuAvg = 0, m_frameGpuAvg = 0, m_frameCpuBegin = 0;
 
-        u32 m_drawCount = 0, m_triangleCount = 0;
+        u32 m_drawCount = 0;
 
         VulkanBuffer m_vertexBuffer;
         VulkanBuffer m_indexBuffer;

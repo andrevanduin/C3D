@@ -53,8 +53,9 @@ namespace C3D
         createInfo.ppEnabledExtensionNames = requiredExtensions.GetData();
 
         // Fill in all the structures for our extensions
-        VkPhysicalDeviceFeatures2 deviceFeatures2  = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
-        deviceFeatures2.features.multiDrawIndirect = VK_TRUE;
+        VkPhysicalDeviceFeatures2 deviceFeatures2        = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+        deviceFeatures2.features.multiDrawIndirect       = VK_TRUE;
+        deviceFeatures2.features.pipelineStatisticsQuery = VK_TRUE;
 
         createInfo.pNext = &deviceFeatures2;
 

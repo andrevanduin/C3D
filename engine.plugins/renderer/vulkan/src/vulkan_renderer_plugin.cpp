@@ -24,18 +24,6 @@
 
 namespace C3D
 {
-    VkQueryPool CreateQueryPool(VulkanContext& context, u32 queryCount)
-    {
-        VkQueryPoolCreateInfo createInfo = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
-        createInfo.queryType             = VK_QUERY_TYPE_TIMESTAMP;
-        createInfo.queryCount            = queryCount;
-
-        VkQueryPool queryPool = 0;
-        VK_CHECK(vkCreateQueryPool(context.device.GetLogical(), &createInfo, context.allocator, &queryPool));
-
-        return queryPool;
-    }
-
     bool VulkanRendererPlugin::OnInit(const RendererPluginConfig& config)
     {
         // Our backend is implemented in Vulkan
@@ -89,8 +77,10 @@ namespace C3D
             return false;
         }
 
-        // Create our query pool
-        m_queryPool = CreateQueryPool(m_context, 128);
+        // Create our query pool for timestamps
+        m_queryPoolTimestamps = VulkanUtils::CreateQueryPool(m_context, 128, VK_QUERY_TYPE_TIMESTAMP);
+        // And for pipeline statistics
+        m_queryPoolStatistics = VulkanUtils::CreateQueryPool(m_context, 1, VK_QUERY_TYPE_PIPELINE_STATISTICS);
 
         // Create our buffers
         if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(64), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -128,7 +118,7 @@ namespace C3D
             return false;
         }
 
-        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", MebiBytes(16), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", MebiBytes(64), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create draw command buffer.");
@@ -216,8 +206,9 @@ namespace C3D
 
         m_context.stagingBuffer.Destroy();
 
-        INFO_LOG("Destroying Query pool");
-        vkDestroyQueryPool(m_context.device.GetLogical(), m_queryPool, m_context.allocator);
+        INFO_LOG("Destroying Query pools");
+        vkDestroyQueryPool(m_context.device.GetLogical(), m_queryPoolTimestamps, m_context.allocator);
+        vkDestroyQueryPool(m_context.device.GetLogical(), m_queryPoolStatistics, m_context.allocator);
 
         m_context.device.Destroy();
 
@@ -273,15 +264,18 @@ namespace C3D
 
         m_frameCpuBegin = Platform::GetAbsoluteTime() * 1000;
 
-        vkCmdResetQueryPool(commandBuffer, m_queryPool, 0, 128);
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 0);
+        vkCmdResetQueryPool(commandBuffer, m_queryPoolTimestamps, 0, 128);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 0);
+
+        vkCmdResetQueryPool(commandBuffer, m_queryPoolStatistics, 0, 1);
+        vkCmdBeginQuery(commandBuffer, m_queryPoolStatistics, 0, 0);
 
         auto projection  = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), 0.01f);
         f32 drawDistance = 100;
 
         // Bind, push our descriptors and then dispatch our compute shader
         {
-            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 2);
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 2);
 
             glm::mat4 projectionT = glm::transpose(projection);
 
@@ -323,7 +317,7 @@ namespace C3D
             vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1, &cullBarrier, 0,
                                  nullptr);
 
-            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 3);
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 3);
         }
 
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
@@ -435,7 +429,10 @@ namespace C3D
                              &presentBarrier);
 
         // Keep track of the renderer End() timestamp
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPool, 1);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 1);
+
+        // End our query for pipeline statistics
+        vkCmdEndQuery(commandBuffer, m_queryPoolStatistics, 0);
 
         // Finally we end our command buffer
         auto result = vkEndCommandBuffer(commandBuffer);
@@ -492,37 +489,46 @@ namespace C3D
         VK_CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX));
         VK_CHECK(vkResetFences(device, 1, &fence));
 
-        u64 queryResults[4];
-        VK_CHECK(vkGetQueryPoolResults(device, m_queryPool, 0, ARRAY_SIZE(queryResults), sizeof(queryResults), queryResults, sizeof(queryResults[0]),
-                                       VK_QUERY_RESULT_64_BIT));
+        u64 timestampResults[4] = {};
+        VK_CHECK(vkGetQueryPoolResults(device, m_queryPoolTimestamps, 0, ARRAY_SIZE(timestampResults), sizeof(timestampResults), timestampResults,
+                                       sizeof(timestampResults[0]), VK_QUERY_RESULT_64_BIT));
+
+        u32 statResults[1] = {};
+        VK_CHECK(vkGetQueryPoolResults(device, m_queryPoolStatistics, 0, 1, sizeof(statResults), statResults, sizeof(statResults[0]), 0));
 
         auto props = m_context.device.GetProperties();
 
-        f64 frameGpuBegin = static_cast<f64>(queryResults[0]) * props.limits.timestampPeriod * 1e-6;
-        f64 frameGpuEnd   = static_cast<f64>(queryResults[1]) * props.limits.timestampPeriod * 1e-6;
-        f64 cullGpuTime   = static_cast<f64>(queryResults[3] - queryResults[2]) * props.limits.timestampPeriod * 1e-6;
+        f64 frameGpuBegin = static_cast<f64>(timestampResults[0]) * props.limits.timestampPeriod * 1e-6;
+        f64 frameGpuEnd   = static_cast<f64>(timestampResults[1]) * props.limits.timestampPeriod * 1e-6;
+        f64 cullGpuTime   = static_cast<f64>(timestampResults[3] - timestampResults[2]) * props.limits.timestampPeriod * 1e-6;
 
         f64 frameCpuEnd = Platform::GetAbsoluteTime() * 1000;
 
         m_frameCpuAvg = m_frameCpuAvg * 0.95 + (frameCpuEnd - m_frameCpuBegin) * 0.05;
         m_frameGpuAvg = m_frameGpuAvg * 0.95 + (frameGpuEnd - frameGpuBegin) * 0.05;
 
-        f64 trianglesPerSecond = static_cast<f64>(m_triangleCount) / (m_frameGpuAvg * 1e-3);
+        f64 triangleCount = static_cast<f64>(statResults[0]);
+
+        f64 trianglesPerSecond = triangleCount / (m_frameGpuAvg * 1e-3);
         f64 drawsPerSecond     = static_cast<f64>(m_drawCount) / (m_frameGpuAvg * 1e-3);
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) && m_meshShadingEnabled)
         {
             titleText.Clear();
-            titleText.Format("Mesh Shading: ON; Culling: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); {:.1f}B tri/sec; {:.1f}M draws/sec;",
-                             m_cullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, trianglesPerSecond * 1e-9,
-                             drawsPerSecond * 1e-6);
+            titleText.Format(
+                "Mesh Shading: ON; Culling: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); triangles {:.1f}M; {:.1f}B tri/sec; {:.1f}M "
+                "draws/sec;",
+                m_cullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, triangleCount * 1e-6,
+                trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
         }
         else
         {
             titleText.Clear();
-            titleText.Format("Mesh Shading: OFF; Culling: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); {:.1f}B tri/sec; {:.1f}M draws/sec;",
-                             m_cullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, trianglesPerSecond * 1e-9,
-                             drawsPerSecond * 1e-6);
+            titleText.Format(
+                "Mesh Shading: OFF; Culling: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms); triangles {:.1f}M; {:.1f}B tri/sec; {:.1f}M "
+                "draws/sec;",
+                m_cullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, triangleCount * 1e-6,
+                trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
         }
 
         Platform::SetWindowTitle(window, titleText);
@@ -881,8 +887,6 @@ namespace C3D
 
             draw.meshIndex    = static_cast<u32>(meshIndex);
             draw.vertexOffset = mesh.vertexOffset;
-
-            m_triangleCount += mesh.lods[0].indexCount / 3;
         }
 
         return m_drawBuffer.Upload(commandBuffer, commandPool, m_draws.GetData(), sizeof(MeshDraw) * m_draws.Size());
