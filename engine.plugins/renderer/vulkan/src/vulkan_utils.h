@@ -26,7 +26,7 @@ namespace C3D
         /**
          * @brief Creates an image barrier structure.
          *
-         * @param image A hanlde to the Vulkan image
+         * @param image A handle to the Vulkan image
          * @param srcAccessMask The
          * @param dstAccessMask
          * @param oldLayout
@@ -45,9 +45,44 @@ namespace C3D
          * @param context The vulkan context
          * @param queryCount The number of queries managed by the pool
          * @param queryType The type of queries the pool will manage
-         * @return a VkQueryPool
+         * @return a VkQueryPool if successful; nullptr otherwise
          */
         VkQueryPool CreateQueryPool(VulkanContext& context, u32 queryCount, VkQueryType queryType);
+
+        /**
+         * @brief Creates a Vulkan image
+         *
+         * @param context A pointer to the vulkan context
+         * @param width The width of the image
+         * @param height The height of the image
+         * @param format The format of the image
+         * @param mipLevels The number of mips in the image
+         * @param usage The usage flags for this image
+         * @return A VkImage if successful; nullptr otherwise
+         */
+        VkImage CreateImage(VulkanContext* context, u32 width, u32 height, VkFormat format, u32 mipLevels, VkImageUsageFlags usage);
+
+        /**
+         * @brief Creates a Vulkan image View
+         *
+         * @param context A pointer to the vulkan context
+         * @param image A handle to the vulkan image
+         * @param format The format of the vulkan image
+         * @param aspectMask An aspect mask for the view
+         * @param mipLevel The mip level for thie view
+         * @param levelCount The number of levels in this view
+         * @return a VkImageView if successful; nullptr otherwise
+         */
+        VkImageView CreateImageView(VulkanContext* context, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel, u32 levelCount);
+
+        /**
+         * @brief Calculates the number of mip levels required for an image of given width and height.
+         *
+         * @param width The width of the image
+         * @param height The height of the image
+         * @return The number of mips required
+         */
+        u32 CalculateImageMiplevels(u32 width, u32 height);
 
         /** @brief Helper method to enable easier loading of vulkan extension functions. */
         template <typename T>

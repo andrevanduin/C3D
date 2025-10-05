@@ -235,6 +235,62 @@ namespace C3D
         return mat4(f / aspect, 0.0f, 0.0f, 0.0f, 0.0f, f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, zNear, 0.0f);
     }
 
+    void VulkanRendererPlugin::BeginRendering(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
+                                              const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height)
+    {
+        VkRenderingAttachmentInfo colorAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+        colorAttachmentInfo.imageView                 = colorView;
+        colorAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        colorAttachmentInfo.loadOp                    = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachmentInfo.storeOp                   = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachmentInfo.clearValue.color          = clearColor;
+
+        VkRenderingAttachmentInfo depthAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+        depthAttachmentInfo.clearValue.depthStencil   = clearDepthStencil;
+        depthAttachmentInfo.imageView                 = depthView;
+        depthAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        depthAttachmentInfo.loadOp                    = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachmentInfo.storeOp                   = VK_ATTACHMENT_STORE_OP_STORE;
+
+        VkRenderingInfo renderInfo      = { VK_STRUCTURE_TYPE_RENDERING_INFO };
+        renderInfo.colorAttachmentCount = 1;
+        renderInfo.pColorAttachments    = &colorAttachmentInfo;
+        renderInfo.pDepthAttachment     = &depthAttachmentInfo;
+        renderInfo.layerCount           = 1;
+        renderInfo.renderArea.offset    = { 0, 0 };
+        renderInfo.renderArea.extent    = { width, height };
+
+        vkCmdBeginRendering(commandBuffer, &renderInfo);
+    }
+
+    void VulkanRendererPlugin::BeginRenderingLate(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView,
+                                                  const VkClearColorValue& clearColor, const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height)
+    {
+        VkRenderingAttachmentInfo colorAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+        colorAttachmentInfo.imageView                 = colorView;
+        colorAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        colorAttachmentInfo.loadOp                    = VK_ATTACHMENT_LOAD_OP_LOAD;
+        colorAttachmentInfo.storeOp                   = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachmentInfo.clearValue.color          = clearColor;
+
+        VkRenderingAttachmentInfo depthAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+        depthAttachmentInfo.clearValue.depthStencil   = clearDepthStencil;
+        depthAttachmentInfo.imageView                 = depthView;
+        depthAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        depthAttachmentInfo.loadOp                    = VK_ATTACHMENT_LOAD_OP_LOAD;
+        depthAttachmentInfo.storeOp                   = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+        VkRenderingInfo renderInfo      = { VK_STRUCTURE_TYPE_RENDERING_INFO };
+        renderInfo.colorAttachmentCount = 1;
+        renderInfo.pColorAttachments    = &colorAttachmentInfo;
+        renderInfo.pDepthAttachment     = &depthAttachmentInfo;
+        renderInfo.layerCount           = 1;
+        renderInfo.renderArea.offset    = { 0, 0 };
+        renderInfo.renderArea.extent    = { width, height };
+
+        vkCmdBeginRendering(commandBuffer, &renderInfo);
+    }
+
     bool VulkanRendererPlugin::Begin(Window& window)
     {
         constexpr VkClearColorValue clearColor               = { 30.f / 255.f, 54.f / 255.f, 42.f / 255.f, 1 };
@@ -262,12 +318,16 @@ namespace C3D
 
         VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
+        // Keep track of the cpu time at which we start Begin()
         m_frameCpuBegin = Platform::GetAbsoluteTime() * 1000;
 
+        // Reset our pools
         vkCmdResetQueryPool(commandBuffer, m_queryPoolTimestamps, 0, 128);
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 0);
-
         vkCmdResetQueryPool(commandBuffer, m_queryPoolStatistics, 0, 1);
+
+        // Write the start (top of pipeline) timestamp
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 0);
+        // Begin quering our pipeline statistics
         vkCmdBeginQuery(commandBuffer, m_queryPoolStatistics, 0, 0);
 
         auto projection  = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), 0.01f);
@@ -309,7 +369,7 @@ namespace C3D
             m_drawCullShader.PushDescriptorSet(commandBuffer, descriptors);
 
             m_drawCullShader.PushConstants(commandBuffer, &cullData, sizeof(DrawCullData));
-            m_drawCullShader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()));
+            m_drawCullShader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()), 1, 1);
 
             VkBufferMemoryBarrier cullBarrier =
                 VulkanUtils::CreateBufferBarrier(m_drawCommandBuffer.GetHandle(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
@@ -319,8 +379,6 @@ namespace C3D
 
             vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 3);
         }
-
-        auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
 
         // Our color and depth target need to be in ATTACHMENT OPTIMAL layout before we can start rendering
         VkImageMemoryBarrier renderBeginBarriers[] = {
@@ -332,67 +390,87 @@ namespace C3D
                              VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0,
                              0, ARRAY_SIZE(renderBeginBarriers), renderBeginBarriers);
 
-        VkRenderingAttachmentInfo colorAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-        colorAttachmentInfo.imageView                 = backendState->colorTarget.GetView();
-        colorAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        colorAttachmentInfo.loadOp                    = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachmentInfo.storeOp                   = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachmentInfo.clearValue.color          = clearColor;
-
-        VkRenderingAttachmentInfo depthAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-        depthAttachmentInfo.clearValue.depthStencil   = clearDepthStencil;
-        depthAttachmentInfo.imageView                 = backendState->depthTarget.GetView();
-        depthAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        depthAttachmentInfo.loadOp                    = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachmentInfo.storeOp                   = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-        VkRenderingInfo renderInfo      = { VK_STRUCTURE_TYPE_RENDERING_INFO };
-        renderInfo.colorAttachmentCount = 1;
-        renderInfo.pColorAttachments    = &colorAttachmentInfo;
-        renderInfo.pDepthAttachment     = &depthAttachmentInfo;
-        renderInfo.layerCount           = 1;
-        renderInfo.renderArea.offset    = { 0, 0 };
-        renderInfo.renderArea.extent    = { window.width, window.height };
-
-        vkCmdBeginRendering(commandBuffer, &renderInfo);
-
         // First commands are to set the viewport and scissor
         vkCmdSetViewport(commandBuffer, 0, 1, &m_viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &m_scissor);
 
-        // TODO: move the actual rendering somewhere else
+        // Begin rendering our first pass (dynamic rendering so we don't need a renderpass)
+        BeginRendering(commandBuffer, backendState->colorTarget.GetView(), backendState->depthTarget.GetView(), clearColor, clearDepthStencil, window.width,
+                       window.height);
+
+        Globals globals    = {};
+        globals.projection = projection;
+
+        if (m_meshShadingEnabled)
         {
-            Globals globals    = {};
-            globals.projection = projection;
+            m_meshletShader.Bind(commandBuffer);
 
-            if (m_meshShadingEnabled)
-            {
-                m_meshletShader.Bind(commandBuffer);
+            DescriptorInfo descriptors[] = {
+                m_drawCommandBuffer.GetHandle(), m_drawBuffer.GetHandle(),   m_meshletBuffer.GetHandle(),
+                m_meshletDataBuffer.GetHandle(), m_vertexBuffer.GetHandle(),
+            };
+            m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
+            m_meshletShader.PushConstants(commandBuffer, &globals, sizeof(globals));
 
-                DescriptorInfo descriptors[] = {
-                    m_drawCommandBuffer.GetHandle(), m_drawBuffer.GetHandle(),   m_meshletBuffer.GetHandle(),
-                    m_meshletDataBuffer.GetHandle(), m_vertexBuffer.GetHandle(),
-                };
-                m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
-                m_meshletShader.PushConstants(commandBuffer, &globals, sizeof(globals));
-
-                vkCmdDrawMeshTasksIndirectCountEXT(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirectMS),
-                                                   m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
-            }
-            else
-            {
-                m_meshShader.Bind(commandBuffer);
-
-                DescriptorInfo descriptors[] = { m_drawCommandBuffer.GetHandle(), m_drawBuffer.GetHandle(), m_vertexBuffer.GetHandle() };
-                m_meshShader.PushDescriptorSet(commandBuffer, descriptors);
-
-                vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
-
-                m_meshShader.PushConstants(commandBuffer, &globals, sizeof(globals));
-                vkCmdDrawIndexedIndirectCountKHR(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect),
-                                                 m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
-            }
+            vkCmdDrawMeshTasksIndirectCountEXT(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirectMS),
+                                               m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
         }
+        else
+        {
+            m_meshShader.Bind(commandBuffer);
+
+            DescriptorInfo descriptors[] = { m_drawCommandBuffer.GetHandle(), m_drawBuffer.GetHandle(), m_vertexBuffer.GetHandle() };
+            m_meshShader.PushDescriptorSet(commandBuffer, descriptors);
+
+            vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
+
+            m_meshShader.PushConstants(commandBuffer, &globals, sizeof(globals));
+            vkCmdDrawIndexedIndirectCountKHR(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect),
+                                             m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
+        }
+
+        // End our rendering
+        vkCmdEndRendering(commandBuffer);
+
+        // Wait for all depth data to be written to the depth target before we start reading
+        VkImageMemoryBarrier depthReadBarriers[] = {
+            backendState->depthTarget.CreateBarrier(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+            backendState->depthPyramid.CreateBarrier(0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL),
+        };
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0,
+                             0, 0, ARRAY_SIZE(depthReadBarriers), depthReadBarriers);
+
+        // Bind our depth reduce shader
+        m_depthReduceShader.Bind(commandBuffer);
+
+        // Build our depth pyramid
+        const auto& mips = backendState->depthPyramid.GetMips();
+        for (u32 i = 0; i < mips.Size(); ++i)
+        {
+            DescriptorInfo descriptors[] = { { mips[i], VK_IMAGE_LAYOUT_GENERAL } };
+            m_depthReduceShader.PushDescriptorSet(commandBuffer, descriptors);
+
+            u32 levelWidth  = std::max(1, (window.width / 2) >> i);
+            u32 levelHeight = std::max(1, (window.height / 2) >> i);
+
+            m_depthReduceShader.Dispatch(commandBuffer, levelWidth, levelHeight, 1);
+        }
+
+        // Wait for the depth target to be writable again
+        VkImageMemoryBarrier depthWriteBarrier = backendState->depthTarget.CreateBarrier(
+            VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0,
+                             0, 0, 1, &depthWriteBarrier);
+
+        // Begin rendering of the late pass (dynamic rendering so we don't need a renderpass)
+        BeginRenderingLate(commandBuffer, backendState->colorTarget.GetView(), backendState->depthTarget.GetView(), clearColor, clearDepthStencil, window.width,
+                           window.height);
+
+        vkCmdEndRendering(commandBuffer);
 
         return true;
     }
@@ -402,9 +480,6 @@ namespace C3D
         auto backendState   = window.rendererState->backendState;
         auto commandBuffer  = backendState->GetCommandBuffer();
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
-
-        // End our rendering
-        vkCmdEndRendering(commandBuffer);
 
         // Setup some copy barriers
         VkImageMemoryBarrier copyBarriers[] = {
@@ -567,11 +642,25 @@ namespace C3D
 
         createInfo.name   = "DEPTH_TARGET";
         createInfo.format = VK_FORMAT_D32_SFLOAT;
-        createInfo.usage  = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        createInfo.usage  = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
         if (!backend->depthTarget.Create(createInfo))
         {
             ERROR_LOG("Failed to create Depth target for window: '{}'.", window.name);
+            return false;
+        }
+
+        // Create the depth pyramid for this window
+        createInfo.name      = "DEPTH_PYRAMID";
+        createInfo.width     = window.width / 2;
+        createInfo.height    = window.height / 2;
+        createInfo.format    = VK_FORMAT_R32_SFLOAT;
+        createInfo.usage     = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+        createInfo.mipLevels = VulkanUtils::CalculateImageMiplevels(window.width / 2, window.height / 2);
+
+        if (!backend->depthPyramid.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create Depth pyramid for window: '{}'.", window.name);
             return false;
         }
 
@@ -638,6 +727,12 @@ namespace C3D
                 return false;
             }
 
+            if (!m_depthReduceShaderModule.Create(&m_context, "depth_reduce.comp"))
+            {
+                ERROR_LOG("Failed to create ShaderModule");
+                return false;
+            }
+
             if (!m_meshShaderModule.Create(&m_context, "mesh.vert"))
             {
                 ERROR_LOG("Failed to create ShaderModule.");
@@ -652,7 +747,7 @@ namespace C3D
 
             VulkanShaderCreateInfo createInfo;
             createInfo.context           = &m_context;
-            createInfo.name              = "DRAW_COMMAND_SHADER";
+            createInfo.name              = "DRAW_CULL_SHADER";
             createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_COMPUTE;
             createInfo.pushConstantsSize = sizeof(DrawCullData);
             createInfo.cache             = VK_NULL_HANDLE;
@@ -661,7 +756,17 @@ namespace C3D
 
             if (!m_drawCullShader.Create(createInfo))
             {
-                ERROR_LOG("Failed to create DrawCommandShader.");
+                ERROR_LOG("Failed to create DrawCull shader.");
+                return false;
+            }
+
+            createInfo.name              = "DEPTH_REDUCE_SHADER";
+            createInfo.pushConstantsSize = 0;
+            createInfo.modules           = { &m_depthReduceShaderModule };
+
+            if (!m_depthReduceShader.Create(createInfo))
+            {
+                ERROR_LOG("Failed to create DepthReduce shader.");
                 return false;
             }
 
@@ -672,7 +777,7 @@ namespace C3D
 
             if (!m_meshShader.Create(createInfo))
             {
-                ERROR_LOG("Failed to create MeshShader.");
+                ERROR_LOG("Failed to create Mesh shader.");
                 return false;
             }
 
@@ -696,7 +801,7 @@ namespace C3D
 
                 if (!m_meshletShader.Create(createInfo))
                 {
-                    ERROR_LOG("Failed to create MeshletShader.");
+                    ERROR_LOG("Failed to create Meshlet shader.");
                     return false;
                 }
             }
@@ -723,6 +828,12 @@ namespace C3D
             if (!backend->depthTarget.Resize(window.width, window.height))
             {
                 ERROR_LOG("Failed to resize Depth target.");
+                return false;
+            }
+
+            if (!backend->depthPyramid.Resize(window.width / 2, window.height / 2, VulkanUtils::CalculateImageMiplevels(window.width / 2, window.height / 2)))
+            {
+                ERROR_LOG("Failed to resize Depth pyramid.");
                 return false;
             }
 
@@ -753,6 +864,9 @@ namespace C3D
 
                 m_drawCullShader.Destroy();
                 m_drawCullShaderModule.Destroy();
+
+                m_depthReduceShader.Destroy();
+                m_depthReduceShaderModule.Destroy();
 
                 if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
                 {
@@ -789,6 +903,8 @@ namespace C3D
             // Destroy the color and depth target
             backend->colorTarget.Destroy();
             backend->depthTarget.Destroy();
+            // Also destroy our depth pyramid
+            backend->depthPyramid.Destroy();
 
             // Destroy the swapchain
             backend->swapchain.Destroy();
@@ -855,7 +971,7 @@ namespace C3D
         auto commandBuffer = backend->GetCommandBuffer();
         auto commandPool   = backend->GetCommandPool();
 
-        m_drawCount = 1000000;
+        m_drawCount = 100000;
         m_draws.Resize(m_drawCount);
 
         f32 sceneRadius  = 300;

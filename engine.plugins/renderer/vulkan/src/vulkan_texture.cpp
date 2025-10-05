@@ -27,6 +27,7 @@ namespace C3D
         m_format     = createInfo.format;
         m_usage      = createInfo.usage;
         m_aspectMask = FormatToAspectMask(createInfo.format);
+        m_mipLevels  = createInfo.mipLevels;
 
         INFO_LOG("Creating: '{}'", m_name);
 
@@ -39,9 +40,13 @@ namespace C3D
         return CreateInternal(createInfo.width, createInfo.height);
     }
 
-    bool VulkanTexture::Resize(u32 width, u32 height)
+    bool VulkanTexture::Resize(u32 width, u32 height, u32 mips)
     {
-        INFO_LOG("Resizing: '{}'.", m_name);
+        if (m_width == width && m_height == height) return true;
+
+        INFO_LOG("Resizing: '{}' from: {}x{} mips: {} to: {}x{} mips: {}.", m_name, m_width, m_height, m_mipLevels, width, height, mips);
+
+        m_mipLevels = mips;
 
         if (m_image)
         {
@@ -83,7 +88,9 @@ namespace C3D
         m_width  = width;
         m_height = height;
 
-        if (!CreateImage())
+        // Create the image
+        m_image = VulkanUtils::CreateImage(m_context, m_width, m_height, m_format, m_mipLevels, m_usage);
+        if (!m_image)
         {
             ERROR_LOG("Failed to create VulkanTexture: '{}'.", m_name);
             return false;
@@ -95,55 +102,27 @@ namespace C3D
             return false;
         }
 
-        if (!CreateImageView())
+        // Create an image view at miplevel 0 (first one) with m_mipLevels levels
+        m_imageView = VulkanUtils::CreateImageView(m_context, m_image, m_format, m_aspectMask, 0, m_mipLevels);
+        if (!m_imageView)
         {
             ERROR_LOG("Failed to create VulkanTexture: '{}'.", m_name);
             return false;
         }
 
-        return true;
-    }
-
-    bool VulkanTexture::CreateImage()
-    {
-        VkImageCreateInfo createInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
-
-        // TODO: Quite some assumptions here for now
-        createInfo.imageType     = VK_IMAGE_TYPE_2D;
-        createInfo.format        = m_format;
-        createInfo.extent        = { m_width, m_height, 1 };
-        createInfo.mipLevels     = 1;
-        createInfo.arrayLayers   = 1;
-        createInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
-        createInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-        createInfo.usage         = m_usage;
-        createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-        auto result = vkCreateImage(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_image);
-        if (!VulkanUtils::IsSuccess(result))
+        // Create an image view for every individual mip level if we have more than a single mip
+        if (m_mipLevels > 1)
         {
-            ERROR_LOG("vkCreateImage failed with error: '{}'.", VulkanUtils::ResultString(result));
-            return false;
-        }
-
-        return true;
-    }
-
-    bool VulkanTexture::CreateImageView()
-    {
-        VkImageViewCreateInfo createInfo       = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        createInfo.image                       = m_image;
-        createInfo.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
-        createInfo.format                      = m_format;
-        createInfo.subresourceRange.aspectMask = m_aspectMask;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.layerCount = 1;
-
-        auto result = vkCreateImageView(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_imageView);
-        if (!VulkanUtils::IsSuccess(result))
-        {
-            ERROR_LOG("Failed to create Image view with error: '{}'.", VulkanUtils::ResultString(result));
-            return false;
+            for (u32 i = 0; i < m_mipLevels; ++i)
+            {
+                auto mipView = VulkanUtils::CreateImageView(m_context, m_image, m_format, m_aspectMask, i, 1);
+                if (!mipView)
+                {
+                    ERROR_LOG("Failed to create VulkanTexture: '{}'.", m_name);
+                    return false;
+                }
+                m_mipViews.EmplaceBack(mipView);
+            }
         }
 
         return true;
@@ -194,6 +173,15 @@ namespace C3D
         {
             vkDestroyImageView(device, m_imageView, m_context->allocator);
             m_imageView = nullptr;
+        }
+
+        if (!m_mipViews.Empty())
+        {
+            for (auto view : m_mipViews)
+            {
+                vkDestroyImageView(device, view, m_context->allocator);
+            }
+            m_mipViews.Destroy();
         }
 
         if (m_image)

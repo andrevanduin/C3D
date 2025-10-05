@@ -55,6 +55,8 @@ namespace C3D
         VulkanTexture colorTarget;
         /** @brief The depth target of our window. */
         VulkanTexture depthTarget;
+        /** @brief The depth pyramid of our window. */
+        VulkanTexture depthPyramid;
 
         VkSemaphore GetAcquireSemaphore() const { return acquireSemaphores[frameIndex % MAX_FRAMES]; }
         VkSemaphore GetPresentSemaphore() const { return presentSemaphores[imageIndex]; }

@@ -83,10 +83,12 @@ namespace C3D
 
     void VulkanShader::Bind(VkCommandBuffer commandBuffer) const { vkCmdBindPipeline(commandBuffer, m_bindPoint, m_pipeline); }
 
-    void VulkanShader::Dispatch(VkCommandBuffer commandBuffer, u32 count) const
+    void VulkanShader::Dispatch(VkCommandBuffer commandBuffer, u32 countX, u32 countY, u32 countZ) const
     {
-        const auto dispatchCount = (count + m_localSizeX - 1) / m_localSizeX;
-        vkCmdDispatch(commandBuffer, dispatchCount, 1, 1);
+        const auto dispatchX = (countX + m_localSizeX - 1) / m_localSizeX;
+        const auto dispatchY = (countY + m_localSizeY - 1) / m_localSizeY;
+        const auto dispatchZ = (countZ + m_localSizeZ - 1) / m_localSizeZ;
+        vkCmdDispatch(commandBuffer, dispatchX, dispatchY, dispatchZ);
     }
 
     void VulkanShader::PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const
@@ -118,30 +120,56 @@ namespace C3D
         }
     }
 
+    u32 VulkanShader::GatherResources(VkDescriptorType (&resourceTypes)[32])
+    {
+        u32 resourceMask = 0;
+
+        for (auto shader : m_shaderModules)
+        {
+            auto mask  = shader->GetResourceMask();
+            auto types = shader->GetResourceTypes();
+
+            for (u32 i = 0; i < 32; ++i)
+            {
+                if (mask & (1 << i))
+                {
+                    if (resourceMask & (1 << i))
+                    {
+                        C3D_ASSERT(resourceTypes[i] == types[i]);
+                    }
+                    else
+                    {
+                        resourceTypes[i] = types[i];
+                        resourceMask |= 1 << i;
+                    }
+                }
+            }
+        }
+
+        return resourceMask;
+    }
+
     bool VulkanShader::CreateSetLayout()
     {
         DynamicArray<VkDescriptorSetLayoutBinding> setBindings;
 
-        u32 storageBufferMask = 0;
-        for (auto shader : m_shaderModules)
-        {
-            storageBufferMask |= shader->GetStorageBufferMask();
-        }
+        VkDescriptorType resourceTypes[32];
+        u32 resourceMask = GatherResources(resourceTypes);
 
-        for (u32 i = 0; i < 32; ++i)
+        for (u32 i = 0; i < ARRAY_SIZE(resourceTypes); ++i)
         {
-            if (storageBufferMask & (1 << i))
+            if (resourceMask & (1 << i))
             {
                 VkDescriptorSetLayoutBinding binding = {};
 
                 binding.binding         = i;
-                binding.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                binding.descriptorType  = resourceTypes[i];
                 binding.descriptorCount = 1;
 
                 binding.stageFlags = 0;
                 for (auto shader : m_shaderModules)
                 {
-                    if (shader->GetStorageBufferMask() & (1 << i))
+                    if (shader->GetResourceMask() & (1 << i))
                     {
                         binding.stageFlags |= shader->GetShaderStage();
                     }
@@ -308,6 +336,8 @@ namespace C3D
         createInfo.layout = m_layout;
 
         m_localSizeX = m_shaderModules[0]->GetLocalSizeX();
+        m_localSizeY = m_shaderModules[0]->GetLocalSizeY();
+        m_localSizeZ = m_shaderModules[0]->GetLocalSizeZ();
 
         auto result = vkCreateComputePipelines(m_context->device.GetLogical(), pipelineCache, 1, &createInfo, m_context->allocator, &m_pipeline);
         if (!VulkanUtils::IsSuccess(result))
@@ -323,22 +353,19 @@ namespace C3D
     {
         DynamicArray<VkDescriptorUpdateTemplateEntry> entries;
 
-        u32 storageBufferMask = 0;
-        for (auto shader : m_shaderModules)
-        {
-            storageBufferMask |= shader->GetStorageBufferMask();
-        }
+        VkDescriptorType resourceTypes[32];
+        u32 resourceMask = GatherResources(resourceTypes);
 
-        for (u32 i = 0; i < 32; ++i)
+        for (u32 i = 0; i < ARRAY_SIZE(resourceTypes); ++i)
         {
-            if (storageBufferMask & (1 << i))
+            if (resourceMask & (1 << i))
             {
                 VkDescriptorUpdateTemplateEntry entry = {};
 
                 entry.dstBinding      = i;
                 entry.dstArrayElement = 0;
                 entry.descriptorCount = 1;
-                entry.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                entry.descriptorType  = resourceTypes[i];
                 entry.offset          = sizeof(DescriptorInfo) * i;
                 entry.stride          = sizeof(DescriptorInfo);
 

@@ -261,10 +261,76 @@ namespace C3D
             createInfo.pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT;
         }
 
-        VkQueryPool queryPool = 0;
-        VK_CHECK(vkCreateQueryPool(context.device.GetLogical(), &createInfo, context.allocator, &queryPool));
+        VkQueryPool queryPool = nullptr;
+        auto result           = vkCreateQueryPool(context.device.GetLogical(), &createInfo, context.allocator, &queryPool);
+        if (!VulkanUtils::IsSuccess(result))
+        {
+            ERROR_LOG("vkCreateQueryPool failed with error: '{}'.", VulkanUtils::ResultString(result));
+            return nullptr;
+        }
 
         return queryPool;
+    }
+
+    VkImage VulkanUtils::CreateImage(VulkanContext* context, u32 width, u32 height, VkFormat format, u32 mipLevels, VkImageUsageFlags usage)
+    {
+        VkImageCreateInfo createInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+
+        // TODO: Quite some assumptions here for now
+        createInfo.imageType     = VK_IMAGE_TYPE_2D;
+        createInfo.format        = format;
+        createInfo.extent        = { width, height, 1 };
+        createInfo.mipLevels     = mipLevels;
+        createInfo.arrayLayers   = 1;
+        createInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+        createInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        createInfo.usage         = usage;
+        createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        VkImage image = nullptr;
+        auto result   = vkCreateImage(context->device.GetLogical(), &createInfo, context->allocator, &image);
+        if (!VulkanUtils::IsSuccess(result))
+        {
+            ERROR_LOG("vkCreateImage failed with error: '{}'.", VulkanUtils::ResultString(result));
+            return nullptr;
+        }
+
+        return image;
+    }
+
+    VkImageView VulkanUtils::CreateImageView(VulkanContext* context, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel,
+                                             u32 levelCount)
+    {
+        VkImageViewCreateInfo createInfo         = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+        createInfo.image                         = image;
+        createInfo.viewType                      = VK_IMAGE_VIEW_TYPE_2D;
+        createInfo.format                        = format;
+        createInfo.subresourceRange.aspectMask   = aspectMask;
+        createInfo.subresourceRange.baseMipLevel = mipLevel;
+        createInfo.subresourceRange.levelCount   = levelCount;
+        createInfo.subresourceRange.layerCount   = 1;
+
+        VkImageView view = nullptr;
+        auto result      = vkCreateImageView(context->device.GetLogical(), &createInfo, context->allocator, &view);
+        if (!VulkanUtils::IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create Image view with error: '{}'.", VulkanUtils::ResultString(result));
+            return nullptr;
+        }
+
+        return view;
+    }
+
+    u32 VulkanUtils::CalculateImageMiplevels(u32 width, u32 height)
+    {
+        u32 result = 1;
+        while (width > 1 || height > 1)
+        {
+            result++;
+            width /= 2;
+            height /= 2;
+        }
+        return result;
     }
 
 #if defined(_DEBUG)

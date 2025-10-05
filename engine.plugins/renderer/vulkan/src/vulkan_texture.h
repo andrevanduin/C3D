@@ -19,6 +19,8 @@ namespace C3D
         VkFormat format;
         /** @brief The image usage flags. */
         VkImageUsageFlags usage;
+        /** @brief The number of mip levels for this Texture. */
+        u32 mipLevels = 1;
         /** @brief A pointer to our Vulkan context. */
         VulkanContext* context = nullptr;
     };
@@ -33,9 +35,10 @@ namespace C3D
          *
          * @param width The width that the texture should have after resizing
          * @param height The height that the texture should have after resizing
+         * @param mips The number of mips required after resizing
          * @return True if successful; false otherwise
          */
-        bool Resize(u32 width, u32 height);
+        bool Resize(u32 width, u32 height, u32 mips = 1);
 
         /**
          * @brief Create a Image barrier for this image with the provided arguments.
@@ -63,17 +66,19 @@ namespace C3D
 
         VkImageView GetView() const { return m_imageView; }
 
+        const DynamicArray<VkImageView>& GetMips() const { return m_mipViews; }
+
     private:
         bool CreateInternal(u32 width, u32 height);
 
-        bool CreateImage();
         bool AllocateAndBind();
-        bool CreateImageView();
 
         /** @brief An optional name for debugging purposes. */
         String m_name;
         /** @brief The width and the height of this Texture. */
         u32 m_width = 0, m_height = 0;
+        /** @brief The number of mip levels in this Texture. */
+        u32 m_mipLevels = 1;
         /** @brief The format used by this Texture. */
         VkFormat m_format;
         /** @brief The image usage flags for this Texture. */
@@ -84,8 +89,10 @@ namespace C3D
         VkImageLayout m_currentLayout;
         /** @brief A handle to the Vulkan image. */
         VkImage m_image = nullptr;
-        /** @brief A handle to the Vulkan image view. */
+        /** @brief A handle to the Vulkan image view base level (of all mips). */
         VkImageView m_imageView = nullptr;
+        /** @brief Handles to the Vulkan image views for each mip. */
+        DynamicArray<VkImageView> m_mipViews;
         /** @brief A handle to the underlying memory used for this Vulkan Texture. */
         VkDeviceMemory m_memory = nullptr;
         /** @brief A pointer to our Vulkan context. */

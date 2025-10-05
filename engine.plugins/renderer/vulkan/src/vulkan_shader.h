@@ -11,6 +11,13 @@ namespace C3D
 
     struct DescriptorInfo
     {
+        DescriptorInfo(VkImageView imageView, VkImageLayout imageLayout)
+        {
+            image.sampler     = VK_NULL_HANDLE;
+            image.imageView   = imageView;
+            image.imageLayout = imageLayout;
+        }
+
         DescriptorInfo(VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout)
         {
             image.sampler     = sampler;
@@ -63,7 +70,7 @@ namespace C3D
         bool Create(const VulkanShaderCreateInfo& createInfo);
 
         void Bind(VkCommandBuffer commandBuffer) const;
-        void Dispatch(VkCommandBuffer commandBuffer, u32 count) const;
+        void Dispatch(VkCommandBuffer commandBuffer, u32 countX, u32 countY, u32 countZ) const;
 
         void PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const;
         void PushConstants(VkCommandBuffer commandBuffer, const void* data, u64 size) const;
@@ -71,6 +78,8 @@ namespace C3D
         void Destroy();
 
     private:
+        u32 GatherResources(VkDescriptorType (&resourceTypes)[32]);
+
         bool CreateSetLayout();
         bool CreatePipelineLayout(u64 pushConstantsSize);
         bool CreateGraphicsPipeline(VkPipelineCache pipelineCache, VulkanSwapchain& swapchain);
@@ -83,7 +92,7 @@ namespace C3D
         /** @brief The bind point used by this Shader. */
         VkPipelineBindPoint m_bindPoint;
         /** @brief The local size x of the shader module. Used in Dispatch calls to calculate number of dispatches. */
-        u32 m_localSizeX = 0;
+        u32 m_localSizeX = 0, m_localSizeY = 0, m_localSizeZ = 0;
         /** @brief An array of VulkanShaderModules used by this Shader. */
         DynamicArray<const VulkanShaderModule*> m_shaderModules;
         /** @brief A handle to the set layout used by this Shader. */

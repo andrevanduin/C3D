@@ -45,11 +45,18 @@ namespace C3D
         bool SupportsFeature(RendererSupportFlag feature) const override;
 
     private:
+        void BeginRendering(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
+                            const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height);
+
+        void BeginRenderingLate(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
+                                const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height);
+
         bool m_meshShadingEnabled = true;
         bool m_cullingEnabled     = true;
         bool m_lodEnabled         = true;
 
         VulkanShaderModule m_drawCullShaderModule;
+        VulkanShaderModule m_depthReduceShaderModule;
         VulkanShaderModule m_meshShaderModule;
         VulkanShaderModule m_meshletShaderModule;
         VulkanShaderModule m_fragmentShaderModule;
@@ -58,6 +65,7 @@ namespace C3D
         VulkanShader m_meshShader;
         VulkanShader m_meshletShader;
         VulkanShader m_drawCullShader;
+        VulkanShader m_depthReduceShader;
 
         DynamicArray<MeshDraw> m_draws;
 
