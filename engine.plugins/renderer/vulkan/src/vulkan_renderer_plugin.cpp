@@ -169,6 +169,14 @@ namespace C3D
             m_lodEnabled ^= true;
             return true;
         });
+        Event.Register(EventCodeDebug3, [this](const u16 code, void* sender, const EventContext& context) {
+            m_debugPyramid ^= true;
+            return true;
+        });
+        Event.Register(EventCodeDebug4, [this](const u16 code, void* sender, const EventContext& context) {
+            m_debugPyramidLevel = context.data.u32[0];
+            return true;
+        });
 
         INFO_LOG("Initialized successfully.");
         return true;
@@ -181,6 +189,8 @@ namespace C3D
         Event.UnregisterAll(EventCodeDebug0);
         Event.UnregisterAll(EventCodeDebug1);
         Event.UnregisterAll(EventCodeDebug2);
+        Event.UnregisterAll(EventCodeDebug3);
+        Event.UnregisterAll(EventCodeDebug4);
 
         m_draws.Destroy();
 
@@ -330,7 +340,7 @@ namespace C3D
         // Begin quering our pipeline statistics
         vkCmdBeginQuery(commandBuffer, m_queryPoolStatistics, 0, 0);
 
-        auto projection  = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), 0.01f);
+        auto projection  = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), 1.f);
         f32 drawDistance = 100;
 
         // Bind, push our descriptors and then dispatch our compute shader
@@ -449,13 +459,26 @@ namespace C3D
         const auto& mips = backendState->depthPyramid.GetMips();
         for (u32 i = 0; i < mips.Size(); ++i)
         {
-            DescriptorInfo descriptors[] = { { mips[i], VK_IMAGE_LAYOUT_GENERAL } };
+            DescriptorInfo sourceDepth = (i == 0)
+                                             ? DescriptorInfo(m_depthSampler, backendState->depthTarget.GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                                             : DescriptorInfo(m_depthSampler, mips[i - 1], VK_IMAGE_LAYOUT_GENERAL);
+
+            DescriptorInfo descriptors[] = { { mips[i], VK_IMAGE_LAYOUT_GENERAL }, sourceDepth };
             m_depthReduceShader.PushDescriptorSet(commandBuffer, descriptors);
 
-            u32 levelWidth  = std::max(1, (window.width / 2) >> i);
-            u32 levelHeight = std::max(1, (window.height / 2) >> i);
+            u32 levelWidth  = Max(1, (window.width / 2) >> i);
+            u32 levelHeight = Max(1, (window.height / 2) >> i);
 
+            DepthReduceData depthReduceData = { vec2(levelWidth, levelHeight) };
+
+            m_depthReduceShader.PushConstants(commandBuffer, &depthReduceData, sizeof(depthReduceData));
             m_depthReduceShader.Dispatch(commandBuffer, levelWidth, levelHeight, 1);
+
+            VkImageMemoryBarrier reduceBarrier =
+                backendState->depthPyramid.CreateBarrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
+
+            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0,
+                                 0, 0, 1, &reduceBarrier);
         }
 
         // Wait for the depth target to be writable again
@@ -492,8 +515,28 @@ namespace C3D
         vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0,
                              0, ARRAY_SIZE(copyBarriers), copyBarriers);
 
-        // Copy the contents of our color target to the current swapchain image
-        backendState->colorTarget.CopyTo(commandBuffer, swapchainImage, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        if (m_debugPyramid)
+        {
+            VkImageBlit blitRegion               = {};
+            blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blitRegion.srcSubresource.mipLevel   = m_debugPyramidLevel;
+            blitRegion.srcSubresource.layerCount = 1;
+            blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blitRegion.dstSubresource.layerCount = 1;
+
+            blitRegion.srcOffsets[0] = { 0, 0, 0 };
+            blitRegion.srcOffsets[1] = { Max(1, (window.width / 2) >> m_debugPyramidLevel), Max(1, (window.height / 2) >> m_debugPyramidLevel), 1 };
+            blitRegion.dstOffsets[0] = { 0, 0, 0 };
+            blitRegion.dstOffsets[1] = { window.width, window.height, 1 };
+
+            vkCmdBlitImage(commandBuffer, backendState->depthPyramid.GetImage(), VK_IMAGE_LAYOUT_GENERAL, swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1, &blitRegion, VK_FILTER_NEAREST);
+        }
+        else
+        {
+            // Copy the contents of our color target to the current swapchain image
+            backendState->colorTarget.CopyTo(commandBuffer, swapchainImage, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        }
 
         // Setup a present barrier
         VkImageMemoryBarrier presentBarrier = VulkanUtils::CreateImageBarrier(
@@ -655,7 +698,7 @@ namespace C3D
         createInfo.width     = window.width / 2;
         createInfo.height    = window.height / 2;
         createInfo.format    = VK_FORMAT_R32_SFLOAT;
-        createInfo.usage     = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+        createInfo.usage     = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         createInfo.mipLevels = VulkanUtils::CalculateImageMiplevels(window.width / 2, window.height / 2);
 
         if (!backend->depthPyramid.Create(createInfo))
@@ -718,6 +761,14 @@ namespace C3D
             VK_SET_DEBUG_OBJECT_NAME(&m_context, VK_OBJECT_TYPE_COMMAND_BUFFER, backend->commandBuffers[i], String::FromFormat("VULKAN_COMMAND_BUFFER_{}", i));
         }
 
+        // Create our depth sampler
+        m_depthSampler = VulkanUtils::CreateSampler(&m_context);
+        if (!m_depthSampler)
+        {
+            ERROR_LOG("Failed to create depth sampler.");
+            return false;
+        }
+
         {
             // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
 
@@ -761,7 +812,7 @@ namespace C3D
             }
 
             createInfo.name              = "DEPTH_REDUCE_SHADER";
-            createInfo.pushConstantsSize = 0;
+            createInfo.pushConstantsSize = sizeof(DepthReduceData);
             createInfo.modules           = { &m_depthReduceShaderModule };
 
             if (!m_depthReduceShader.Create(createInfo))
@@ -857,6 +908,8 @@ namespace C3D
             auto device = m_context.device.GetLogical();
 
             {
+                vkDestroySampler(m_context.device.GetLogical(), m_depthSampler, m_context.allocator);
+
                 // TODO: This should not be here! It does not depend on the window we just need access to the swapchain
                 m_meshShader.Destroy();
                 m_meshShaderModule.Destroy();
@@ -971,7 +1024,7 @@ namespace C3D
         auto commandBuffer = backend->GetCommandBuffer();
         auto commandPool   = backend->GetCommandPool();
 
-        m_drawCount = 100000;
+        m_drawCount = 1000000;
         m_draws.Resize(m_drawCount);
 
         f32 sceneRadius  = 300;

@@ -54,6 +54,8 @@ namespace C3D
         bool m_meshShadingEnabled = true;
         bool m_cullingEnabled     = true;
         bool m_lodEnabled         = true;
+        bool m_debugPyramid       = false;
+        u32 m_debugPyramidLevel   = 0;
 
         VulkanShaderModule m_drawCullShaderModule;
         VulkanShaderModule m_depthReduceShaderModule;
@@ -66,6 +68,8 @@ namespace C3D
         VulkanShader m_meshletShader;
         VulkanShader m_drawCullShader;
         VulkanShader m_depthReduceShader;
+
+        VkSampler m_depthSampler;
 
         DynamicArray<MeshDraw> m_draws;
 

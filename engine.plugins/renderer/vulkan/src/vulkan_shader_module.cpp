@@ -427,7 +427,7 @@ namespace C3D
                         m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_SAMPLER;
                         break;
                     case ID::Kind::TypeSampledImage:
-                        m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+                        m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                         break;
                     default:
                         ERROR_LOG("Unsupported ID::Kind.");

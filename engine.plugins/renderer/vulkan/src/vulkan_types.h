@@ -79,13 +79,18 @@ namespace C3D
         VkDrawMeshTasksIndirectCommandEXT indirectMS;
     };
 
-    struct DrawCullData
+    struct alignas(16) DrawCullData
     {
         vec4 frustum[6];
         u32 drawCount = 0;
 
         i32 cullingEnabled = 0;
         i32 lodEnabled     = 0;
+    };
+
+    struct alignas(16) DepthReduceData
+    {
+        vec2 imageSize;
     };
 
 }  // namespace C3D

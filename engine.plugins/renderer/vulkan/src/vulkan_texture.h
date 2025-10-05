@@ -64,9 +64,12 @@ namespace C3D
         /** @brief Destroy the vulkan texture and it's internal resources. */
         void Destroy();
 
+        VkImage GetImage() const { return m_image; }
+
         VkImageView GetView() const { return m_imageView; }
 
         const DynamicArray<VkImageView>& GetMips() const { return m_mipViews; }
+        u32 GetMipLevels() const { return m_mipLevels; }
 
     private:
         bool CreateInternal(u32 width, u32 height);

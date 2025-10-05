@@ -263,7 +263,7 @@ namespace C3D
 
         VkQueryPool queryPool = nullptr;
         auto result           = vkCreateQueryPool(context.device.GetLogical(), &createInfo, context.allocator, &queryPool);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!IsSuccess(result))
         {
             ERROR_LOG("vkCreateQueryPool failed with error: '{}'.", VulkanUtils::ResultString(result));
             return nullptr;
@@ -289,7 +289,7 @@ namespace C3D
 
         VkImage image = nullptr;
         auto result   = vkCreateImage(context->device.GetLogical(), &createInfo, context->allocator, &image);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!IsSuccess(result))
         {
             ERROR_LOG("vkCreateImage failed with error: '{}'.", VulkanUtils::ResultString(result));
             return nullptr;
@@ -312,7 +312,7 @@ namespace C3D
 
         VkImageView view = nullptr;
         auto result      = vkCreateImageView(context->device.GetLogical(), &createInfo, context->allocator, &view);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!IsSuccess(result))
         {
             ERROR_LOG("Failed to create Image view with error: '{}'.", VulkanUtils::ResultString(result));
             return nullptr;
@@ -331,6 +331,31 @@ namespace C3D
             height /= 2;
         }
         return result;
+    }
+
+    VkSampler VulkanUtils::CreateSampler(VulkanContext* context)
+    {
+        // TODO: Make more configurable in the future
+        VkSamplerCreateInfo createInfo = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+
+        createInfo.minLod       = 0;
+        createInfo.maxLod       = 16.f;
+        createInfo.magFilter    = VK_FILTER_NEAREST;
+        createInfo.minFilter    = VK_FILTER_NEAREST;
+        createInfo.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        createInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        createInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+        VkSampler sampler;
+        auto result = vkCreateSampler(context->device.GetLogical(), &createInfo, context->allocator, &sampler);
+        if (!IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create Sampler with error: '{}'.", VulkanUtils::ResultString(result));
+            return nullptr;
+        }
+
+        return sampler;
     }
 
 #if defined(_DEBUG)
