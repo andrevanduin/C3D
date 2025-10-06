@@ -7,7 +7,7 @@
 
 namespace C3D
 {
-    bool VulkanUtils::IsSuccess(const VkResult result)
+    bool VkUtils::IsSuccess(const VkResult result)
     {
         // From: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkResult.html
         switch (result)
@@ -58,7 +58,7 @@ namespace C3D
         }
     }
 
-    const char* VulkanUtils::ResultString(const VkResult result, const bool getExtended)
+    const char* VkUtils::ResultString(const VkResult result, const bool getExtended)
     {
         // From: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkResult.html
         // Success Codes
@@ -191,7 +191,7 @@ namespace C3D
         }
     }
 
-    u32 VulkanUtils::GetAvailableGPUMemoryInMB(VkPhysicalDeviceMemoryProperties properties)
+    u32 VkUtils::GetAvailableGPUMemoryInMB(VkPhysicalDeviceMemoryProperties properties)
     {
         f32 gpuMemory = 0.0f;
         for (u32 i = 0; i < properties.memoryHeapCount; i++)
@@ -205,8 +205,8 @@ namespace C3D
         return static_cast<u32>(gpuMemory);
     }
 
-    VkImageMemoryBarrier VulkanUtils::CreateImageBarrier(VkImage image, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout oldLayout,
-                                                         VkImageLayout newLayout, VkImageAspectFlags aspectMask)
+    VkImageMemoryBarrier VkUtils::CreateImageBarrier(VkImage image, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout oldLayout,
+                                                     VkImageLayout newLayout, VkImageAspectFlags aspectMask)
     {
         VkImageMemoryBarrier barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 
@@ -234,7 +234,7 @@ namespace C3D
         return barrier;
     }
 
-    VkBufferMemoryBarrier VulkanUtils::CreateBufferBarrier(VkBuffer buffer, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask)
+    VkBufferMemoryBarrier VkUtils::CreateBufferBarrier(VkBuffer buffer, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask)
     {
         VkBufferMemoryBarrier result = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
 
@@ -249,7 +249,7 @@ namespace C3D
         return result;
     }
 
-    VkQueryPool VulkanUtils::CreateQueryPool(VulkanContext& context, u32 queryCount, VkQueryType queryType)
+    VkQueryPool VkUtils::CreateQueryPool(VulkanContext& context, u32 queryCount, VkQueryType queryType)
     {
         VkQueryPoolCreateInfo createInfo = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
         createInfo.queryType             = VK_QUERY_TYPE_TIMESTAMP;
@@ -265,14 +265,14 @@ namespace C3D
         auto result           = vkCreateQueryPool(context.device.GetLogical(), &createInfo, context.allocator, &queryPool);
         if (!IsSuccess(result))
         {
-            ERROR_LOG("vkCreateQueryPool failed with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("vkCreateQueryPool failed with error: '{}'.", VkUtils::ResultString(result));
             return nullptr;
         }
 
         return queryPool;
     }
 
-    VkImage VulkanUtils::CreateImage(VulkanContext* context, u32 width, u32 height, VkFormat format, u32 mipLevels, VkImageUsageFlags usage)
+    VkImage VkUtils::CreateImage(VulkanContext* context, u32 width, u32 height, VkFormat format, u32 mipLevels, VkImageUsageFlags usage)
     {
         VkImageCreateInfo createInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
 
@@ -291,15 +291,14 @@ namespace C3D
         auto result   = vkCreateImage(context->device.GetLogical(), &createInfo, context->allocator, &image);
         if (!IsSuccess(result))
         {
-            ERROR_LOG("vkCreateImage failed with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("vkCreateImage failed with error: '{}'.", VkUtils::ResultString(result));
             return nullptr;
         }
 
         return image;
     }
 
-    VkImageView VulkanUtils::CreateImageView(VulkanContext* context, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel,
-                                             u32 levelCount)
+    VkImageView VkUtils::CreateImageView(VulkanContext* context, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel, u32 levelCount)
     {
         VkImageViewCreateInfo createInfo         = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
         createInfo.image                         = image;
@@ -314,14 +313,14 @@ namespace C3D
         auto result      = vkCreateImageView(context->device.GetLogical(), &createInfo, context->allocator, &view);
         if (!IsSuccess(result))
         {
-            ERROR_LOG("Failed to create Image view with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to create Image view with error: '{}'.", VkUtils::ResultString(result));
             return nullptr;
         }
 
         return view;
     }
 
-    u32 VulkanUtils::CalculateImageMiplevels(u32 width, u32 height)
+    u32 VkUtils::CalculateImageMiplevels(u32 width, u32 height)
     {
         u32 result = 1;
         while (width > 1 || height > 1)
@@ -333,7 +332,7 @@ namespace C3D
         return result;
     }
 
-    VkSampler VulkanUtils::CreateSampler(VulkanContext* context)
+    VkSampler VkUtils::CreateSampler(VulkanContext* context)
     {
         // TODO: Make more configurable in the future
         VkSamplerCreateInfo createInfo = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
@@ -351,7 +350,7 @@ namespace C3D
         auto result = vkCreateSampler(context->device.GetLogical(), &createInfo, context->allocator, &sampler);
         if (!IsSuccess(result))
         {
-            ERROR_LOG("Failed to create Sampler with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to create Sampler with error: '{}'.", VkUtils::ResultString(result));
             return nullptr;
         }
 
@@ -359,7 +358,7 @@ namespace C3D
     }
 
 #if defined(_DEBUG)
-    const char* VulkanUtils::VkMessageTypeToString(const VkDebugUtilsMessageTypeFlagsEXT s)
+    const char* VkUtils::VkMessageTypeToString(const VkDebugUtilsMessageTypeFlagsEXT s)
     {
         if (s == 7) return "General | Validation | Performance";
         if (s == 6) return "Validation | Performance";
@@ -371,8 +370,8 @@ namespace C3D
         return "Unknown";
     }
 
-    VkBool32 VulkanUtils::VkDebugLog(const VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, const VkDebugUtilsMessageTypeFlagsEXT messageTypes,
-                                     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void*)
+    VkBool32 VkUtils::VkDebugLog(const VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, const VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+                                 const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void*)
     {
         auto type = VkMessageTypeToString(messageTypes);
         if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
@@ -395,7 +394,7 @@ namespace C3D
         return VK_FALSE;
     }
 
-    void VulkanUtils::SetDebugObjectName(const VulkanContext* context, VkObjectType type, void* handle, const String& name)
+    void VkUtils::SetDebugObjectName(const VulkanContext* context, VkObjectType type, void* handle, const String& name)
     {
         const VkDebugUtilsObjectNameInfoEXT nameInfo = { VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, type, reinterpret_cast<uint64_t>(handle),
                                                          name.Data() };
@@ -403,7 +402,7 @@ namespace C3D
         VK_CHECK(vkSetDebugUtilsObjectNameEXT(context->device.GetLogical(), &nameInfo));
     }
 
-    void VulkanUtils::SetDebugObjectTag(const VulkanContext* context, VkObjectType type, void* handle, u64 tagSize, const void* tagData)
+    void VkUtils::SetDebugObjectTag(const VulkanContext* context, VkObjectType type, void* handle, u64 tagSize, const void* tagData)
     {
         const VkDebugUtilsObjectTagInfoEXT tagInfo = {
             VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT, nullptr, type, reinterpret_cast<uint64_t>(handle), 0, tagSize, tagData
@@ -412,7 +411,7 @@ namespace C3D
         VK_CHECK(vkSetDebugUtilsObjectTagEXT(context->device.GetLogical(), &tagInfo));
     }
 
-    void VulkanUtils::BeginCmdDebugLabel(const VulkanContext* context, VkCommandBuffer buffer, const String& label, const RGBA& color)
+    void VkUtils::BeginCmdDebugLabel(const VulkanContext* context, VkCommandBuffer buffer, const String& label, const RGBA& color)
     {
         VkDebugUtilsLabelEXT labelInfo = { VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT, nullptr, label.Data() };
         std::memcpy(labelInfo.color, &color, sizeof(f32) * 4);
@@ -420,6 +419,6 @@ namespace C3D
         vkCmdBeginDebugUtilsLabelEXT(buffer, &labelInfo);
     }
 
-    void VulkanUtils::EndCmdDebugLabel(const VulkanContext* context, VkCommandBuffer buffer) { vkCmdEndDebugUtilsLabelEXT(buffer); }
+    void VkUtils::EndCmdDebugLabel(const VulkanContext* context, VkCommandBuffer buffer) { vkCmdEndDebugUtilsLabelEXT(buffer); }
 #endif
 }  // namespace C3D

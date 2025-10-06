@@ -83,7 +83,7 @@ namespace C3D
         vkCmdCopyBuffer(commandBuffer, m_context->stagingBuffer.GetHandle(), m_handle, 1, &region);
 
         // Create a barrier that will ensure the copy is done before we start reading the buffer in the shader
-        VkBufferMemoryBarrier copyBarrier = VulkanUtils::CreateBufferBarrier(m_handle, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+        VkBufferMemoryBarrier copyBarrier = VkUtils::CreateBufferBarrier(m_handle, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
         vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 1,
                              &copyBarrier, 0, 0);
 

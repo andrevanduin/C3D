@@ -186,9 +186,9 @@ namespace C3D
         setCreateInfo.pBindings    = setBindings.GetData();
 
         auto result = vkCreateDescriptorSetLayout(m_context->device.GetLogical(), &setCreateInfo, m_context->allocator, &m_setLayout);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to create DescriptorSetLayout with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to create DescriptorSetLayout with error: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 
@@ -217,9 +217,9 @@ namespace C3D
         }
 
         auto result = vkCreatePipelineLayout(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_layout);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to create PipelineLayout with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to create PipelineLayout with error: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 
@@ -310,9 +310,9 @@ namespace C3D
         createInfo.pNext                                    = &pipelineRenderingCreateInfo;
 
         auto result = vkCreateGraphicsPipelines(m_context->device.GetLogical(), pipelineCache, 1, &createInfo, m_context->allocator, &m_pipeline);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to create Graphics Pipeline with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to create Graphics Pipeline with error: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 
@@ -340,9 +340,9 @@ namespace C3D
         m_localSizeZ = m_shaderModules[0]->GetLocalSizeZ();
 
         auto result = vkCreateComputePipelines(m_context->device.GetLogical(), pipelineCache, 1, &createInfo, m_context->allocator, &m_pipeline);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to create Compute Pipeline with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to create Compute Pipeline with error: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 
@@ -384,9 +384,9 @@ namespace C3D
         createInfo.pipelineLayout    = m_layout;
 
         auto result = vkCreateDescriptorUpdateTemplate(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_updateTemplate);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to create descriptor update template because: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to create descriptor update template because: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 

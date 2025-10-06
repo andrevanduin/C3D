@@ -21,7 +21,7 @@ namespace C3D
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = { VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT };
         debugCreateInfo.messageSeverity                    = logSeverity;
         debugCreateInfo.messageType                        = messageType;
-        debugCreateInfo.pfnUserCallback                    = VulkanUtils::VkDebugLog;
+        debugCreateInfo.pfnUserCallback                    = VkUtils::VkDebugLog;
 
         VK_CHECK(vkCreateDebugUtilsMessengerEXT(context.instance, &debugCreateInfo, context.allocator, &context.debugMessenger));
 

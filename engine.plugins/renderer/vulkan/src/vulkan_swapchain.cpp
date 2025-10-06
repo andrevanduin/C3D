@@ -118,9 +118,9 @@ namespace C3D
 
         // Create our swapchain
         auto result = vkCreateSwapchainKHR(device, &createInfo, m_context->allocator, &m_handle);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("vkCreateSwapchainKHR failed with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("vkCreateSwapchainKHR failed with error: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 
@@ -129,9 +129,9 @@ namespace C3D
 
         // Obtain the number of images in our swapchain
         result = vkGetSwapchainImagesKHR(device, m_handle, &m_imageCount, nullptr);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("vkGetSwapchainImagesKHR(1) failed with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("vkGetSwapchainImagesKHR(1) failed with error: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 
@@ -140,9 +140,9 @@ namespace C3D
 
         // Obtain the actual images from our swapchain
         result = vkGetSwapchainImagesKHR(device, m_handle, &m_imageCount, m_images.GetData());
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("vkGetSwapchainImagesKHR(2) failed with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("vkGetSwapchainImagesKHR(2) failed with error: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 

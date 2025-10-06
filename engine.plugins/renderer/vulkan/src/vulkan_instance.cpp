@@ -115,9 +115,9 @@ namespace C3D
 #endif
 
         auto result = vkCreateInstance(&createInfo, context.allocator, &context.instance);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            auto resultString = VulkanUtils::ResultString(result);
+            auto resultString = VkUtils::ResultString(result);
             ERROR_LOG("vkCreateInstance failed with the following error: '{}'.", resultString);
             return false;
         }

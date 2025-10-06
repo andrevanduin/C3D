@@ -45,11 +45,6 @@ void main()
         return;
     }
 
-    if (drawVisibility[di] == 0)
-    {
-        return;
-    }
-
     uint meshIndex = draws[di].meshIndex;
     Mesh mesh = meshes[meshIndex];
 
@@ -64,7 +59,7 @@ void main()
 
     visible = cullData.cullingEnabled == 1 ? visible : true;
 
-    if (visible)
+    if (visible && drawVisibility[di] == 0)
     {
         uint dci = atomicAdd(drawCommandCount, 1);
 
@@ -87,4 +82,6 @@ void main()
         drawCommands[dci].groupCountY = 1;
         drawCommands[dci].groupCountZ = 1;
     }
+
+    drawVisibility[di] = visible ? 1 : 0;
 }

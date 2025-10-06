@@ -64,9 +64,9 @@ namespace C3D
         createInfo.pCode                    = code;
 
         auto result = vkCreateShaderModule(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_handle);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to create shader module: '{}' with error: '{}'.", name, VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to create shader module: '{}' with error: '{}'.", name, VkUtils::ResultString(result));
             if (code)
             {
                 Memory.Free(code);

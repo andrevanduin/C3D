@@ -245,6 +245,22 @@ namespace C3D
         return std::pow(x, y);
     }
 
+    /**
+     * @brief Find the power of 2 that is as close as possible to v but still smaller than v
+     *
+     * @param v The number to find the previous closest power of 2 for
+     * @return The previous closests power of 2
+     */
+    C3D_API C3D_INLINE u32 FindPreviousPow2(u32 v)
+    {
+        u32 r = 1;
+        while (r * 2 < v)
+        {
+            r *= 2;
+        }
+        return r;
+    }
+
     /** @brief Checks if the provided f32 value x is not a number. */
     C3D_API C3D_INLINE bool IsNaN(f32 x) { return std::isnan(x); }
 

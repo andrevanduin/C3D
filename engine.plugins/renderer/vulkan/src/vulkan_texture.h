@@ -71,6 +71,9 @@ namespace C3D
         const DynamicArray<VkImageView>& GetMips() const { return m_mipViews; }
         u32 GetMipLevels() const { return m_mipLevels; }
 
+        u32 GetWidth() const { return m_width; }
+        u32 GetHeight() const { return m_height; }
+
     private:
         bool CreateInternal(u32 width, u32 height);
 

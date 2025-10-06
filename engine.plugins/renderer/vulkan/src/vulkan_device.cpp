@@ -96,9 +96,9 @@ namespace C3D
         }
 
         auto result = vkCreateDevice(m_physical.handle, &createInfo, m_context->allocator, &m_logical.handle);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to create device: '{}.'", VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to create device: '{}.'", VkUtils::ResultString(result));
             return false;
         }
 
@@ -119,9 +119,9 @@ namespace C3D
     void VulkanDevice::QuerySwapchainSupport(VkSurfaceKHR surface)
     {
         auto result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical.handle, surface, &m_physical.swapchainSupportInfo.capabilities);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            FATAL_LOG("vkGetPhysicalDeviceSurfaceCapabilitiesKHR failed with the following error: '{}'.", VulkanUtils::ResultString(result));
+            FATAL_LOG("vkGetPhysicalDeviceSurfaceCapabilitiesKHR failed with the following error: '{}'.", VkUtils::ResultString(result));
         }
 
         u32 formatCount = 0;
@@ -333,7 +333,7 @@ namespace C3D
             vkGetPhysicalDeviceMemoryProperties(current, &m_physical.memory);
 
             // Calculate the available memory on the GPU in MB
-            u32 gpuMemory = VulkanUtils::GetAvailableGPUMemoryInMB(m_physical.memory);
+            u32 gpuMemory = VkUtils::GetAvailableGPUMemoryInMB(m_physical.memory);
 
             Metrics.SetAllocatorAvailableSpace(GPU_ALLOCATOR_ID, MebiBytes(gpuMemory));
 

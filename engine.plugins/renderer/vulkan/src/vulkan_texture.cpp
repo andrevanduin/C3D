@@ -59,7 +59,7 @@ namespace C3D
     VkImageMemoryBarrier VulkanTexture::CreateBarrier(VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout newLayout)
     {
         // Create our barrier
-        auto barrier = VulkanUtils::CreateImageBarrier(m_image, srcAccessMask, dstAccessMask, m_currentLayout, newLayout, m_aspectMask);
+        auto barrier = VkUtils::CreateImageBarrier(m_image, srcAccessMask, dstAccessMask, m_currentLayout, newLayout, m_aspectMask);
         // Our new layout will be the current one after the barrier command has executed
         m_currentLayout = newLayout;
 
@@ -89,7 +89,7 @@ namespace C3D
         m_height = height;
 
         // Create the image
-        m_image = VulkanUtils::CreateImage(m_context, m_width, m_height, m_format, m_mipLevels, m_usage);
+        m_image = VkUtils::CreateImage(m_context, m_width, m_height, m_format, m_mipLevels, m_usage);
         if (!m_image)
         {
             ERROR_LOG("Failed to create VulkanTexture: '{}'.", m_name);
@@ -103,7 +103,7 @@ namespace C3D
         }
 
         // Create an image view at miplevel 0 (first one) with m_mipLevels levels
-        m_imageView = VulkanUtils::CreateImageView(m_context, m_image, m_format, m_aspectMask, 0, m_mipLevels);
+        m_imageView = VkUtils::CreateImageView(m_context, m_image, m_format, m_aspectMask, 0, m_mipLevels);
         if (!m_imageView)
         {
             ERROR_LOG("Failed to create VulkanTexture: '{}'.", m_name);
@@ -115,7 +115,7 @@ namespace C3D
         {
             for (u32 i = 0; i < m_mipLevels; ++i)
             {
-                auto mipView = VulkanUtils::CreateImageView(m_context, m_image, m_format, m_aspectMask, i, 1);
+                auto mipView = VkUtils::CreateImageView(m_context, m_image, m_format, m_aspectMask, i, 1);
                 if (!mipView)
                 {
                     ERROR_LOG("Failed to create VulkanTexture: '{}'.", m_name);
@@ -147,16 +147,16 @@ namespace C3D
         allocateInfo.memoryTypeIndex      = memoryTypeIndex;
 
         auto result = vkAllocateMemory(device, &allocateInfo, m_context->allocator, &m_memory);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to allocate memory with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to allocate memory with error: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 
         result = vkBindImageMemory(device, m_image, m_memory, 0);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to bind memory with error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("Failed to bind memory with error: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 

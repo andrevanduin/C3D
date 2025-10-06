@@ -58,6 +58,7 @@ namespace C3D
         u32 m_debugPyramidLevel   = 0;
 
         VulkanShaderModule m_drawCullShaderModule;
+        VulkanShaderModule m_drawCullLateShaderModule;
         VulkanShaderModule m_depthReduceShaderModule;
         VulkanShaderModule m_meshShaderModule;
         VulkanShaderModule m_meshletShaderModule;
@@ -67,6 +68,7 @@ namespace C3D
         VulkanShader m_meshShader;
         VulkanShader m_meshletShader;
         VulkanShader m_drawCullShader;
+        VulkanShader m_drawCullLateShader;
         VulkanShader m_depthReduceShader;
 
         VkSampler m_depthSampler;
@@ -88,6 +90,7 @@ namespace C3D
         VulkanBuffer m_drawBuffer;
         VulkanBuffer m_drawCommandBuffer;
         VulkanBuffer m_drawCommandCountBuffer;
+        VulkanBuffer m_drawVisibilityBuffer;
 
         VkViewport m_viewport;
         VkRect2D m_scissor;

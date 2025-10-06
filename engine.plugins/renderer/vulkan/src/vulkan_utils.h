@@ -11,7 +11,7 @@ namespace C3D
 {
     struct VulkanContext;
 
-    namespace VulkanUtils
+    namespace VkUtils
     {
 
         /** @brief A method to check if the passed VkResult is one of the results that are considered a SUCCESS. */
@@ -113,13 +113,13 @@ namespace C3D
         void BeginCmdDebugLabel(const VulkanContext* context, VkCommandBuffer buffer, const String& label, const RGBA& color);
         void EndCmdDebugLabel(const VulkanContext* context, VkCommandBuffer buffer);
 
-#define VK_SET_DEBUG_OBJECT_NAME(context, type, handle, name) VulkanUtils::SetDebugObjectName(context, type, handle, name)
+#define VK_SET_DEBUG_OBJECT_NAME(context, type, handle, name) VkUtils::SetDebugObjectName(context, type, handle, name)
 
-#define VK_SET_DEBUG_OBJECT_TAG(context, type, handle, tagSize, tagData) VulkanUtils::SetDebugObjectTag(context, type, handle, tagSize, tagData)
+#define VK_SET_DEBUG_OBJECT_TAG(context, type, handle, tagSize, tagData) VkUtils::SetDebugObjectTag(context, type, handle, tagSize, tagData)
 
-#define VK_BEGIN_CMD_DEBUG_LABEL(context, buffer, label, color) VulkanUtils::BeginCmdDebugLabel(context, buffer, label, color)
+#define VK_BEGIN_CMD_DEBUG_LABEL(context, buffer, label, color) VkUtils::BeginCmdDebugLabel(context, buffer, label, color)
 
-#define VK_END_CMD_DEBUG_LABEL(context, buffer) VulkanUtils::EndCmdDebugLabel(context, buffer)
+#define VK_END_CMD_DEBUG_LABEL(context, buffer) VkUtils::EndCmdDebugLabel(context, buffer)
 
 #else
 /* Both macros simply do nothing in non-debug builds */
@@ -128,5 +128,5 @@ namespace C3D
 #define VK_BEGIN_CMD_DEBUG_LABEL(context, buffer, label, color)
 #define VK_END_CMD_DEBUG_LABEL(context, buffer)
 #endif
-    }  // namespace VulkanUtils
+    }  // namespace VkUtils
 }  // namespace C3D

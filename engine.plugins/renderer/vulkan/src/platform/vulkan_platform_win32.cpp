@@ -45,9 +45,9 @@ namespace C3D
         createInfo.hwnd                        = window.platformState->hwnd;
 
         auto result = vkCreateWin32SurfaceKHR(context.instance, &createInfo, context.allocator, &window.rendererState->backendState->surface);
-        if (!VulkanUtils::IsSuccess(result))
+        if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("vkCreateWin32SurfaceKHR failed with the following error: '{}'.", VulkanUtils::ResultString(result));
+            ERROR_LOG("vkCreateWin32SurfaceKHR failed with the following error: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 

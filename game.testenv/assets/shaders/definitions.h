@@ -26,6 +26,14 @@ struct Globals
     mat4 projection;
 };
 
+struct DrawCullData
+{
+    vec4 frustum[6];
+    uint drawCount;
+    int cullingEnabled;
+    int lodEnabled;
+};
+
 struct MeshLod
 {
     uint indexOffset;
