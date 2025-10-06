@@ -19,10 +19,6 @@ namespace C3D
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
             // We always want to use push descriptors
             VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
-            // We always want to use 8-Bit storage
-            VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
-            // We always want to use draw indirect count
-            VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME,
         };
 
         // First we select the ideal phyiscal device
@@ -68,14 +64,18 @@ namespace C3D
 
         deviceFeatures2.pNext = &device11Features;
 
-        // 8-Bit storage and shader float16
+        // Enable Vulkan 1.2 features
         VkPhysicalDeviceVulkan12Features device12Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
 
-        device12Features.shaderInt8                        = VK_TRUE;
-        device12Features.shaderFloat16                     = VK_TRUE;
-        device12Features.uniformAndStorageBuffer8BitAccess = VK_TRUE;
-        device12Features.storageBuffer8BitAccess           = VK_TRUE;
         device12Features.drawIndirectCount                 = VK_TRUE;
+        device12Features.storageBuffer8BitAccess           = VK_TRUE;
+        device12Features.uniformAndStorageBuffer8BitAccess = VK_TRUE;
+        device12Features.storagePushConstant8              = VK_TRUE;
+        device12Features.shaderFloat16                     = VK_TRUE;
+        device12Features.shaderInt8                        = VK_TRUE;
+        device12Features.samplerFilterMinmax               = VK_TRUE;
+        device12Features.scalarBlockLayout                 = VK_TRUE;
+        device12Features.bufferDeviceAddress               = VK_TRUE;
         device11Features.pNext                             = &device12Features;
 
         // Dynamic rendering

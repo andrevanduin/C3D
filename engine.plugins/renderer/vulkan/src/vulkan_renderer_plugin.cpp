@@ -476,8 +476,8 @@ namespace C3D
                 vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
 
                 m_meshShader.PushConstants(commandBuffer, &globals, sizeof(globals));
-                vkCmdDrawIndexedIndirectCountKHR(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect),
-                                                 m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
+                vkCmdDrawIndexedIndirectCount(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect),
+                                              m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
             }
 
             // End our rendering
@@ -608,8 +608,8 @@ namespace C3D
                 vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
 
                 m_meshShader.PushConstants(commandBuffer, &globals, sizeof(globals));
-                vkCmdDrawIndexedIndirectCountKHR(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect),
-                                                 m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
+                vkCmdDrawIndexedIndirectCount(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect),
+                                              m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
             }
 
             vkCmdEndRendering(commandBuffer);

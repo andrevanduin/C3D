@@ -143,10 +143,9 @@ namespace C3D
 
                 vertex.pos = { m_vs.data[vi * 3 + 0], m_vs.data[vi * 3 + 1], m_vs.data[vi * 3 + 2] };
 
-                // TODO: Fix rounding
-                vertex.nx = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 0] * 127.f + 127.f);
-                vertex.ny = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 1] * 127.f + 127.f);
-                vertex.nz = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 2] * 127.f + 127.f);
+                vertex.nx = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 0] * 127.f + 127.5f);
+                vertex.ny = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 1] * 127.f + 127.5f);
+                vertex.nz = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 2] * 127.f + 127.5f);
 
                 vertex.tx = (vti == FACE_INDEX_NOT_POPULATED) ? 0 : QuantizeHalf(m_vts.data[vti * 3 + 0]);
                 vertex.ty = (vti == FACE_INDEX_NOT_POPULATED) ? 0 : QuantizeHalf(m_vts.data[vti * 3 + 1]);

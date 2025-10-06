@@ -13,22 +13,11 @@ namespace C3D
 {
     struct ID
     {
-        enum Kind
-        {
-            Unknown,
-            Variable,
-            TypePointer,
-            TypeStruct,
-            TypeImage,
-            TypeSampler,
-            TypeSampledImage,
-        };
-
-        Kind kind = Unknown;
-        u32 typeId;
-        u32 storageClass;
-        u32 binding;
-        u32 set;
+        u32 opCode       = 0;
+        u32 typeId       = 0;
+        u32 storageClass = 0;
+        u32 binding      = 0;
+        u32 set          = 0;
     };
 
     bool VulkanShaderModule::Create(VulkanContext* context, const char* name)
@@ -151,6 +140,26 @@ namespace C3D
             default:
                 C3D_ASSERT_MSG(false, "Could not determine shader kind");
                 return shaderc_glsl_vertex_shader;
+        }
+    }
+
+    static VkDescriptorType GetDescriptorType(SpvOp op)
+    {
+        switch (op)
+        {
+            case SpvOpTypeStruct:
+                return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            case SpvOpTypeImage:
+                return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            case SpvOpTypeSampler:
+                return VK_DESCRIPTOR_TYPE_SAMPLER;
+            case SpvOpTypeSampledImage:
+                return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            case SpvOpTypeAccelerationStructureKHR:
+                return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+            default:
+                C3D_FAIL("Unknown resource type");
+                return VkDescriptorType(0);
         }
     }
 
@@ -330,52 +339,9 @@ namespace C3D
                     }
                     break;
                 }
-                case SpvOpTypePointer:
-                {
-                    C3D_ASSERT(wordCount == 4);
-
-                    u32 id = instruction[1];
-                    C3D_ASSERT(id < idBound);
-                    C3D_ASSERT(ids[id].kind == ID::Unknown);
-
-                    ids[id].kind         = ID::TypePointer;
-                    ids[id].typeId       = instruction[3];
-                    ids[id].storageClass = instruction[2];
-                    break;
-                }
                 case SpvOpTypeStruct:
-                {
-                    C3D_ASSERT(wordCount >= 2);
-
-                    u32 id = instruction[1];
-                    C3D_ASSERT(id < idBound);
-
-                    C3D_ASSERT(ids[id].kind == ID::Unknown);
-                    ids[id].kind = ID::TypeStruct;
-                    break;
-                }
                 case SpvOpTypeImage:
-                {
-                    C3D_ASSERT(wordCount >= 2);
-
-                    u32 id = instruction[1];
-                    C3D_ASSERT(id < idBound);
-
-                    C3D_ASSERT(ids[id].kind == ID::Unknown);
-                    ids[id].kind = ID::TypeImage;
-                    break;
-                }
                 case SpvOpTypeSampler:
-                {
-                    C3D_ASSERT(wordCount >= 2);
-
-                    u32 id = instruction[1];
-                    C3D_ASSERT(id < idBound);
-
-                    C3D_ASSERT(ids[id].kind == ID::Unknown);
-                    ids[id].kind = ID::TypeSampler;
-                    break;
-                }
                 case SpvOpTypeSampledImage:
                 {
                     C3D_ASSERT(wordCount >= 2);
@@ -383,8 +349,21 @@ namespace C3D
                     u32 id = instruction[1];
                     C3D_ASSERT(id < idBound);
 
-                    C3D_ASSERT(ids[id].kind == ID::Unknown);
-                    ids[id].kind = ID::TypeSampledImage;
+                    C3D_ASSERT(ids[id].opCode == 0);
+                    ids[id].opCode = opcode;
+                    break;
+                }
+                case SpvOpTypePointer:
+                {
+                    C3D_ASSERT(wordCount == 4);
+
+                    u32 id = instruction[1];
+                    C3D_ASSERT(id < idBound);
+
+                    C3D_ASSERT(ids[id].opCode == 0);
+                    ids[id].opCode       = opcode;
+                    ids[id].typeId       = instruction[3];
+                    ids[id].storageClass = instruction[2];
                     break;
                 }
                 case SpvOpVariable:
@@ -394,8 +373,8 @@ namespace C3D
                     u32 id = instruction[2];
                     C3D_ASSERT(id < idBound);
 
-                    C3D_ASSERT(ids[id].kind == ID::Unknown);
-                    ids[id].kind         = ID::Variable;
+                    C3D_ASSERT(ids[id].opCode == 0);
+                    ids[id].opCode       = opcode;
                     ids[id].typeId       = instruction[1];
                     ids[id].storageClass = instruction[3];
                     break;
@@ -405,39 +384,42 @@ namespace C3D
 
         for (auto& id : ids)
         {
-            if (id.kind == ID::Variable && (id.storageClass == SpvStorageClassUniform || id.storageClass == SpvStorageClassUniformConstant ||
-                                            id.storageClass == SpvStorageClassStorageBuffer))
+            if (id.opCode == SpvOpVariable && (id.storageClass == SpvStorageClassUniform || id.storageClass == SpvStorageClassUniformConstant ||
+                                               id.storageClass == SpvStorageClassStorageBuffer))
             {
                 // Assume that id.type refers to a pointer to a storage buffer
                 C3D_ASSERT(id.set == 0);
                 C3D_ASSERT(id.binding < 32);
-                C3D_ASSERT(ids[id.typeId].kind == ID::TypePointer);
+                C3D_ASSERT(ids[id.typeId].opCode == SpvOpTypePointer);
 
-                ID::Kind typeKind = ids[ids[id.typeId].typeId].kind;
+                u32 typeKind                  = ids[ids[id.typeId].typeId].opCode;
+                VkDescriptorType resourceType = GetDescriptorType(static_cast<SpvOp>(typeKind));
+
+                C3D_ASSERT((m_resourceMask & (1 << id.binding)) == 0 || m_resourceTypes[id.binding] == resourceType);
 
                 switch (typeKind)
                 {
-                    case ID::Kind::TypeStruct:
+                    case SpvOpTypeStruct:
                         m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                         break;
-                    case ID::Kind::TypeImage:
+                    case SpvOpTypeImage:
                         m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
                         break;
-                    case ID::Kind::TypeSampler:
+                    case SpvOpTypeSampler:
                         m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_SAMPLER;
                         break;
-                    case ID::Kind::TypeSampledImage:
+                    case SpvOpTypeSampledImage:
                         m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                         break;
                     default:
-                        ERROR_LOG("Unsupported ID::Kind.");
+                        ERROR_LOG("Unsupported resource type.");
                         return false;
                 }
 
                 m_resourceMask |= 1 << id.binding;
             }
 
-            if (id.kind == ID::Variable && id.storageClass == SpvStorageClassPushConstant)
+            if (id.opCode == SpvOpVariable && id.storageClass == SpvStorageClassPushConstant)
             {
                 m_usePushConstants = true;
             }
