@@ -345,7 +345,7 @@ namespace C3D
                      VK_VERSION_PATCH(props.driverVersion));
             INFO_LOG("API Version    - {}.{}.{}", VK_API_VERSION_MAJOR(props.apiVersion), VK_API_VERSION_MINOR(props.apiVersion),
                      VK_API_VERSION_PATCH(props.apiVersion));
-            INFO_LOG("Max PushConstants size: {}Bytes", props.limits.maxPushConstantsSize);
+            INFO_LOG("Max PushConstants size: {} Bytes", props.limits.maxPushConstantsSize);
             INFO_LOG("Max DrawIndirect count: {}", props.limits.maxDrawIndirectCount);
 
             // We have found our perfect GPU let's save off it's handle and break

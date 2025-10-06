@@ -82,10 +82,15 @@ namespace C3D
     struct alignas(16) DrawCullData
     {
         vec4 frustum[6];
+
         u32 drawCount = 0;
 
-        i32 cullingEnabled = 0;
-        i32 lodEnabled     = 0;
+        i32 cullingEnabled          = 0;
+        i32 occlusionCullingEnabled = 0;
+        i32 lodEnabled              = 0;
+
+        f32 p00, p11, zNear;
+        f32 pyramidWidth, pyramidHeight;
     };
 
     struct alignas(16) DepthReduceData

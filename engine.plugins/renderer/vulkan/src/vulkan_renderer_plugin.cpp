@@ -158,29 +158,35 @@ namespace C3D
         }
 
         Event.Register(EventCodeDebug0, [this](const u16 code, void* sender, const EventContext& context) {
-            if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+            switch (context.data.u32[0])
             {
-                m_meshShadingEnabled ^= true;
+                case C3D::KeyM:
+                    if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+                    {
+                        m_meshShadingEnabled ^= true;
+                    }
+                    else
+                    {
+                        WARN_LOG("Mesh shading is not support by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
+                    }
+                    break;
+                case C3D::KeyC:
+                    m_cullingEnabled ^= true;
+                    break;
+                case C3D::KeyO:
+                    m_occlusionCullingEnabled ^= true;
+                    break;
+                case C3D::KeyL:
+                    m_lodEnabled ^= true;
+                    break;
+                case C3D::KeyP:
+                    m_debugPyramid ^= true;
+                    break;
             }
-            else
-            {
-                WARN_LOG("Mesh shading is not support by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
-            }
+
             return true;
         });
         Event.Register(EventCodeDebug1, [this](const u16 code, void* sender, const EventContext& context) {
-            m_cullingEnabled ^= true;
-            return true;
-        });
-        Event.Register(EventCodeDebug2, [this](const u16 code, void* sender, const EventContext& context) {
-            m_lodEnabled ^= true;
-            return true;
-        });
-        Event.Register(EventCodeDebug3, [this](const u16 code, void* sender, const EventContext& context) {
-            m_debugPyramid ^= true;
-            return true;
-        });
-        Event.Register(EventCodeDebug4, [this](const u16 code, void* sender, const EventContext& context) {
             m_debugPyramidLevel = context.data.u32[0];
             return true;
         });
@@ -195,9 +201,6 @@ namespace C3D
 
         Event.UnregisterAll(EventCodeDebug0);
         Event.UnregisterAll(EventCodeDebug1);
-        Event.UnregisterAll(EventCodeDebug2);
-        Event.UnregisterAll(EventCodeDebug3);
-        Event.UnregisterAll(EventCodeDebug4);
 
         m_draws.Destroy();
 
@@ -361,23 +364,31 @@ namespace C3D
             dvbCleared = true;
         }
 
-        constexpr f32 zNear        = 1.f;
-        constexpr f32 drawDistance = 100;
+        constexpr f32 zNear = 1.f;
 
         auto projection = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), zNear);
 
         glm::mat4 projectionT = glm::transpose(projection);
 
-        DrawCullData cullData   = {};
-        cullData.frustum[0]     = NormalizePlane(projectionT[3] + projectionT[0]);  // x + w < 0
-        cullData.frustum[1]     = NormalizePlane(projectionT[3] - projectionT[0]);  // x - w > 0
-        cullData.frustum[2]     = NormalizePlane(projectionT[3] + projectionT[1]);  // y + w < 0
-        cullData.frustum[3]     = NormalizePlane(projectionT[3] - projectionT[1]);  // y - w > 0
-        cullData.frustum[4]     = NormalizePlane(projectionT[3] - projectionT[2]);  // z - w > 0 -- reverse z
-        cullData.frustum[5]     = vec4(0, 0, -1, drawDistance);                     // reverse z, infinite far plane
-        cullData.drawCount      = m_drawCount;
-        cullData.cullingEnabled = m_cullingEnabled;
-        cullData.lodEnabled     = m_lodEnabled;
+        u32 depthPyramidWidth  = backendState->depthPyramid.GetWidth();
+        u32 depthPyramidHeight = backendState->depthPyramid.GetHeight();
+
+        DrawCullData cullData            = {};
+        cullData.frustum[0]              = NormalizePlane(projectionT[3] + projectionT[0]);  // x + w < 0
+        cullData.frustum[1]              = NormalizePlane(projectionT[3] - projectionT[0]);  // x - w > 0
+        cullData.frustum[2]              = NormalizePlane(projectionT[3] + projectionT[1]);  // y + w < 0
+        cullData.frustum[3]              = NormalizePlane(projectionT[3] - projectionT[1]);  // y - w > 0
+        cullData.frustum[4]              = NormalizePlane(projectionT[3] - projectionT[2]);  // z - w > 0 -- reverse z
+        cullData.frustum[5]              = vec4(0, 0, -1, m_drawDistance);                   // reverse z, infinite far plane
+        cullData.drawCount               = m_drawCount;
+        cullData.cullingEnabled          = m_cullingEnabled;
+        cullData.occlusionCullingEnabled = m_occlusionCullingEnabled;
+        cullData.lodEnabled              = m_lodEnabled;
+        cullData.p00                     = projection[0][0];
+        cullData.p11                     = projection[1][1];
+        cullData.zNear                   = zNear;
+        cullData.pyramidWidth            = depthPyramidWidth;
+        cullData.pyramidHeight           = depthPyramidHeight;
 
         Globals globals    = {};
         globals.projection = projection;
@@ -492,9 +503,6 @@ namespace C3D
             m_depthReduceShader.Bind(commandBuffer);
 
             // Build our depth pyramid
-            u32 depthPyramidWidth  = backendState->depthPyramid.GetWidth();
-            u32 depthPyramidHeight = backendState->depthPyramid.GetHeight();
-
             const auto& mips = backendState->depthPyramid.GetMips();
             for (u32 i = 0; i < mips.Size(); ++i)
             {
@@ -551,13 +559,14 @@ namespace C3D
             m_drawCullLateShader.Bind(commandBuffer);
 
             DescriptorInfo descriptors[] = {
-                m_drawBuffer.GetHandle(),           m_meshBuffer.GetHandle(), m_drawCommandBuffer.GetHandle(), m_drawCommandCountBuffer.GetHandle(),
-                m_drawVisibilityBuffer.GetHandle(),
+                m_drawBuffer.GetHandle(),           m_meshBuffer.GetHandle(),
+                m_drawCommandBuffer.GetHandle(),    m_drawCommandCountBuffer.GetHandle(),
+                m_drawVisibilityBuffer.GetHandle(), DescriptorInfo(m_depthSampler, backendState->depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL)
             };
-            m_drawCullShader.PushDescriptorSet(commandBuffer, descriptors);
+            m_drawCullLateShader.PushDescriptorSet(commandBuffer, descriptors);
 
-            m_drawCullShader.PushConstants(commandBuffer, &cullData, sizeof(DrawCullData));
-            m_drawCullShader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()), 1, 1);
+            m_drawCullLateShader.PushConstants(commandBuffer, &cullData, sizeof(DrawCullData));
+            m_drawCullLateShader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()), 1, 1);
 
             VkBufferMemoryBarrier cullBarriers[] = {
                 VkUtils::CreateBufferBarrier(m_drawCommandBuffer.GetHandle(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT),
@@ -752,10 +761,11 @@ namespace C3D
 
         titleText.Clear();
         titleText.Format(
-            "Mesh Shading: {}; Culling: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms; pyramid {:.2f} ms; cull late: {:.2f} "
+            "Mesh Shading: {}; Cull: {}; Occlusion: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms; pyramid {:.2f} ms; cull late: {:.2f} "
             "ms); triangles {:.1f}M; {:.1f}B tri/sec; {:.1f}M draws/sec;",
-            meshShadingEnabledAndSupported ? "ON" : "OFF", m_cullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg,
-            cullGpuTime, pyramidGpuTime, cullLateGpuTime, triangleCount * 1e-6, trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
+            meshShadingEnabledAndSupported ? "ON" : "OFF", m_cullingEnabled ? "ON" : "OFF", m_occlusionCullingEnabled ? "ON" : "OFF",
+            m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, pyramidGpuTime, cullLateGpuTime, triangleCount * 1e-6,
+            trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
 
         Platform::SetWindowTitle(window, titleText);
 
@@ -885,7 +895,7 @@ namespace C3D
         }
 
         // Create our depth sampler
-        m_depthSampler = VkUtils::CreateSampler(&m_context);
+        m_depthSampler = VkUtils::CreateSampler(&m_context, VK_SAMPLER_REDUCTION_MODE_MIN);
         if (!m_depthSampler)
         {
             ERROR_LOG("Failed to create depth sampler.");
@@ -1174,18 +1184,15 @@ namespace C3D
         m_drawCount = 1000000;
         m_draws.Resize(m_drawCount);
 
-        f32 sceneRadius  = 300;
-        f32 drawDistance = 200;
-
         for (auto& draw : m_draws)
         {
             u64 meshIndex    = Random.Generate(static_cast<u64>(0), geometry.meshes.Size() - 1);
             const auto& mesh = geometry.meshes[meshIndex];
 
-            draw.position.x = Random.Generate(-sceneRadius, sceneRadius);
-            draw.position.y = Random.Generate(-sceneRadius, sceneRadius);
-            draw.position.z = Random.Generate(-sceneRadius, sceneRadius);
-            draw.scale      = Random.Generate(2.f, 4.0f);
+            draw.position.x = Random.Generate(-m_sceneRadius, m_sceneRadius);
+            draw.position.y = Random.Generate(-m_sceneRadius, m_sceneRadius);
+            draw.position.z = Random.Generate(-m_sceneRadius, m_sceneRadius);
+            draw.scale      = Random.Generate(2.f, 4.f);
 
             vec3 axis        = vec3(Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f));
             f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));

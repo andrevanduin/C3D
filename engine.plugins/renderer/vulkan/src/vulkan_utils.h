@@ -84,7 +84,7 @@ namespace C3D
          */
         u32 CalculateImageMiplevels(u32 width, u32 height);
 
-        VkSampler CreateSampler(VulkanContext* context);
+        VkSampler CreateSampler(VulkanContext* context, VkSamplerReductionMode reductionMode);
 
         /** @brief Helper method to enable easier loading of vulkan extension functions. */
         template <typename T>

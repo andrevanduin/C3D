@@ -332,19 +332,27 @@ namespace C3D
         return result;
     }
 
-    VkSampler VkUtils::CreateSampler(VulkanContext* context)
+    VkSampler VkUtils::CreateSampler(VulkanContext* context, VkSamplerReductionMode reductionMode)
     {
         // TODO: Make more configurable in the future
         VkSamplerCreateInfo createInfo = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
         createInfo.minLod       = 0;
         createInfo.maxLod       = 16.f;
-        createInfo.magFilter    = VK_FILTER_NEAREST;
-        createInfo.minFilter    = VK_FILTER_NEAREST;
+        createInfo.magFilter    = VK_FILTER_LINEAR;
+        createInfo.minFilter    = VK_FILTER_LINEAR;
         createInfo.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
         createInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         createInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+        VkSamplerReductionModeCreateInfo createInfoReduction = { VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO };
+
+        if (reductionMode != VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE)
+        {
+            createInfoReduction.reductionMode = reductionMode;
+            createInfo.pNext                  = &createInfoReduction;
+        }
 
         VkSampler sampler;
         auto result = vkCreateSampler(context->device.GetLogical(), &createInfo, context->allocator, &sampler);

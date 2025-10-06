@@ -51,11 +51,12 @@ namespace C3D
         void BeginRenderingLate(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
                                 const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height);
 
-        bool m_meshShadingEnabled = true;
-        bool m_cullingEnabled     = true;
-        bool m_lodEnabled         = true;
-        bool m_debugPyramid       = false;
-        u32 m_debugPyramidLevel   = 0;
+        bool m_meshShadingEnabled      = true;
+        bool m_cullingEnabled          = true;
+        bool m_occlusionCullingEnabled = true;
+        bool m_lodEnabled              = true;
+        bool m_debugPyramid            = false;
+        u32 m_debugPyramidLevel        = 0;
 
         VulkanShaderModule m_drawCullShaderModule;
         VulkanShaderModule m_drawCullLateShaderModule;
@@ -80,7 +81,9 @@ namespace C3D
 
         f64 m_frameCpuAvg = 0, m_frameGpuAvg = 0, m_frameCpuBegin = 0;
 
-        u32 m_drawCount = 0;
+        u32 m_drawCount    = 0;
+        f32 m_sceneRadius  = 300;
+        f32 m_drawDistance = 200;
 
         VulkanBuffer m_vertexBuffer;
         VulkanBuffer m_indexBuffer;
