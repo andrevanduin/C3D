@@ -60,7 +60,7 @@ namespace C3D
          * @param usage The usage flags for this image
          * @return A VkImage if successful; nullptr otherwise
          */
-        VkImage CreateImage(VulkanContext* context, u32 width, u32 height, VkFormat format, u32 mipLevels, VkImageUsageFlags usage);
+        VkImage CreateImage(VulkanContext* context, const String& name, u32 width, u32 height, VkFormat format, u32 mipLevels, VkImageUsageFlags usage);
 
         /**
          * @brief Creates a Vulkan image View
@@ -73,7 +73,8 @@ namespace C3D
          * @param levelCount The number of levels in this view
          * @return a VkImageView if successful; nullptr otherwise
          */
-        VkImageView CreateImageView(VulkanContext* context, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel, u32 levelCount);
+        VkImageView CreateImageView(VulkanContext* context, const String& name, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel,
+                                    u32 levelCount);
 
         /**
          * @brief Calculates the number of mip levels required for an image of given width and height.

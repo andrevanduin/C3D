@@ -95,7 +95,7 @@ namespace C3D
         createInfo.surface                  = windowBackendState->surface;
         createInfo.minImageCount            = Max(MIN_IMAGES, capabilities.minImageCount);
 
-        m_surfaceFormat            = GetSurfaceFormat();
+        m_surfaceFormat            = m_context->device.GetPreferredSurfaceFormat();
         createInfo.imageFormat     = m_surfaceFormat.format;
         createInfo.imageColorSpace = m_surfaceFormat.colorSpace;
 
@@ -153,22 +153,6 @@ namespace C3D
         }
 
         return true;
-    }
-
-    VkSurfaceFormatKHR VulkanSwapchain::GetSurfaceFormat() const
-    {
-        const auto& formats = m_context->device.GetSurfaceFormats();
-        for (auto& format : formats)
-        {
-            if (format.format == VK_FORMAT_B8G8R8A8_UNORM && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-            {
-                // We have found our preferred format so let's return it.
-                return format;
-            }
-        }
-
-        WARN_LOG("Could not find Preferred Swapchain ImageFormat. Falling back to first format in the list.");
-        return formats[0];
     }
 
     VkPresentModeKHR VulkanSwapchain::GetPresentMode() const

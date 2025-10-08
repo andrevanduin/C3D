@@ -18,6 +18,8 @@ namespace C3D
         bool OnInit(const CSONObject& config) override;
         void OnShutdown() override;
 
+        bool CreateResources() const;
+
         bool UploadMeshes(const Window& window, const DynamicArray<MeshAsset>& meshes);
         bool GenerateDrawCommands(const Window& window) const;
 

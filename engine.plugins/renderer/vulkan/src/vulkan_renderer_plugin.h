@@ -25,6 +25,8 @@ namespace C3D
         bool OnInit(const RendererPluginConfig& config) override;
         void OnShutdown() override;
 
+        bool CreateResources() override;
+
         bool Begin(Window& window) override;
         bool End(Window& window) override;
 
@@ -46,10 +48,13 @@ namespace C3D
 
     private:
         void BeginRendering(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
-                            const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height);
+                            const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height, bool late) const;
 
-        void BeginRenderingLate(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
-                                const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height);
+        void CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, const VulkanTexture& depthPyramid, const DrawCullData& cullData,
+                      u32 timestamp) const;
+        void RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget, const Globals& globals,
+                        const Window& window, bool late) const;
+        void DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const;
 
         bool m_meshShadingEnabled      = true;
         bool m_cullingEnabled          = true;
@@ -59,7 +64,6 @@ namespace C3D
         u32 m_debugPyramidLevel        = 0;
 
         VulkanShaderModule m_drawCullShaderModule;
-        VulkanShaderModule m_drawCullLateShaderModule;
         VulkanShaderModule m_depthReduceShaderModule;
         VulkanShaderModule m_meshShaderModule;
         VulkanShaderModule m_meshletShaderModule;

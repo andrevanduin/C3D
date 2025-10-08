@@ -41,8 +41,6 @@ namespace C3D
 
         u32 GetImageCount() const { return m_imageCount; }
 
-        VkFormat GetImageFormat() const { return m_surfaceFormat.format; }
-
     private:
         /**
          * @brief Internal create method. Creates a new swapchain with the width and height of the provided window.

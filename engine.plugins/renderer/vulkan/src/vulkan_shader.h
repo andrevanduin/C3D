@@ -54,14 +54,14 @@ namespace C3D
         VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         /** @brief An initializer list containing all ShaderModules that should be used by this Shader. */
         std::initializer_list<VulkanShaderModule*> modules;
-        /** @brief A pointer to the Vulkan context. */
-        VulkanContext* context = nullptr;
-        /** @brief A pointer to the swapchain. */
-        VulkanSwapchain* swapchain = nullptr;
+        /** @brief An initialize list containing all constants we want to pass to the Shader. */
+        std::initializer_list<i32> constants;
         /** @brief The cache for the pipelines. */
         VkPipelineCache cache = VK_NULL_HANDLE;
         /** @brief The size of the push constants block that will be used by this Shader. */
         u64 pushConstantsSize = 0;
+        /** @brief A pointer to the Vulkan context. */
+        VulkanContext* context = nullptr;
     };
 
     class VulkanShader
@@ -82,8 +82,8 @@ namespace C3D
 
         bool CreateSetLayout();
         bool CreatePipelineLayout(u64 pushConstantsSize);
-        bool CreateGraphicsPipeline(VkPipelineCache pipelineCache, VulkanSwapchain& swapchain);
-        bool CreateComputePipeline(VkPipelineCache pipelineCache);
+        bool CreateGraphicsPipeline(VkPipelineCache pipelineCache, const std::initializer_list<i32>& constants);
+        bool CreateComputePipeline(VkPipelineCache pipelineCache, const std::initializer_list<i32>& constants);
 
         bool CreateDescriptorUpdateTemplate();
 

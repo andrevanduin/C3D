@@ -175,6 +175,24 @@ namespace C3D
 
     VkResult VulkanDevice::WaitIdle() const { return vkDeviceWaitIdle(m_logical.handle); }
 
+    VkSurfaceFormatKHR VulkanDevice::GetPreferredSurfaceFormat() const
+    {
+        const auto& formats = m_physical.swapchainSupportInfo.formats;
+        for (auto& format : formats)
+        {
+            if (format.format == VK_FORMAT_B8G8R8A8_UNORM && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            {
+                // We have found our preferred format so let's return it.
+                return format;
+            }
+        }
+
+        WARN_LOG("Could not find Preferred Swapchain ImageFormat. Falling back to first format in the list.");
+        return formats[0];
+    }
+
+    VkFormat VulkanDevice::GetPreferredImageFormat() const { return GetPreferredSurfaceFormat().format; }
+
     const char* VkPhysicalDeviceTypeToString(VkPhysicalDeviceType type)
     {
         switch (type)

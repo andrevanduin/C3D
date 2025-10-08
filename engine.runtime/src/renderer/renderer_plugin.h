@@ -15,6 +15,14 @@ namespace C3D
         virtual void OnShutdown()                               = 0;
 
         /**
+         * @brief Creates renderer-specfic resources.
+         * Useful for when there are resources that need to be created that can't yet be created during OnInit()
+         *
+         * @return True if successful; false otherwise
+         */
+        virtual bool CreateResources() = 0;
+
+        /**
          * @brief Begins rendering the frame.
          * If this method returns false you should stop rendering the current frame.
          *

@@ -99,6 +99,7 @@ namespace C3D
             return true;
         });
 
+        // Initialize our render system
         SystemManager::RegisterSystem<RenderSystem>(RenderSystemType, state.config.systemConfigs["Renderer"]);  // Render System
 
         // Create all the requested windows
@@ -123,6 +124,13 @@ namespace C3D
             }
 
             index++;
+        }
+
+        // Create our render's resources (we need atleast one window before we can do this)
+        if (!Renderer.CreateResources())
+        {
+            ERROR_LOG("Failed to create Renderer resources.");
+            return false;
         }
 
         // Try to boot the application

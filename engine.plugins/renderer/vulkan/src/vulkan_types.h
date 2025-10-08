@@ -81,16 +81,16 @@ namespace C3D
 
     struct alignas(16) DrawCullData
     {
-        vec4 frustum[6];
+        f32 p00, p11, zNear, zFar;        // Symmertric projection parameters
+        f32 frustum[4];                   // Data for left/right/top/bottom planes
+        f32 lodBase, lodStep;             // Lod distance i = base * pow(step, i)
+        f32 pyramidWidth, pyramidHeight;  // Depth pyramid size in texels
 
         u32 drawCount = 0;
 
         i32 cullingEnabled          = 0;
         i32 occlusionCullingEnabled = 0;
         i32 lodEnabled              = 0;
-
-        f32 p00, p11, zNear;
-        f32 pyramidWidth, pyramidHeight;
     };
 
     struct alignas(16) DepthReduceData

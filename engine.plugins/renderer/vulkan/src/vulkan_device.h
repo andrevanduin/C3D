@@ -78,6 +78,12 @@ namespace C3D
         /** @brief Waits for the device to go idle. */
         VkResult WaitIdle() const;
 
+        /** @brief Returns the preferred surface format. */
+        VkSurfaceFormatKHR GetPreferredSurfaceFormat() const;
+
+        /** @brief Returns the preferred image format. */
+        VkFormat GetPreferredImageFormat() const;
+
         VkDevice GetLogical() const { return m_logical.handle; }
         VkPhysicalDevice GetPhysical() const { return m_physical.handle; }
 
@@ -85,7 +91,6 @@ namespace C3D
         VkPhysicalDeviceProperties GetProperties() const { return m_physical.properties; }
         VkPhysicalDeviceMemoryProperties GetMemoryProperties() const { return m_physical.memory; }
 
-        const DynamicArray<VkSurfaceFormatKHR>& GetSurfaceFormats() const { return m_physical.swapchainSupportInfo.formats; }
         const DynamicArray<VkPresentModeKHR>& GetPresentModes() const { return m_physical.swapchainSupportInfo.presentModes; }
         const VkSurfaceCapabilitiesKHR& GetSurfaceCapabilities() const { return m_physical.swapchainSupportInfo.capabilities; }
 

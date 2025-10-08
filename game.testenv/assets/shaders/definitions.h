@@ -28,16 +28,16 @@ struct Globals
 
 struct DrawCullData
 {
-    vec4 frustum[6];
+    float p00, p11, zNear, zFar;        // Symmertric projection parameters
+    float frustum[4];                   // Data for left/right/top/bottom planes
+    float lodBase, lodStep;             // Lod distance i = base * pow(step, i)
+    float pyramidWidth, pyramidHeight;  // Depth pyramid size in texels
 
     uint drawCount;
 
     int cullingEnabled;
     int occlusionCullingEnabled;
     int lodEnabled;
-
-    float p00, p11, zNear;
-    float pyramidWidth, pyramidHeight;
 };
 
 struct MeshLod

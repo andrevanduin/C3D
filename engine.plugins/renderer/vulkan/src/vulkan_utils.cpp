@@ -222,12 +222,8 @@ namespace C3D
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         // Aspect mask (color or depth etc.)
         barrier.subresourceRange.aspectMask = aspectMask;
-        // Start with mip 0
-        barrier.subresourceRange.baseMipLevel = 0;
         // Transition all remaining mip levels
         barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-        // Start at the first layer
-        barrier.subresourceRange.baseArrayLayer = 0;
         // Transition all layers at once
         barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
@@ -272,7 +268,7 @@ namespace C3D
         return queryPool;
     }
 
-    VkImage VkUtils::CreateImage(VulkanContext* context, u32 width, u32 height, VkFormat format, u32 mipLevels, VkImageUsageFlags usage)
+    VkImage VkUtils::CreateImage(VulkanContext* context, const String& name, u32 width, u32 height, VkFormat format, u32 mipLevels, VkImageUsageFlags usage)
     {
         VkImageCreateInfo createInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
 
@@ -295,10 +291,13 @@ namespace C3D
             return nullptr;
         }
 
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_IMAGE, image, name);
+
         return image;
     }
 
-    VkImageView VkUtils::CreateImageView(VulkanContext* context, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel, u32 levelCount)
+    VkImageView VkUtils::CreateImageView(VulkanContext* context, const String& name, VkImage image, VkFormat format, VkImageAspectFlags aspectMask,
+                                         u32 mipLevel, u32 levelCount)
     {
         VkImageViewCreateInfo createInfo         = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
         createInfo.image                         = image;
@@ -316,6 +315,9 @@ namespace C3D
             ERROR_LOG("Failed to create Image view with error: '{}'.", VkUtils::ResultString(result));
             return nullptr;
         }
+
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_IMAGE_VIEW, view,
+                                 String::FromFormat("{}_IMAGE_VIEW_MIP_{}_LEVEL_COUNT_{})", name, mipLevel, levelCount));
 
         return view;
     }

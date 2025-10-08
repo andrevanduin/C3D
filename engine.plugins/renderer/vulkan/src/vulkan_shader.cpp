@@ -54,14 +54,14 @@ namespace C3D
         switch (m_bindPoint)
         {
             case VK_PIPELINE_BIND_POINT_GRAPHICS:
-                if (!CreateGraphicsPipeline(createInfo.cache, *createInfo.swapchain))
+                if (!CreateGraphicsPipeline(createInfo.cache, createInfo.constants))
                 {
                     ERROR_LOG("Failed to create Graphics Pipeline.");
                     return false;
                 }
                 break;
             case VK_PIPELINE_BIND_POINT_COMPUTE:
-                if (!CreateComputePipeline(createInfo.cache))
+                if (!CreateComputePipeline(createInfo.cache, createInfo.constants))
                 {
                     ERROR_LOG("Failed to create Compute Pipeline.");
                     return false;
@@ -228,20 +228,39 @@ namespace C3D
         return true;
     }
 
-    bool VulkanShader::CreateGraphicsPipeline(VkPipelineCache pipelineCache, VulkanSwapchain& swapchain)
+    static VkSpecializationInfo FillSpecializationInfo(DynamicArray<VkSpecializationMapEntry>& entries, const std::initializer_list<i32>& constants)
+    {
+        for (u32 i = 0; i < constants.size(); ++i)
+        {
+            entries.EmplaceBack(i, i * sizeof(i32), sizeof(i32));
+        }
+
+        VkSpecializationInfo result = {};
+        result.mapEntryCount        = static_cast<u32>(entries.Size());
+        result.pMapEntries          = entries.GetData();
+        result.dataSize             = constants.size() * sizeof(i32);
+        result.pData                = constants.begin();
+
+        return result;
+    }
+
+    bool VulkanShader::CreateGraphicsPipeline(VkPipelineCache pipelineCache, const std::initializer_list<i32>& constants)
     {
         VkGraphicsPipelineCreateInfo createInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
         createInfo.layout                       = m_layout;
 
-        DynamicArray<VkPipelineShaderStageCreateInfo> stages;
+        DynamicArray<VkSpecializationMapEntry> specializationEntries;
+        VkSpecializationInfo specializationInfo = FillSpecializationInfo(specializationEntries, constants);
 
+        DynamicArray<VkPipelineShaderStageCreateInfo> stages;
         for (auto shader : m_shaderModules)
         {
             VkPipelineShaderStageCreateInfo stageInfo = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
-            stageInfo.stage  = shader->GetShaderStage();
-            stageInfo.module = shader->GetHandle();
-            stageInfo.pName  = "main";
+            stageInfo.stage               = shader->GetShaderStage();
+            stageInfo.module              = shader->GetHandle();
+            stageInfo.pName               = "main";
+            stageInfo.pSpecializationInfo = &specializationInfo;
 
             stages.PushBack(stageInfo);
         }
@@ -304,9 +323,9 @@ namespace C3D
         // TODO: We are hardcoding the depth format here which we might want to make configurable later
         pipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
 
-        // TODO: Quite bad since this assumes we will always have the same single format as was intially picked for the provided swapchain
-        auto format                                         = swapchain.GetImageFormat();
-        pipelineRenderingCreateInfo.pColorAttachmentFormats = &format;
+        auto surfaceFormat = m_context->device.GetPreferredSurfaceFormat();
+
+        pipelineRenderingCreateInfo.pColorAttachmentFormats = &surfaceFormat.format;
         createInfo.pNext                                    = &pipelineRenderingCreateInfo;
 
         auto result = vkCreateGraphicsPipelines(m_context->device.GetLogical(), pipelineCache, 1, &createInfo, m_context->allocator, &m_pipeline);
@@ -321,16 +340,20 @@ namespace C3D
         return true;
     }
 
-    bool VulkanShader::CreateComputePipeline(VkPipelineCache pipelineCache)
+    bool VulkanShader::CreateComputePipeline(VkPipelineCache pipelineCache, const std::initializer_list<i32>& constants)
     {
         C3D_ASSERT_MSG(m_shaderModules.Size() == 1, "Expected only a single ShaderModule for a Compute pipeline");
 
         VkComputePipelineCreateInfo createInfo    = { VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
         VkPipelineShaderStageCreateInfo stageInfo = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
-        stageInfo.stage  = m_shaderModules[0]->GetShaderStage();
-        stageInfo.module = m_shaderModules[0]->GetHandle();
-        stageInfo.pName  = "main";
+        DynamicArray<VkSpecializationMapEntry> specializationEntries;
+        VkSpecializationInfo specializationInfo = FillSpecializationInfo(specializationEntries, constants);
+
+        stageInfo.stage               = m_shaderModules[0]->GetShaderStage();
+        stageInfo.module              = m_shaderModules[0]->GetHandle();
+        stageInfo.pName               = "main";
+        stageInfo.pSpecializationInfo = &specializationInfo;
 
         createInfo.stage  = stageInfo;
         createInfo.layout = m_layout;

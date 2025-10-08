@@ -76,6 +76,8 @@ namespace C3D
         }
     }
 
+    bool RenderSystem::CreateResources() const { return m_backendPlugin->CreateResources(); }
+
     bool RenderSystem::UploadMeshes(const Window& window, const DynamicArray<MeshAsset>& meshAssets)
     {
         for (const auto& asset : meshAssets)
