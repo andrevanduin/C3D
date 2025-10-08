@@ -3,6 +3,7 @@
 #extension GL_EXT_shader_explicit_arithmetic_types : require
 
 #include "definitions.h"
+#include "math_utils.h"
 
 layout (constant_id = 0) const bool LATE = false;
 
@@ -49,16 +50,17 @@ bool ProjectSphere(vec3 center, float radius, float zNear, float p00, float p11,
     }
 
     vec2 cx = -center.xz;
-    vec2 vx = vec2(sqrt(dot(cx, cx) - radius * radius), radius) / length(cx);
+    vec2 vx = vec2(sqrt(dot(cx, cx) - radius * radius), radius);
     vec2 minx = mat2(vx.x, vx.y, -vx.y, vx.x) * cx;
     vec2 maxx = mat2(vx.x, -vx.y, vx.y, vx.x) * cx;
 
     vec2 cy = -center.yz;
-    vec2 vy = vec2(sqrt(dot(cy, cy) - radius * radius), radius) / length(cy);
-    vec2 miny = mat2(vy.x, -vy.y, vy.y, vy.x) * cy;
-    vec2 maxy = mat2(vy.x, vy.y, -vy.y, vy.x) * cy;
+    vec2 vy = vec2(sqrt(dot(cy, cy) - radius * radius), radius);
+    vec2 miny = mat2(vy.x, vy.y, -vy.y, vy.x) * cy;
+    vec2 maxy = mat2(vy.x, -vy.y, vy.y, vy.x) * cy;
 
-    aabb = vec4(minx.x / minx.y * p00, miny.x / miny.y * p11, maxx.x / maxx.y * p00, maxy.x / maxy.y * p11) * vec4(0.5f, -0.5f, 0.5f, -0.5f) + vec4(0.5f);
+    aabb = vec4(minx.x / minx.y * p00, miny.x / miny.y * p11, maxx.x / maxx.y * p00, maxy.x / maxy.y * p11);
+    aabb = aabb.xwzy * vec4(0.5f, -0.5f, 0.5f, -0.5f) + vec4(0.5f); // clip space -> uv space
 
     return true;
 }
@@ -80,7 +82,7 @@ void main()
     uint meshIndex = draws[di].meshIndex;
     Mesh mesh = meshes[meshIndex];
 
-    vec3 center = mesh.center * draws[di].scale + draws[di].position;
+    vec3 center = RotateVecByQuat(mesh.center, draws[di].orientation) * draws[di].scale + draws[di].position;
     float radius = mesh.radius * draws[di].scale;
 
     bool visible = true;

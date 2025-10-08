@@ -68,7 +68,8 @@ void main()
     uint ti = gl_LocalInvocationID.x;
     uint mi = payload.meshletIndices[gl_WorkGroupID.x];
     
-    MeshDraw meshDraw = draws[drawCommands[gl_DrawIDARB].drawId];
+    uint drawId = drawCommands[gl_DrawIDARB].drawId;
+    MeshDraw meshDraw = draws[drawId];
 
     uint vertexCount = meshlets[mi].vertexCount;
     uint triangleCount = meshlets[mi].triangleCount;

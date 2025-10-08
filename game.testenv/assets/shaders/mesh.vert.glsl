@@ -30,7 +30,8 @@ layout (location = 0) out vec4 color;
 
 void main()
 {
-    MeshDraw meshDraw = draws[drawCommands[gl_DrawIDARB].drawId];
+    uint drawId = drawCommands[gl_DrawIDARB].drawId;
+    MeshDraw meshDraw = draws[drawId];
 
     Vertex v = vertices[gl_VertexIndex];
     vec3 position = vec3(v.x, v.y, v.z);

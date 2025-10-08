@@ -606,7 +606,7 @@ namespace C3D
             firstFrame = true;
         }
 
-        constexpr f32 zNear = 1.f;
+        constexpr f32 zNear = 0.5f;
 
         auto projection = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), zNear);
 
