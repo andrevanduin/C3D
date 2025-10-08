@@ -53,7 +53,7 @@ namespace C3D
         void CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, const VulkanTexture& depthPyramid, const DrawCullData& cullData,
                       u32 timestamp) const;
         void RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget, const Globals& globals,
-                        const Window& window, bool late) const;
+                        const Window& window, u32 query, bool late) const;
         void DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const;
 
         bool m_meshShadingEnabled      = true;

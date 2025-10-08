@@ -81,7 +81,7 @@ namespace C3D
         // Create our query pool for timestamps
         m_queryPoolTimestamps = VkUtils::CreateQueryPool(m_context, 128, VK_QUERY_TYPE_TIMESTAMP);
         // And for pipeline statistics
-        m_queryPoolStatistics = VkUtils::CreateQueryPool(m_context, 1, VK_QUERY_TYPE_PIPELINE_STATISTICS);
+        m_queryPoolStatistics = VkUtils::CreateQueryPool(m_context, 2, VK_QUERY_TYPE_PIPELINE_STATISTICS);
 
         // Create our buffers
         if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(64), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -455,12 +455,19 @@ namespace C3D
     }
 
     void VulkanRendererPlugin::RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget,
-                                          const Globals& globals, const Window& window, bool late) const
+                                          const Globals& globals, const Window& window, u32 query, bool late) const
     {
         constexpr VkClearColorValue clearColor               = { 30.f / 255.f, 54.f / 255.f, 42.f / 255.f, 1 };
         constexpr VkClearDepthStencilValue clearDepthStencil = { 0.f, 0 };
 
+        // Begin quering our pipeline statistics
+        vkCmdBeginQuery(commandBuffer, m_queryPoolStatistics, query, 0);
+
         BeginRendering(commandBuffer, colorTarget.GetView(), depthTarget.GetView(), clearColor, clearDepthStencil, window.width, window.height, late);
+
+        // First commands are to set the viewport and scissor
+        vkCmdSetViewport(commandBuffer, 0, 1, &m_viewport);
+        vkCmdSetScissor(commandBuffer, 0, 1, &m_scissor);
 
         if (m_meshShadingEnabled)
         {
@@ -492,6 +499,8 @@ namespace C3D
 
         // End our rendering
         vkCmdEndRendering(commandBuffer);
+
+        vkCmdEndQuery(commandBuffer, m_queryPoolStatistics, query);
     }
 
     void VulkanRendererPlugin::DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const
@@ -574,16 +583,10 @@ namespace C3D
 
         // Reset our pools
         vkCmdResetQueryPool(commandBuffer, m_queryPoolTimestamps, 0, 128);
-        vkCmdResetQueryPool(commandBuffer, m_queryPoolStatistics, 0, 1);
-
-        // First commands are to set the viewport and scissor
-        vkCmdSetViewport(commandBuffer, 0, 1, &m_viewport);
-        vkCmdSetScissor(commandBuffer, 0, 1, &m_scissor);
+        vkCmdResetQueryPool(commandBuffer, m_queryPoolStatistics, 0, 2);
 
         // Write the start (top of pipeline) timestamp
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 0);
-        // Begin quering our pipeline statistics
-        vkCmdBeginQuery(commandBuffer, m_queryPoolStatistics, 0, 0);
 
         static bool firstFrame = false;
         if (!firstFrame)
@@ -654,7 +657,7 @@ namespace C3D
         CullStep(commandBuffer, m_drawCullShader, backendState->depthPyramid, cullData, 2);
 
         // Early render: render objects that were visible last frame
-        RenderStep(commandBuffer, backendState->colorTarget, backendState->depthTarget, globals, window, /* late = */ false);
+        RenderStep(commandBuffer, backendState->colorTarget, backendState->depthTarget, globals, window, 0, /* late = */ false);
 
         // Depth pyramid generation
         DepthPyramidStep(commandBuffer, backendState->depthTarget, backendState->depthPyramid);
@@ -663,7 +666,7 @@ namespace C3D
         CullStep(commandBuffer, m_drawCullLateShader, backendState->depthPyramid, cullData, 6);
 
         // Late render: render objects that are visible this frame but weren't drawn in the early pass
-        RenderStep(commandBuffer, backendState->colorTarget, backendState->depthTarget, globals, window, /* late = */ true);
+        RenderStep(commandBuffer, backendState->colorTarget, backendState->depthTarget, globals, window, 1, /* late = */ true);
 
         return true;
     }
@@ -673,9 +676,6 @@ namespace C3D
         auto backendState   = window.rendererState->backendState;
         auto commandBuffer  = backendState->GetCommandBuffer();
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
-
-        // End our query for pipeline statistics
-        vkCmdEndQuery(commandBuffer, m_queryPoolStatistics, 0);
 
         // Setup some copy barriers
         VkImageMemoryBarrier copyBarriers[] = {
@@ -786,8 +786,8 @@ namespace C3D
         VK_CHECK(vkGetQueryPoolResults(device, m_queryPoolTimestamps, 0, ARRAY_SIZE(timestampResults), sizeof(timestampResults), timestampResults,
                                        sizeof(timestampResults[0]), VK_QUERY_RESULT_64_BIT));
 
-        u32 statResults[1] = {};
-        VK_CHECK(vkGetQueryPoolResults(device, m_queryPoolStatistics, 0, 1, sizeof(statResults), statResults, sizeof(statResults[0]), 0));
+        u32 statResults[2] = {};
+        VK_CHECK(vkGetQueryPoolResults(device, m_queryPoolStatistics, 0, ARRAY_SIZE(statResults), sizeof(statResults), statResults, sizeof(statResults[0]), 0));
 
         auto props = m_context.device.GetProperties();
 
@@ -802,7 +802,7 @@ namespace C3D
         m_frameCpuAvg = m_frameCpuAvg * 0.95 + (frameCpuEnd - m_frameCpuBegin) * 0.05;
         m_frameGpuAvg = m_frameGpuAvg * 0.95 + (frameGpuEnd - frameGpuBegin) * 0.05;
 
-        f64 triangleCount = static_cast<f64>(statResults[0]);
+        f64 triangleCount = static_cast<f64>(statResults[0] + statResults[1]);
 
         f64 trianglesPerSecond = triangleCount / (m_frameGpuAvg * 1e-3);
         f64 drawsPerSecond     = static_cast<f64>(m_drawCount) / (m_frameGpuAvg * 1e-3);
