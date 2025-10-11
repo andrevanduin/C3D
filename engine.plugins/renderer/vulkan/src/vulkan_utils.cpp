@@ -205,47 +205,102 @@ namespace C3D
         return static_cast<u32>(gpuMemory);
     }
 
-    VkImageMemoryBarrier VkUtils::CreateImageBarrier(VkImage image, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout oldLayout,
-                                                     VkImageLayout newLayout, VkImageAspectFlags aspectMask)
+    VkImageMemoryBarrier2 VkUtils::ImageBarrier2(VkImage image, VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask, VkImageLayout oldLayout,
+                                                 VkPipelineStageFlags2 dstStageMask, VkAccessFlags2 dstAccessMask, VkImageLayout newLayout,
+                                                 VkImageAspectFlags aspectMask, u32 baseMipLevel, u32 levelCount)
     {
-        VkImageMemoryBarrier barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        VkImageMemoryBarrier2 barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
 
-        barrier.image = image;
-        // Source and destination access masks
-        barrier.srcAccessMask = srcAccessMask;
-        barrier.dstAccessMask = dstAccessMask;
-        // Layouts
-        barrier.oldLayout = oldLayout;
-        barrier.newLayout = newLayout;
-        // NOTE: family index is currently ignored since we only use 1 shared queue
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        // Aspect mask (color or depth etc.)
-        barrier.subresourceRange.aspectMask = aspectMask;
-        // Transition all remaining mip levels
-        barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-        // Transition all layers at once
-        barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+        barrier.image                         = image;
+        barrier.srcStageMask                  = srcStageMask;
+        barrier.srcAccessMask                 = srcAccessMask;
+        barrier.dstStageMask                  = dstStageMask;
+        barrier.dstAccessMask                 = dstAccessMask;
+        barrier.oldLayout                     = oldLayout;
+        barrier.newLayout                     = newLayout;
+        barrier.srcQueueFamilyIndex           = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex           = VK_QUEUE_FAMILY_IGNORED;
+        barrier.subresourceRange.aspectMask   = aspectMask;
+        barrier.subresourceRange.baseMipLevel = baseMipLevel;
+        barrier.subresourceRange.levelCount   = levelCount;
+        barrier.subresourceRange.layerCount   = VK_REMAINING_ARRAY_LAYERS;
 
         return barrier;
     }
 
-    VkBufferMemoryBarrier VkUtils::CreateBufferBarrier(VkBuffer buffer, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask)
+    VkBufferMemoryBarrier2 VkUtils::BufferBarrier2(VkBuffer buffer, VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask,
+                                                   VkPipelineStageFlags2 dstStageMask, VkAccessFlags dstAccessMask)
     {
-        VkBufferMemoryBarrier result = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+        VkBufferMemoryBarrier2 barrier = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2 };
 
-        result.srcAccessMask       = srcAccessMask;
-        result.dstAccessMask       = dstAccessMask;
-        result.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        result.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        result.buffer              = buffer;
-        result.offset              = 0;
-        result.size                = VK_WHOLE_SIZE;
+        barrier.buffer              = buffer;
+        barrier.srcStageMask        = srcStageMask;
+        barrier.srcAccessMask       = srcAccessMask;
+        barrier.dstStageMask        = dstStageMask;
+        barrier.dstAccessMask       = dstAccessMask;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.offset              = 0;
+        barrier.size                = VK_WHOLE_SIZE;
 
-        return result;
+        return barrier;
     }
 
-    VkQueryPool VkUtils::CreateQueryPool(VulkanContext& context, u32 queryCount, VkQueryType queryType)
+    void VkUtils::PipelineBarrier(VkCommandBuffer commandBuffer, VkDependencyFlags dependencyFlags, u32 bufferBarrierCount,
+                                  const VkBufferMemoryBarrier2* pBufferBarriers, u32 imageBarrierCount, const VkImageMemoryBarrier2* pImageBarriers)
+    {
+        VkDependencyInfo dependencyInfo         = { VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+        dependencyInfo.dependencyFlags          = dependencyFlags;
+        dependencyInfo.bufferMemoryBarrierCount = bufferBarrierCount;
+        dependencyInfo.pBufferMemoryBarriers    = pBufferBarriers;
+        dependencyInfo.imageMemoryBarrierCount  = imageBarrierCount;
+        dependencyInfo.pImageMemoryBarriers     = pImageBarriers;
+
+        vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+    }
+
+    VkCommandPool VkUtils::CreateCommandPool(VulkanContext* context, const String& name)
+    {
+        VkCommandPoolCreateInfo createInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+        createInfo.queueFamilyIndex        = context->device.GetGraphicsFamilyIndex();
+        createInfo.flags                   = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+
+        VkCommandPool commandPool = nullptr;
+
+        auto result = vkCreateCommandPool(context->device.GetLogical(), &createInfo, context->allocator, &commandPool);
+        if (!IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create CommandPool with error: '{}'.", name);
+            return nullptr;
+        }
+
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_COMMAND_POOL, commandPool, name);
+
+        return commandPool;
+    }
+
+    VkCommandBuffer VkUtils::AllocateCommandBuffer(VulkanContext* context, const String& name, VkCommandPool commandPool, VkCommandBufferLevel level)
+    {
+        VkCommandBufferAllocateInfo allocateInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+        allocateInfo.commandPool                 = commandPool;
+        allocateInfo.level                       = level;
+        allocateInfo.commandBufferCount          = 1;
+
+        VkCommandBuffer commandBuffer = nullptr;
+
+        auto result = vkAllocateCommandBuffers(context->device.GetLogical(), &allocateInfo, &commandBuffer);
+        if (!IsSuccess(result))
+        {
+            ERROR_LOG("Failed to Allocate CommandBuffers with error: '{}'.", ResultString(result));
+            return nullptr;
+        }
+
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_COMMAND_BUFFER, commandBuffer, name);
+
+        return commandBuffer;
+    }
+
+    VkQueryPool VkUtils::CreateQueryPool(VulkanContext* context, u32 queryCount, VkQueryType queryType)
     {
         VkQueryPoolCreateInfo createInfo = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
         createInfo.queryType             = VK_QUERY_TYPE_TIMESTAMP;
@@ -258,10 +313,11 @@ namespace C3D
         }
 
         VkQueryPool queryPool = nullptr;
-        auto result           = vkCreateQueryPool(context.device.GetLogical(), &createInfo, context.allocator, &queryPool);
+
+        auto result = vkCreateQueryPool(context->device.GetLogical(), &createInfo, context->allocator, &queryPool);
         if (!IsSuccess(result))
         {
-            ERROR_LOG("vkCreateQueryPool failed with error: '{}'.", VkUtils::ResultString(result));
+            ERROR_LOG("Failed to create QueryPool with error: '{}'.", ResultString(result));
             return nullptr;
         }
 
@@ -284,10 +340,11 @@ namespace C3D
         createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         VkImage image = nullptr;
-        auto result   = vkCreateImage(context->device.GetLogical(), &createInfo, context->allocator, &image);
+
+        auto result = vkCreateImage(context->device.GetLogical(), &createInfo, context->allocator, &image);
         if (!IsSuccess(result))
         {
-            ERROR_LOG("vkCreateImage failed with error: '{}'.", VkUtils::ResultString(result));
+            ERROR_LOG("Failed to create Image with error: '{}'.", ResultString(result));
             return nullptr;
         }
 
@@ -309,10 +366,11 @@ namespace C3D
         createInfo.subresourceRange.layerCount   = 1;
 
         VkImageView view = nullptr;
-        auto result      = vkCreateImageView(context->device.GetLogical(), &createInfo, context->allocator, &view);
+
+        auto result = vkCreateImageView(context->device.GetLogical(), &createInfo, context->allocator, &view);
         if (!IsSuccess(result))
         {
-            ERROR_LOG("Failed to create Image view with error: '{}'.", VkUtils::ResultString(result));
+            ERROR_LOG("Failed to create Image view with error: '{}'.", ResultString(result));
             return nullptr;
         }
 
@@ -334,7 +392,7 @@ namespace C3D
         return result;
     }
 
-    VkSampler VkUtils::CreateSampler(VulkanContext* context, VkSamplerReductionMode reductionMode)
+    VkSampler VkUtils::CreateSampler(VulkanContext* context, const String& name, VkSamplerReductionMode reductionMode)
     {
         // TODO: Make more configurable in the future
         VkSamplerCreateInfo createInfo = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
@@ -356,15 +414,54 @@ namespace C3D
             createInfo.pNext                  = &createInfoReduction;
         }
 
-        VkSampler sampler;
+        VkSampler sampler = nullptr;
+
         auto result = vkCreateSampler(context->device.GetLogical(), &createInfo, context->allocator, &sampler);
         if (!IsSuccess(result))
         {
-            ERROR_LOG("Failed to create Sampler with error: '{}'.", VkUtils::ResultString(result));
+            ERROR_LOG("Failed to create Sampler with error: '{}'.", ResultString(result));
             return nullptr;
         }
 
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_SAMPLER, sampler, name);
+
         return sampler;
+    }
+
+    VkSemaphore VkUtils::CreateSemaphore(VulkanContext* context, const String& name)
+    {
+        VkSemaphoreCreateInfo createInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+
+        VkSemaphore semaphore = nullptr;
+
+        auto result = vkCreateSemaphore(context->device.GetLogical(), &createInfo, context->allocator, &semaphore);
+        if (!IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create Semaphore with error: '{}'.", ResultString(result));
+            return nullptr;
+        }
+
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_SEMAPHORE, semaphore, name);
+
+        return semaphore;
+    }
+
+    VkFence VkUtils::CreateFence(VulkanContext* context, const String& name)
+    {
+        VkFenceCreateInfo createInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+
+        VkFence fence = nullptr;
+
+        auto result = vkCreateFence(context->device.GetLogical(), &createInfo, context->allocator, &fence);
+        if (!IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create Fence with error: '{}'.", ResultString(result));
+            return nullptr;
+        }
+
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_FENCE, fence, name);
+
+        return fence;
     }
 
 #if defined(_DEBUG)

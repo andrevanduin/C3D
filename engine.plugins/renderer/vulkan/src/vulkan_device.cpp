@@ -82,6 +82,7 @@ namespace C3D
 
         device13Features.dynamicRendering = VK_TRUE;
         device13Features.synchronization2 = VK_TRUE;
+        device13Features.maintenance4     = VK_TRUE;
 
         device12Features.pNext = &device13Features;
 

@@ -40,27 +40,6 @@ namespace C3D
          */
         bool Resize(u32 width, u32 height, u32 mips = 1);
 
-        /**
-         * @brief Create a Image barrier for this image with the provided arguments.
-         * This can later be used in a vkCmdPipelineBarrier to wait for the image to be in the newLayout before proceeding.
-         *
-         * @param srcAccessMask The access mask for the source
-         * @param dstAccessMask The access mask for the destination
-         * @param newLayout The expected new layout of the image
-         * @return VkImageMemoryBarrier that can be used in the vkCmdPipelineBarrier call
-         */
-        VkImageMemoryBarrier CreateBarrier(VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout newLayout);
-
-        /**
-         * @brief Copy the contents of this image to the provided target.
-         *
-         * @param commandBuffer The command buffer to which we should record the copy command
-         * @param target The target image
-         * @param targetAspectMask The target image's aspect mask
-         * @param targetLayout The target image's layout
-         */
-        void CopyTo(VkCommandBuffer commandBuffer, VkImage target, VkImageAspectFlags targetAspectMask, VkImageLayout targetLayout);
-
         /** @brief Destroy the vulkan texture and it's internal resources. */
         void Destroy();
 

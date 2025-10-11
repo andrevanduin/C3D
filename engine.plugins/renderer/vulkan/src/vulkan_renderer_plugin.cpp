@@ -79,9 +79,9 @@ namespace C3D
         }
 
         // Create our query pool for timestamps
-        m_queryPoolTimestamps = VkUtils::CreateQueryPool(m_context, 128, VK_QUERY_TYPE_TIMESTAMP);
+        m_queryPoolTimestamps = VkUtils::CreateQueryPool(&m_context, 128, VK_QUERY_TYPE_TIMESTAMP);
         // And for pipeline statistics
-        m_queryPoolStatistics = VkUtils::CreateQueryPool(m_context, 2, VK_QUERY_TYPE_PIPELINE_STATISTICS);
+        m_queryPoolStatistics = VkUtils::CreateQueryPool(&m_context, 2, VK_QUERY_TYPE_PIPELINE_STATISTICS);
 
         // Create our buffers
         if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(64), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -371,7 +371,7 @@ namespace C3D
         }
 
         // Create our depth sampler
-        m_depthSampler = VkUtils::CreateSampler(&m_context, VK_SAMPLER_REDUCTION_MODE_MIN);
+        m_depthSampler = VkUtils::CreateSampler(&m_context, "DEPTH_SAMPLER", VK_SAMPLER_REDUCTION_MODE_MIN);
         if (!m_depthSampler)
         {
             ERROR_LOG("Failed to create depth sampler.");
@@ -398,11 +398,11 @@ namespace C3D
         colorAttachmentInfo.clearValue.color          = clearColor;
 
         VkRenderingAttachmentInfo depthAttachmentInfo = { VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-        depthAttachmentInfo.clearValue.depthStencil   = clearDepthStencil;
         depthAttachmentInfo.imageView                 = depthView;
-        depthAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        depthAttachmentInfo.imageLayout               = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
         depthAttachmentInfo.loadOp                    = late ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachmentInfo.storeOp                   = late ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAttachmentInfo.storeOp                   = VK_ATTACHMENT_STORE_OP_STORE;
+        depthAttachmentInfo.clearValue.depthStencil   = clearDepthStencil;
 
         VkRenderingInfo renderInfo      = { VK_STRUCTURE_TYPE_RENDERING_INFO };
         renderInfo.colorAttachmentCount = 1;
@@ -418,21 +418,32 @@ namespace C3D
     void VulkanRendererPlugin::CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const DrawCullData& cullData,
                                         u32 timestamp, bool late) const
     {
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, timestamp + 0);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, timestamp + 0);
 
-        VkBufferMemoryBarrier prefillBarrier =
-            VkUtils::CreateBufferBarrier(m_drawCommandCountBuffer.GetHandle(), VK_ACCESS_INDIRECT_COMMAND_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &prefillBarrier, 0, nullptr);
+        u32 rasterizationStage =
+            m_meshShadingEnabled ? VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT : VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+
+        auto prefillBarrier = VkUtils::BufferBarrier2(m_drawCommandCountBuffer.GetHandle(), VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+                                                      VK_ACCESS_INDIRECT_COMMAND_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+
+        VkUtils::PipelineBarrier(commandBuffer, 0, 1, &prefillBarrier, 0, nullptr);
 
         // Zero initialize our draw command count buffer
         m_drawCommandCountBuffer.Fill(commandBuffer, 0, 4, 0);
 
-        VkBufferMemoryBarrier fillBarrier = VkUtils::CreateBufferBarrier(m_drawCommandCountBuffer.GetHandle(), VK_ACCESS_TRANSFER_WRITE_BIT,
-                                                                         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
-        VkImageMemoryBarrier readBarrier  = depthPyramid.CreateBarrier(0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
+        auto pyramidBarrier = VkUtils::ImageBarrier2(depthPyramid.GetImage(), late ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : 0,
+                                                     late ? VK_ACCESS_SHADER_WRITE_BIT : 0, late ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED,
+                                                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
-        VkPipelineStageFlags srcStageFlags = late ? VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_TRANSFER_BIT;
-        vkCmdPipelineBarrier(commandBuffer, srcStageFlags, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &fillBarrier, 1, &readBarrier);
+        VkBufferMemoryBarrier2 fillBarriers[] = {
+            VkUtils::BufferBarrier2(m_drawCommandBuffer.GetHandle(), VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | rasterizationStage,
+                                    VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                    VK_ACCESS_SHADER_WRITE_BIT),
+            VkUtils::BufferBarrier2(m_drawCommandCountBuffer.GetHandle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
+        };
+
+        VkUtils::PipelineBarrier(commandBuffer, 0, ARRAY_SIZE(fillBarriers), fillBarriers, 1, &pyramidBarrier);
 
         shader.Bind(commandBuffer);
 
@@ -446,15 +457,16 @@ namespace C3D
         shader.PushConstants(commandBuffer, &cullData, sizeof(DrawCullData));
         shader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()), 1, 1);
 
-        VkBufferMemoryBarrier cullBarriers[] = {
-            VkUtils::CreateBufferBarrier(m_drawCommandBuffer.GetHandle(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT),
-            VkUtils::CreateBufferBarrier(m_drawCommandCountBuffer.GetHandle(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT),
+        VkBufferMemoryBarrier2 cullBarriers[] = {
+            VkUtils::BufferBarrier2(m_drawCommandBuffer.GetHandle(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+                                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | rasterizationStage, VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT),
+            VkUtils::BufferBarrier2(m_drawCommandCountBuffer.GetHandle(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+                                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT),
         };
 
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, ARRAY_SIZE(cullBarriers),
-                             cullBarriers, 0, nullptr);
+        VkUtils::PipelineBarrier(commandBuffer, 0, ARRAY_SIZE(cullBarriers), cullBarriers, 0, nullptr);
 
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, timestamp + 1);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, timestamp + 1);
     }
 
     void VulkanRendererPlugin::RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget,
@@ -508,15 +520,18 @@ namespace C3D
 
     void VulkanRendererPlugin::DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const
     {
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 4);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, 4);
 
         // Wait for all depth data to be written to the depth target before we start reading
-        VkImageMemoryBarrier depthReadBarriers[] = {
-            depthTarget.CreateBarrier(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+        VkImageMemoryBarrier2 depthBarriers[] = {
+            VkUtils::ImageBarrier2(depthTarget.GetImage(), VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT,
+                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT),
+            VkUtils::ImageBarrier2(depthPyramid.GetImage(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL,
+                                   VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL),
         };
 
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0,
-                             0, 0, ARRAY_SIZE(depthReadBarriers), depthReadBarriers);
+        VkUtils::PipelineBarrier(commandBuffer, 0, 0, nullptr, ARRAY_SIZE(depthBarriers), depthBarriers);
 
         // Bind our depth reduce shader
         m_depthReduceShader.Bind(commandBuffer);
@@ -539,21 +554,22 @@ namespace C3D
             m_depthReduceShader.PushConstants(commandBuffer, &depthReduceData, sizeof(depthReduceData));
             m_depthReduceShader.Dispatch(commandBuffer, levelWidth, levelHeight, 1);
 
-            VkImageMemoryBarrier reduceBarrier = depthPyramid.CreateBarrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
+            auto reduceBarrier = VkUtils::ImageBarrier2(depthPyramid.GetImage(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+                                                        VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT,
+                                                        VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, i, 1);
 
-            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0,
-                                 0, 0, 1, &reduceBarrier);
+            VkUtils::PipelineBarrier(commandBuffer, 0, 0, nullptr, 1, &reduceBarrier);
         }
 
         // Wait for the depth target to be writable again
-        VkImageMemoryBarrier depthWriteBarrier =
-            depthTarget.CreateBarrier(VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                                      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        auto depthWriteBarrier = VkUtils::ImageBarrier2(depthTarget.GetImage(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT,
+                                                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                                                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                                                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0,
-                             0, 0, 1, &depthWriteBarrier);
+        VkUtils::PipelineBarrier(commandBuffer, 0, 0, nullptr, 1, &depthWriteBarrier);
 
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 5);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, 5);
     }
 
     bool VulkanRendererPlugin::Begin(Window& window)
@@ -595,11 +611,10 @@ namespace C3D
         {
             m_drawVisibilityBuffer.Fill(commandBuffer, 0, 4 * m_drawCount, 0);
 
-            VkBufferMemoryBarrier fillBarrier = VkUtils::CreateBufferBarrier(m_drawVisibilityBuffer.GetHandle(), VK_ACCESS_TRANSFER_WRITE_BIT,
-                                                                             VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+            auto fillBarrier = VkUtils::BufferBarrier2(m_drawVisibilityBuffer.GetHandle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                                                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
 
-            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &fillBarrier, 0,
-                                 nullptr);
+            VkUtils::PipelineBarrier(commandBuffer, 0, 1, &fillBarrier, 0, nullptr);
 
             firstFrame = true;
         }
@@ -640,33 +655,39 @@ namespace C3D
         Globals globals    = {};
         globals.projection = projection;
 
+        auto& colorTarget  = backendState->colorTarget;
+        auto& depthTarget  = backendState->depthTarget;
+        auto& depthPyramid = backendState->depthPyramid;
+
         // Our color and depth target need to be in ATTACHMENT OPTIMAL layout before we can start rendering
-        VkImageMemoryBarrier renderBeginBarriers[] = {
-            backendState->colorTarget.CreateBarrier(0, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-            backendState->depthTarget.CreateBarrier(0, 0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+        VkImageMemoryBarrier2 renderBeginBarriers[] = {
+            VkUtils::ImageBarrier2(colorTarget.GetImage(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+            VkUtils::ImageBarrier2(depthTarget.GetImage(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+                                   VK_IMAGE_ASPECT_DEPTH_BIT),
         };
 
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0,
-                             0, ARRAY_SIZE(renderBeginBarriers), renderBeginBarriers);
+        VkUtils::PipelineBarrier(commandBuffer, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, ARRAY_SIZE(renderBeginBarriers), renderBeginBarriers);
 
         // Early cull: frustum cull & fill objects that *were* visible last frame
-        CullStep(commandBuffer, m_drawCullShader, backendState->depthPyramid, cullData, 2, /* late = */ false);
+        CullStep(commandBuffer, m_drawCullShader, depthPyramid, cullData, 2, /* late = */ false);
 
         // Early render: render objects that were visible last frame
-        RenderStep(commandBuffer, backendState->colorTarget, backendState->depthTarget, globals, window, 0, /* late = */ false);
+        RenderStep(commandBuffer, colorTarget, depthTarget, globals, window, 0, /* late = */ false);
 
         // Depth pyramid generation
-        DepthPyramidStep(commandBuffer, backendState->depthTarget, backendState->depthPyramid);
+        DepthPyramidStep(commandBuffer, depthTarget, depthPyramid);
 
         // Late cull: frustum + occlusion cull & fill object that were *not* visible last frame
-        CullStep(commandBuffer, m_drawCullLateShader, backendState->depthPyramid, cullData, 6, /* late = */ true);
+        CullStep(commandBuffer, m_drawCullLateShader, depthPyramid, cullData, 6, /* late = */ true);
 
         // Late render: render objects that are visible this frame but weren't drawn in the early pass
-        RenderStep(commandBuffer, backendState->colorTarget, backendState->depthTarget, globals, window, 1, /* late = */ true);
+        RenderStep(commandBuffer, colorTarget, depthTarget, globals, window, 1, /* late = */ true);
 
         return true;
-    }
+    }  // namespace C3D
 
     bool VulkanRendererPlugin::End(Window& window)
     {
@@ -674,17 +695,22 @@ namespace C3D
         auto commandBuffer  = backendState->GetCommandBuffer();
         auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
 
+        auto& colorTarget  = backendState->colorTarget;
+        auto& depthPyramid = backendState->depthPyramid;
+
         // Setup some copy barriers
-        VkImageMemoryBarrier copyBarriers[] = {
-            backendState->colorTarget.CreateBarrier(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
-            VkUtils::CreateImageBarrier(swapchainImage, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                        VK_IMAGE_ASPECT_COLOR_BIT),
+        VkImageMemoryBarrier2 copyBarriers[] = {
+            VkUtils::ImageBarrier2(colorTarget.GetImage(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
+            VkUtils::ImageBarrier2(swapchainImage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL),
+            VkUtils::ImageBarrier2(depthPyramid.GetImage(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
+                                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL),
         };
 
-        // Wait for color target to be in TRANSFER_SRC_OPTIMAL and wait for swapchain
-        // image to be in TRANSFER_DST_OPTIMAL
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0,
-                             0, ARRAY_SIZE(copyBarriers), copyBarriers);
+        // Wait for color target to be in TRANSFER_SRC_OPTIMAL and wait for swapchain image to be in TRANSFER_DST_OPTIMAL
+        VkUtils::PipelineBarrier(commandBuffer, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, ARRAY_SIZE(copyBarriers), copyBarriers);
 
         if (m_debugPyramid)
         {
@@ -709,17 +735,23 @@ namespace C3D
         else
         {
             // Copy the contents of our color target to the current swapchain image
-            backendState->colorTarget.CopyTo(commandBuffer, swapchainImage, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            VkImageCopy copyRegion               = {};
+            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.srcSubresource.layerCount = 1;
+            copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.dstSubresource.layerCount = 1;
+            copyRegion.extent                    = { window.width, window.height, 1 };
+
+            vkCmdCopyImage(commandBuffer, colorTarget.GetImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                           &copyRegion);
         }
 
         // Setup a present barrier
-        VkImageMemoryBarrier presentBarrier = VkUtils::CreateImageBarrier(swapchainImage, VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                                                          VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT);
+        auto presentBarrier = VkUtils::ImageBarrier2(swapchainImage, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
-        // Wait for the swapchain image to go from TRANSFER_DST_OPTIMAL to
-        // PRESENT_SRC_KHR
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1,
-                             &presentBarrier);
+        // Wait for the swapchain image to go from TRANSFER_DST_OPTIMAL to PRESENT_SRC_KHR
+        VkUtils::PipelineBarrier(commandBuffer, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 1, &presentBarrier);
 
         // Keep track of the renderer End() timestamp
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 1);
@@ -744,7 +776,7 @@ namespace C3D
         auto commandBuffer    = backendState->GetCommandBuffer();
         auto queue            = m_context.device.GetDeviceQueue();
 
-        VkPipelineStageFlags submitStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        VkPipelineStageFlags submitStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
         VkSubmitInfo submitInfo         = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
         submitInfo.waitSemaphoreCount   = 1;
@@ -773,11 +805,11 @@ namespace C3D
 
         auto result = backendState->swapchain.Present(backendState);
 
-        auto device = m_context.device.GetLogical();
-        auto fence  = backendState->GetFence();
+        auto device     = m_context.device.GetLogical();
+        auto frameFence = backendState->GetFence();
 
-        VK_CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX));
-        VK_CHECK(vkResetFences(device, 1, &fence));
+        VK_CHECK(vkWaitForFences(device, 1, &frameFence, VK_TRUE, UINT64_MAX));
+        VK_CHECK(vkResetFences(device, 1, &frameFence));
 
         u64 timestampResults[8] = {};
         VK_CHECK(vkGetQueryPoolResults(device, m_queryPoolTimestamps, 0, ARRAY_SIZE(timestampResults), sizeof(timestampResults), timestampResults,
@@ -891,10 +923,12 @@ namespace C3D
         INFO_LOG("Creating semaphores.");
         for (u32 i = 0; i < MAX_FRAMES; ++i)
         {
-            VkSemaphoreCreateInfo createInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-            VK_CHECK(vkCreateSemaphore(device, &createInfo, m_context.allocator, &backend->acquireSemaphores[i]));
-
-            VK_SET_DEBUG_OBJECT_NAME(&m_context, VK_OBJECT_TYPE_SEMAPHORE, backend->acquireSemaphores[i], String::FromFormat("VULKAN_ACQUIRE_SEMAPHORE_{}", i));
+            backend->acquireSemaphores[i] = VkUtils::CreateSemaphore(&m_context, String::FromFormat("VULKAN_ACQUIRE_SEMAPHORE_{}", i));
+            if (!backend->acquireSemaphores[i])
+            {
+                ERROR_LOG("Failed to create acquire Semaphores.");
+                return false;
+            }
         }
 
         // Get the number of swapchain images
@@ -904,40 +938,42 @@ namespace C3D
         // Then create the semaphores
         for (u32 i = 0; i < swapchainImageCount; ++i)
         {
-            VkSemaphoreCreateInfo createInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-            VK_CHECK(vkCreateSemaphore(device, &createInfo, m_context.allocator, &backend->presentSemaphores[i]));
-
-            VK_SET_DEBUG_OBJECT_NAME(&m_context, VK_OBJECT_TYPE_SEMAPHORE, backend->presentSemaphores[i], String::FromFormat("VULKAN_PRESENT_SEMAPHORE_{}", i));
+            backend->presentSemaphores[i] = VkUtils::CreateSemaphore(&m_context, String::FromFormat("VULKAN_PRESENT_SEMAPHORE_{}", i));
+            if (!backend->presentSemaphores[i])
+            {
+                ERROR_LOG("Failed to create present Semaphores.");
+                return false;
+            }
         }
 
         INFO_LOG("Creating fences.");
         for (u32 i = 0; i < MAX_FRAMES; ++i)
         {
-            VkFenceCreateInfo createInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-            VK_CHECK(vkCreateFence(device, &createInfo, m_context.allocator, &backend->fences[i]));
-
-            VK_SET_DEBUG_OBJECT_NAME(&m_context, VK_OBJECT_TYPE_FENCE, backend->fences[i], String::FromFormat("VULKAN_FENCE_{}", i));
+            backend->fences[i] = VkUtils::CreateFence(&m_context, String::FromFormat("VULKAN_FENCE_{}", i));
+            if (!backend->fences[i])
+            {
+                ERROR_LOG("Failed to create Fences.");
+                return false;
+            }
         }
 
-        INFO_LOG("Creating command pools and buffers");
+        INFO_LOG("Creating CommandPools and Buffers.");
         for (u32 i = 0; i < MAX_FRAMES; ++i)
         {
-            VkCommandPoolCreateInfo createInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-            createInfo.queueFamilyIndex        = m_context.device.GetGraphicsFamilyIndex();
-            createInfo.flags                   = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+            backend->commandPools[i] = VkUtils::CreateCommandPool(&m_context, String::FromFormat("VULKAN_COMMAND_POOL_{}", i));
+            if (!backend->commandPools[i])
+            {
+                ERROR_LOG("Failed to create CommandPool.");
+                return false;
+            }
 
-            VK_CHECK(vkCreateCommandPool(device, &createInfo, m_context.allocator, &backend->commandPools[i]));
-
-            VK_SET_DEBUG_OBJECT_NAME(&m_context, VK_OBJECT_TYPE_COMMAND_POOL, backend->commandPools[i], String::FromFormat("VULKAN_COMMAND_POOL_{}", i));
-
-            VkCommandBufferAllocateInfo allocateInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-            allocateInfo.commandPool                 = backend->commandPools[i];
-            allocateInfo.level                       = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-            allocateInfo.commandBufferCount          = 1;
-
-            VK_CHECK(vkAllocateCommandBuffers(device, &allocateInfo, &backend->commandBuffers[i]));
-
-            VK_SET_DEBUG_OBJECT_NAME(&m_context, VK_OBJECT_TYPE_COMMAND_BUFFER, backend->commandBuffers[i], String::FromFormat("VULKAN_COMMAND_BUFFER_{}", i));
+            backend->commandBuffers[i] = VkUtils::AllocateCommandBuffer(&m_context, String::FromFormat("VULKAN_COMMAND_BUFFER_{}", i), backend->commandPools[i],
+                                                                        VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+            if (!backend->commandBuffers[i])
+            {
+                ERROR_LOG("Failed to allocate CommandBuffer.");
+                return false;
+            }
         }
 
         return true;

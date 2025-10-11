@@ -23,31 +23,36 @@ namespace C3D
         /** @brief Calculate the available GPU memory in MebiBytes. */
         u32 GetAvailableGPUMemoryInMB(VkPhysicalDeviceMemoryProperties properties);
 
+        VkImageMemoryBarrier2 ImageBarrier2(VkImage image, VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask, VkImageLayout oldLayout,
+                                            VkPipelineStageFlags2 dstStageMask, VkAccessFlags2 dstAccessMask, VkImageLayout newLayout,
+                                            VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, u32 baseMipLevel = 0,
+                                            u32 levelCount = VK_REMAINING_MIP_LEVELS);
+
+        VkBufferMemoryBarrier2 BufferBarrier2(VkBuffer buffer, VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask,
+                                              VkPipelineStageFlags2 dstStageMask, VkAccessFlags dstAccessMask);
+
+        void PipelineBarrier(VkCommandBuffer commandBuffer, VkDependencyFlags dependencyFlags, u32 bufferBarrierCount,
+                             const VkBufferMemoryBarrier2* pBufferBarriers, u32 imageBarrierCount, const VkImageMemoryBarrier2* pImageBarriers);
+
         /**
-         * @brief Creates an image barrier structure.
+         * @brief Create a Command Pool object
          *
-         * @param image A handle to the Vulkan image
-         * @param srcAccessMask The
-         * @param dstAccessMask
-         * @param oldLayout
-         * @param newLayout
-         * @param aspectMask
-         * @return VkImageMemoryBarrier
+         * @param context A pointer to the Vulkan context
+         * @param name The name of the commandpool (used for debugging purposes)
+         * @return VkCommandPool if successful; nullptr otherwise
          */
-        VkImageMemoryBarrier CreateImageBarrier(VkImage image, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout oldLayout,
-                                                VkImageLayout newLayout, VkImageAspectFlags aspectMask);
+        VkCommandPool CreateCommandPool(VulkanContext* context, const String& name);
 
-        VkBufferMemoryBarrier CreateBufferBarrier(VkBuffer buffer, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask);
-
+        VkCommandBuffer AllocateCommandBuffer(VulkanContext* context, const String& name, VkCommandPool commandPool, VkCommandBufferLevel level);
         /**
          * @brief Creates a Vulkan query pool
          *
-         * @param context The vulkan context
+         * @param context  A pointer to the vulkan context
          * @param queryCount The number of queries managed by the pool
          * @param queryType The type of queries the pool will manage
          * @return a VkQueryPool if successful; nullptr otherwise
          */
-        VkQueryPool CreateQueryPool(VulkanContext& context, u32 queryCount, VkQueryType queryType);
+        VkQueryPool CreateQueryPool(VulkanContext* context, u32 queryCount, VkQueryType queryType);
 
         /**
          * @brief Creates a Vulkan image
@@ -85,7 +90,33 @@ namespace C3D
          */
         u32 CalculateImageMiplevels(u32 width, u32 height);
 
-        VkSampler CreateSampler(VulkanContext* context, VkSamplerReductionMode reductionMode);
+        /**
+         * @brief Create a Sampler object
+         *
+         * @param context  A pointer to the Vulkan context
+         * @param name The name of the sampler (used for debugging purposes)
+         * @param reductionMode The reduction mode used by the sampler
+         * @return VkSampler if successful; nullptr otherwise
+         */
+        VkSampler CreateSampler(VulkanContext* context, const String& name, VkSamplerReductionMode reductionMode);
+
+        /**
+         * @brief Create a Semaphore object
+         *
+         * @param context A pointer to the Vulkan context
+         * @param name The name of the semaphore (used for debugging purposes)
+         * @return VkSemaphore if successful; nullptr otherwise
+         */
+        VkSemaphore CreateSemaphore(VulkanContext* context, const String& name);
+
+        /**
+         * @brief Creates a Vulkan fence
+         *
+         * @param context A pointer to the Vulkan context
+         * @param name The name of the fence (used for debugging purposes)
+         * @return VkFence if successful; nullptr otherwise
+         */
+        VkFence CreateFence(VulkanContext* context, const String& name);
 
         /** @brief Helper method to enable easier loading of vulkan extension functions. */
         template <typename T>

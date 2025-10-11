@@ -16,6 +16,7 @@ namespace C3D
         u32 opCode       = 0;
         u32 typeId       = 0;
         u32 storageClass = 0;
+        u32 constant     = 0;
         u32 binding      = 0;
         u32 set          = 0;
     };
@@ -171,7 +172,7 @@ namespace C3D
 
         // Set target SPIR-V version
         shaderc_compile_options_t options = shaderc_compile_options_initialize();
-        shaderc_compile_options_set_target_spirv(options, shaderc_spirv_version_1_4);
+        shaderc_compile_options_set_target_spirv(options, shaderc_spirv_version_1_6);
 
         // Compile the GLSL into SPIR-V
         shaderc_compilation_result_t compilationResult =
@@ -277,6 +278,10 @@ namespace C3D
         u32 idBound = code[3];
         DynamicArray<ID> ids(idBound);
 
+        u32 localSizeIdX = INVALID_ID;
+        u32 localSizeIdY = INVALID_ID;
+        u32 localSizeIdZ = INVALID_ID;
+
         // First instruction starts at index 5
         u32 offset = 5;
         while (offset < codeSize)
@@ -310,6 +315,24 @@ namespace C3D
                             m_localSizeX = instruction[3];
                             m_localSizeY = instruction[4];
                             m_localSizeZ = instruction[5];
+                            break;
+                        }
+                    }
+                    break;
+                }
+                case SpvOpExecutionModeId:
+                {
+                    C3D_ASSERT(wordCount >= 3);
+
+                    u32 mode = instruction[2];
+                    switch (mode)
+                    {
+                        case SpvExecutionModeLocalSizeId:
+                        {
+                            C3D_ASSERT(wordCount == 6);
+                            localSizeIdX = static_cast<i32>(instruction[3]);
+                            localSizeIdY = static_cast<i32>(instruction[4]);
+                            localSizeIdZ = static_cast<i32>(instruction[5]);
                             break;
                         }
                     }
@@ -364,6 +387,20 @@ namespace C3D
                     ids[id].opCode       = opcode;
                     ids[id].typeId       = instruction[3];
                     ids[id].storageClass = instruction[2];
+                    break;
+                }
+                case SpvOpConstant:
+                {
+                    // Currently we only correctly handle 32-bit integer constants
+                    C3D_ASSERT(wordCount >= 4);
+
+                    u32 id = instruction[2];
+                    C3D_ASSERT(id < idBound);
+
+                    C3D_ASSERT(ids[id].opCode == 0);
+                    ids[id].opCode   = opcode;
+                    ids[id].typeId   = instruction[1];
+                    ids[id].constant = instruction[3];
                     break;
                 }
                 case SpvOpVariable:
@@ -423,6 +460,29 @@ namespace C3D
             {
                 m_usePushConstants = true;
             }
+        }
+
+        if (m_shaderStage == VK_SHADER_STAGE_COMPUTE_BIT)
+        {
+            if (localSizeIdX != INVALID_ID)
+            {
+                C3D_ASSERT(ids[localSizeIdX].opCode == SpvOpConstant);
+                m_localSizeX = ids[localSizeIdX].constant;
+            }
+
+            if (localSizeIdY != INVALID_ID)
+            {
+                C3D_ASSERT(ids[localSizeIdY].opCode == SpvOpConstant);
+                m_localSizeY = ids[localSizeIdY].constant;
+            }
+
+            if (localSizeIdZ != INVALID_ID)
+            {
+                C3D_ASSERT(ids[localSizeIdZ].opCode == SpvOpConstant);
+                m_localSizeZ = ids[localSizeIdZ].constant;
+            }
+
+            C3D_ASSERT(m_localSizeX && m_localSizeY && m_localSizeZ);
         }
 
         return true;

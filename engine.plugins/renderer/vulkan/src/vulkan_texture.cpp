@@ -56,28 +56,6 @@ namespace C3D
         return CreateInternal(width, height);
     }
 
-    VkImageMemoryBarrier VulkanTexture::CreateBarrier(VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout newLayout)
-    {
-        // Create our barrier
-        auto barrier = VkUtils::CreateImageBarrier(m_image, srcAccessMask, dstAccessMask, m_currentLayout, newLayout, m_aspectMask);
-        // Our new layout will be the current one after the barrier command has executed
-        m_currentLayout = newLayout;
-
-        return barrier;
-    }
-
-    void VulkanTexture::CopyTo(VkCommandBuffer commandBuffer, VkImage target, VkImageAspectFlags targetAspectMask, VkImageLayout targetLayout)
-    {
-        VkImageCopy copyRegion               = {};
-        copyRegion.srcSubresource.aspectMask = m_aspectMask;
-        copyRegion.srcSubresource.layerCount = 1;
-        copyRegion.dstSubresource.aspectMask = targetAspectMask;
-        copyRegion.dstSubresource.layerCount = 1;
-        copyRegion.extent                    = { m_width, m_height, 1 };
-
-        vkCmdCopyImage(commandBuffer, m_image, m_currentLayout, target, targetLayout, 1, &copyRegion);
-    }
-
     bool VulkanTexture::CreateInternal(u32 width, u32 height)
     {
         INFO_LOG("Creating: '{}'.", m_name);

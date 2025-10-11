@@ -74,14 +74,19 @@ namespace C3D
         createInfo.ppEnabledExtensionNames = requiredExtensions.GetData();
 
         DynamicArray<const char*> requiredValidationLayerNames;
+        DynamicArray<VkValidationFeatureEnableEXT> enabledValidationFeatures;
+
+        VkValidationFeaturesEXT validationFeatures = { VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT };
 
         if (context.flags & RendererConfigFlag::FlagValidationLayers)
         {
+            // Enable synchronization validation
+            enabledValidationFeatures.EmplaceBack(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
+            enabledValidationFeatures.EmplaceBack(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
+
             // If we are require validation layers we add them here
             INFO_LOG("Validation layers are enabled.");
             requiredValidationLayerNames.EmplaceBack("VK_LAYER_KHRONOS_validation");
-            // NOTE: If needed for debugging we can enable this validation layer
-            // requiredValidationLayerNames.EmplaceBack("VK_LAYER_LUNARG_api_dump");
 
             INFO_LOG("Required instance layers that need to be loaded: {}.", StringUtils::Join(requiredValidationLayerNames, ", "));
 
@@ -109,6 +114,11 @@ namespace C3D
             }
 
             INFO_LOG("All required layers are present.");
+
+            validationFeatures.enabledValidationFeatureCount = enabledValidationFeatures.Size();
+            validationFeatures.pEnabledValidationFeatures    = enabledValidationFeatures.GetData();
+
+            createInfo.pNext = &validationFeatures;
         }
 
         createInfo.enabledLayerCount   = requiredValidationLayerNames.Size();
