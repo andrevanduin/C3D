@@ -12,7 +12,12 @@ namespace C3D
     {
         /** @brief Get the currently installed version of Vulkan. */
         u32 apiVersion = 0;
-        vkEnumerateInstanceVersion(&apiVersion);
+        auto result    = vkEnumerateInstanceVersion(&apiVersion);
+        if (!VkUtils::IsSuccess(result))
+        {
+            ERROR_LOG("Failed to enumerate instance version: '{}'.", VkUtils::ResultString(result));
+            return false;
+        }
 
         context.api.major = VK_API_VERSION_MAJOR(apiVersion);
         context.api.minor = VK_API_VERSION_MINOR(apiVersion);
@@ -28,7 +33,6 @@ namespace C3D
 
         VkInstanceCreateInfo createInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
         createInfo.pApplicationInfo     = &appInfo;
-
         // First we obtain the platform-specific extensions that we require
         auto requiredExtensions = VulkanPlatform::GetRequiredExtensionNames();
         // Add the default required surface extension
@@ -114,7 +118,7 @@ namespace C3D
         createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
 
-        auto result = vkCreateInstance(&createInfo, context.allocator, &context.instance);
+        result = vkCreateInstance(&createInfo, context.allocator, &context.instance);
         if (!VkUtils::IsSuccess(result))
         {
             auto resultString = VkUtils::ResultString(result);

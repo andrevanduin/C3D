@@ -70,19 +70,20 @@ namespace C3D
         device12Features.drawIndirectCount                 = VK_TRUE;
         device12Features.storageBuffer8BitAccess           = VK_TRUE;
         device12Features.uniformAndStorageBuffer8BitAccess = VK_TRUE;
-        device12Features.storagePushConstant8              = VK_TRUE;
         device12Features.shaderFloat16                     = VK_TRUE;
         device12Features.shaderInt8                        = VK_TRUE;
         device12Features.samplerFilterMinmax               = VK_TRUE;
         device12Features.scalarBlockLayout                 = VK_TRUE;
-        device12Features.bufferDeviceAddress               = VK_TRUE;
-        device11Features.pNext                             = &device12Features;
 
-        // Dynamic rendering
-        VkPhysicalDeviceDynamicRenderingFeatures dynamicRendering = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES };
+        device11Features.pNext = &device12Features;
 
-        dynamicRendering.dynamicRendering = VK_TRUE;
-        device12Features.pNext            = &dynamicRendering;
+        // Enable Vulkan 1.3 features
+        VkPhysicalDeviceVulkan13Features device13Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+
+        device13Features.dynamicRendering = VK_TRUE;
+        device13Features.synchronization2 = VK_TRUE;
+
+        device12Features.pNext = &device13Features;
 
         // Mesh shaders
         VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT };
@@ -92,7 +93,7 @@ namespace C3D
 
         if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
-            dynamicRendering.pNext = &meshShaderFeatures;
+            device13Features.pNext = &meshShaderFeatures;
         }
 
         auto result = vkCreateDevice(m_physical.handle, &createInfo, m_context->allocator, &m_logical.handle);
@@ -266,10 +267,10 @@ namespace C3D
             return false;
         }
 
-        // Ensure we are capable of using Vulkan 1.2 or greater
-        if (m_physical.properties.apiVersion < VK_API_VERSION_1_2)
+        // Ensure we are capable of using Vulkan 1.3 or greater
+        if (m_physical.properties.apiVersion < VK_API_VERSION_1_3)
         {
-            INFO_LOG("Device does not support Vulkan 1.2");
+            INFO_LOG("Device does not support Vulkan 1.3");
             return false;
         }
 
