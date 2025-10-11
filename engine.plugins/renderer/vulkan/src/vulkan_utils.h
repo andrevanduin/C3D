@@ -23,39 +23,83 @@ namespace C3D
         /** @brief Calculate the available GPU memory in MebiBytes. */
         u32 GetAvailableGPUMemoryInMB(VkPhysicalDeviceMemoryProperties properties);
 
-        VkImageMemoryBarrier2 ImageBarrier2(VkImage image, VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask, VkImageLayout oldLayout,
-                                            VkPipelineStageFlags2 dstStageMask, VkAccessFlags2 dstAccessMask, VkImageLayout newLayout,
-                                            VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, u32 baseMipLevel = 0,
-                                            u32 levelCount = VK_REMAINING_MIP_LEVELS);
+        /**
+         * @brief Creates a Vulkan Image Barrier.
+         *
+         * @param image The image for which the barrier should be created
+         * @param srcStageMask The source stage mask
+         * @param srcAccessMask The source access mask
+         * @param oldLayout The old layout of the image
+         * @param dstStageMask The destination stage mask
+         * @param dstAccessMask The destination access mask
+         * @param newLayout The new layout of the image
+         * @param aspectMask The aspect mask (= VK_IMAGE_ASPECT_COLOR_BIT by default)
+         * @param baseMipLevel The base mip level to start at (= 0 by default)
+         * @param levelCount The number of mip levels to include in the barrier (= VK_REMAINING_MIP_LEVELS by default)
+         * @return A VkImageMemoryBarrier2
+         */
+        VkImageMemoryBarrier2 ImageBarrier(VkImage image, VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask, VkImageLayout oldLayout,
+                                           VkPipelineStageFlags2 dstStageMask, VkAccessFlags2 dstAccessMask, VkImageLayout newLayout,
+                                           VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, u32 baseMipLevel = 0,
+                                           u32 levelCount = VK_REMAINING_MIP_LEVELS);
 
-        VkBufferMemoryBarrier2 BufferBarrier2(VkBuffer buffer, VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask,
-                                              VkPipelineStageFlags2 dstStageMask, VkAccessFlags dstAccessMask);
+        /**
+         * @brief Creates a Vulkan Buffer Barrier.
+         *
+         * @param buffer The buffer for which a barrier should be created
+         * @param srcStageMask The src stage mask
+         * @param srcAccessMask The source access mask
+         * @param dstStageMask The destination stage mask
+         * @param dstAccessMask The destination access mask
+         * @return A VkBufferMemoryBarrier2
+         */
+        VkBufferMemoryBarrier2 BufferBarrier(VkBuffer buffer, VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask,
+                                             VkPipelineStageFlags2 dstStageMask, VkAccessFlags dstAccessMask);
 
+        /**
+         * @brief Sets up a Vulkan Pipeline Barrier.
+         *
+         * @param commandBuffer The command buffer to use for the pipeline barrier
+         * @param dependencyFlags The dependency flags for the barrier
+         * @param bufferBarrierCount The number of buffer barriers
+         * @param pBufferBarriers A pointer to the buffer barriers
+         * @param imageBarrierCount The number of image barriers
+         * @param pImageBarriers A pointer to the image barriers
+         */
         void PipelineBarrier(VkCommandBuffer commandBuffer, VkDependencyFlags dependencyFlags, u32 bufferBarrierCount,
                              const VkBufferMemoryBarrier2* pBufferBarriers, u32 imageBarrierCount, const VkImageMemoryBarrier2* pImageBarriers);
 
         /**
-         * @brief Create a Command Pool object
+         * @brief Creates a Vulkan Command Pool.
          *
          * @param context A pointer to the Vulkan context
          * @param name The name of the commandpool (used for debugging purposes)
-         * @return VkCommandPool if successful; nullptr otherwise
+         * @return A VkCommandPool if successful; nullptr otherwise
          */
         VkCommandPool CreateCommandPool(VulkanContext* context, const String& name);
 
+        /**
+         * @brief Allocate a Vulkan Command Buffer from a Command Pool.
+         *
+         * @param context  A pointer to the Vulkan context
+         * @param name The name of the command buffer (used for debugging purposes)
+         * @param commandPool A command pool to allocate from
+         * @param level The command buffer level (primary, or secondary)
+         * @return A VkCommandBuffer if successful; nullptr otherwise
+         */
         VkCommandBuffer AllocateCommandBuffer(VulkanContext* context, const String& name, VkCommandPool commandPool, VkCommandBufferLevel level);
         /**
-         * @brief Creates a Vulkan query pool
+         * @brief Creates a Vulkan Query Pool.
          *
          * @param context  A pointer to the vulkan context
          * @param queryCount The number of queries managed by the pool
          * @param queryType The type of queries the pool will manage
-         * @return a VkQueryPool if successful; nullptr otherwise
+         * @return A VkQueryPool if successful; nullptr otherwise
          */
         VkQueryPool CreateQueryPool(VulkanContext* context, u32 queryCount, VkQueryType queryType);
 
         /**
-         * @brief Creates a Vulkan image
+         * @brief Creates a Vulkan image.
          *
          * @param context A pointer to the vulkan context
          * @param width The width of the image
@@ -68,7 +112,7 @@ namespace C3D
         VkImage CreateImage(VulkanContext* context, const String& name, u32 width, u32 height, VkFormat format, u32 mipLevels, VkImageUsageFlags usage);
 
         /**
-         * @brief Creates a Vulkan image View
+         * @brief Creates a Vulkan image View.
          *
          * @param context A pointer to the vulkan context
          * @param image A handle to the vulkan image
@@ -76,7 +120,7 @@ namespace C3D
          * @param aspectMask An aspect mask for the view
          * @param mipLevel The mip level for thie view
          * @param levelCount The number of levels in this view
-         * @return a VkImageView if successful; nullptr otherwise
+         * @return A VkImageView if successful; nullptr otherwise
          */
         VkImageView CreateImageView(VulkanContext* context, const String& name, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel,
                                     u32 levelCount);
@@ -91,17 +135,17 @@ namespace C3D
         u32 CalculateImageMiplevels(u32 width, u32 height);
 
         /**
-         * @brief Create a Sampler object
+         * @brief Create a Vulkan Sampler.
          *
          * @param context  A pointer to the Vulkan context
          * @param name The name of the sampler (used for debugging purposes)
          * @param reductionMode The reduction mode used by the sampler
-         * @return VkSampler if successful; nullptr otherwise
+         * @return A VkSampler if successful; nullptr otherwise
          */
         VkSampler CreateSampler(VulkanContext* context, const String& name, VkSamplerReductionMode reductionMode);
 
         /**
-         * @brief Create a Semaphore object
+         * @brief Create a Vulkan Semaphore.
          *
          * @param context A pointer to the Vulkan context
          * @param name The name of the semaphore (used for debugging purposes)
@@ -110,11 +154,11 @@ namespace C3D
         VkSemaphore CreateSemaphore(VulkanContext* context, const String& name);
 
         /**
-         * @brief Creates a Vulkan fence
+         * @brief Creates a Vulkan fence.
          *
          * @param context A pointer to the Vulkan context
          * @param name The name of the fence (used for debugging purposes)
-         * @return VkFence if successful; nullptr otherwise
+         * @return A VkFence if successful; nullptr otherwise
          */
         VkFence CreateFence(VulkanContext* context, const String& name);
 

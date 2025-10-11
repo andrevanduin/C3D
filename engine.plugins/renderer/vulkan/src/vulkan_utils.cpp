@@ -205,9 +205,9 @@ namespace C3D
         return static_cast<u32>(gpuMemory);
     }
 
-    VkImageMemoryBarrier2 VkUtils::ImageBarrier2(VkImage image, VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask, VkImageLayout oldLayout,
-                                                 VkPipelineStageFlags2 dstStageMask, VkAccessFlags2 dstAccessMask, VkImageLayout newLayout,
-                                                 VkImageAspectFlags aspectMask, u32 baseMipLevel, u32 levelCount)
+    VkImageMemoryBarrier2 VkUtils::ImageBarrier(VkImage image, VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask, VkImageLayout oldLayout,
+                                                VkPipelineStageFlags2 dstStageMask, VkAccessFlags2 dstAccessMask, VkImageLayout newLayout,
+                                                VkImageAspectFlags aspectMask, u32 baseMipLevel, u32 levelCount)
     {
         VkImageMemoryBarrier2 barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
 
@@ -228,8 +228,8 @@ namespace C3D
         return barrier;
     }
 
-    VkBufferMemoryBarrier2 VkUtils::BufferBarrier2(VkBuffer buffer, VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask,
-                                                   VkPipelineStageFlags2 dstStageMask, VkAccessFlags dstAccessMask)
+    VkBufferMemoryBarrier2 VkUtils::BufferBarrier(VkBuffer buffer, VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask,
+                                                  VkPipelineStageFlags2 dstStageMask, VkAccessFlags dstAccessMask)
     {
         VkBufferMemoryBarrier2 barrier = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2 };
 
