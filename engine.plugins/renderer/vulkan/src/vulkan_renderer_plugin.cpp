@@ -415,8 +415,8 @@ namespace C3D
         vkCmdBeginRendering(commandBuffer, &renderInfo);
     }
 
-    void VulkanRendererPlugin::CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, const VulkanTexture& depthPyramid,
-                                        const DrawCullData& cullData, u32 timestamp) const
+    void VulkanRendererPlugin::CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const DrawCullData& cullData,
+                                        u32 timestamp, bool late) const
     {
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, timestamp + 0);
 
@@ -429,7 +429,10 @@ namespace C3D
 
         VkBufferMemoryBarrier fillBarrier = VkUtils::CreateBufferBarrier(m_drawCommandCountBuffer.GetHandle(), VK_ACCESS_TRANSFER_WRITE_BIT,
                                                                          VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
-        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &fillBarrier, 0, nullptr);
+        VkImageMemoryBarrier readBarrier  = depthPyramid.CreateBarrier(0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
+
+        VkPipelineStageFlags srcStageFlags = late ? VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_TRANSFER_BIT;
+        vkCmdPipelineBarrier(commandBuffer, srcStageFlags, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &fillBarrier, 1, &readBarrier);
 
         shader.Bind(commandBuffer);
 
@@ -510,7 +513,6 @@ namespace C3D
         // Wait for all depth data to be written to the depth target before we start reading
         VkImageMemoryBarrier depthReadBarriers[] = {
             depthTarget.CreateBarrier(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
-            depthPyramid.CreateBarrier(0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL),
         };
 
         vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0,
@@ -599,10 +601,6 @@ namespace C3D
             vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &fillBarrier, 0,
                                  nullptr);
 
-            VkImageMemoryBarrier depthPyramidLayoutBarrier = backendState->depthPyramid.CreateBarrier(0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
-            vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0,
-                                 0, 0, 0, 1, &depthPyramidLayoutBarrier);
-
             firstFrame = true;
         }
 
@@ -646,7 +644,6 @@ namespace C3D
         VkImageMemoryBarrier renderBeginBarriers[] = {
             backendState->colorTarget.CreateBarrier(0, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
             backendState->depthTarget.CreateBarrier(0, 0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
-            backendState->depthPyramid.CreateBarrier(0, 0, VK_IMAGE_LAYOUT_GENERAL),
         };
 
         vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -654,7 +651,7 @@ namespace C3D
                              0, ARRAY_SIZE(renderBeginBarriers), renderBeginBarriers);
 
         // Early cull: frustum cull & fill objects that *were* visible last frame
-        CullStep(commandBuffer, m_drawCullShader, backendState->depthPyramid, cullData, 2);
+        CullStep(commandBuffer, m_drawCullShader, backendState->depthPyramid, cullData, 2, /* late = */ false);
 
         // Early render: render objects that were visible last frame
         RenderStep(commandBuffer, backendState->colorTarget, backendState->depthTarget, globals, window, 0, /* late = */ false);
@@ -663,7 +660,7 @@ namespace C3D
         DepthPyramidStep(commandBuffer, backendState->depthTarget, backendState->depthPyramid);
 
         // Late cull: frustum + occlusion cull & fill object that were *not* visible last frame
-        CullStep(commandBuffer, m_drawCullLateShader, backendState->depthPyramid, cullData, 6);
+        CullStep(commandBuffer, m_drawCullLateShader, backendState->depthPyramid, cullData, 6, /* late = */ true);
 
         // Late render: render objects that are visible this frame but weren't drawn in the early pass
         RenderStep(commandBuffer, backendState->colorTarget, backendState->depthTarget, globals, window, 1, /* late = */ true);

@@ -24,7 +24,7 @@ namespace C3D
         appInfo.applicationVersion = applicationVersion;
         appInfo.pEngineName        = "C3DEngine";
         // TODO: This is hard-coded for now
-        appInfo.engineVersion = VK_MAKE_VERSION(0, 6, 0);
+        appInfo.engineVersion = VK_MAKE_VERSION(0, 6, 1);
 
         VkInstanceCreateInfo createInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
         createInfo.pApplicationInfo     = &appInfo;
