@@ -15,7 +15,7 @@ namespace C3D
         auto result    = vkEnumerateInstanceVersion(&apiVersion);
         if (!VkUtils::IsSuccess(result))
         {
-            ERROR_LOG("Failed to enumerate instance version: '{}'.", VkUtils::ResultString(result));
+            ERROR_LOG("Failed to enumerate Vulkan instance version: '{}'.", VkUtils::ResultString(result));
             return false;
         }
 
@@ -81,8 +81,14 @@ namespace C3D
         if (context.flags & RendererConfigFlag::FlagValidationLayers)
         {
             // Enable synchronization validation
-            enabledValidationFeatures.EmplaceBack(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
-            enabledValidationFeatures.EmplaceBack(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
+            if (context.flags & RendererConfigFlag::FlagValidateSynchronization)
+            {
+                enabledValidationFeatures.EmplaceBack(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
+            }
+            if (context.flags & RendererConfigFlag::FlagValidateBestPractices)
+            {
+                enabledValidationFeatures.EmplaceBack(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
+            }
 
             // If we are require validation layers we add them here
             INFO_LOG("Validation layers are enabled.");

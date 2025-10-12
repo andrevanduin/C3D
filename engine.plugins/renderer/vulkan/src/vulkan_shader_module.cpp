@@ -26,62 +26,33 @@ namespace C3D
         m_name    = name;
         m_context = context;
 
-        ShaderManager ShaderManager;
-        ShaderAsset shader;
-
-        INFO_LOG("Loading GLSL file: '{}'.", name);
-
-        if (!ShaderManager.Read(name, shader))
-        {
-            ERROR_LOG("Failed to read the source for: '{}'.", name);
-            return false;
-        }
+        INFO_LOG("Creating ShaderModule: '{}'.", m_name);
 
         DetermineShaderStage();
 
-        u32* code    = nullptr;
-        u64 numBytes = 0;
-        if (!CompileIntoSPIRV(shader.source, shader.size, &code, numBytes))
+        auto result = CreateInternal();
+        if (!result)
         {
-            ERROR_LOG("Failed to compile GLSL into SPIRV for: '{}'.", name);
+            ERROR_LOG("Failed to create ShaderModule: '{}'.", name)
             return false;
-        }
-
-        ShaderManager::Cleanup(shader);
-
-        VkShaderModuleCreateInfo createInfo = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-        createInfo.codeSize                 = numBytes;
-        createInfo.pCode                    = code;
-
-        auto result = vkCreateShaderModule(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_handle);
-        if (!VkUtils::IsSuccess(result))
-        {
-            ERROR_LOG("Failed to create shader module: '{}' with error: '{}'.", name, VkUtils::ResultString(result));
-            if (code)
-            {
-                Memory.Free(code);
-            }
-            return false;
-        }
-
-        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_SHADER_MODULE, m_handle, String::FromFormat("SHADER_MODULE_{}", name));
-
-        if (!ReflectSPIRV(code, numBytes))
-        {
-            ERROR_LOG("Failed to reflect the SPIRV for: '{}'.", name);
-            if (code)
-            {
-                Memory.Free(code);
-            }
-            return false;
-        }
-
-        if (code)
-        {
-            Memory.Free(code);
         }
 
         INFO_LOG("ShaderModule: '{}' created successfully.", name);
+        return true;
+    }
+
+    bool VulkanShaderModule::Recreate()
+    {
+        INFO_LOG("Recreating ShaderModule: '{}'.", m_name);
+
+        auto result = CreateInternal();
+        if (!result)
+        {
+            ERROR_LOG("Failed to recreate ShaderModule: '{}'.", m_name)
+            return false;
+        }
+
+        INFO_LOG("ShaderModule: '{}' recreated successfully.", m_name);
         return true;
     }
 
@@ -94,6 +65,76 @@ namespace C3D
 
             vkDestroyShaderModule(m_context->device.GetLogical(), m_handle, m_context->allocator);
         }
+    }
+
+    bool VulkanShaderModule::CreateInternal()
+    {
+        ShaderManager ShaderManager;
+        ShaderAsset shader;
+
+        INFO_LOG("Loading GLSL file: '{}'.", m_name);
+
+        if (!ShaderManager.Read(m_name, shader))
+        {
+            ERROR_LOG("Failed to read the source for: '{}'.", m_name);
+            return false;
+        }
+
+        u32* code    = nullptr;
+        u64 numBytes = 0;
+        if (!CompileIntoSPIRV(shader.source, shader.size, &code, numBytes))
+        {
+            ERROR_LOG("Failed to compile GLSL into SPIRV for: '{}'.", m_name);
+            ShaderManager::Cleanup(shader);
+            return false;
+        }
+
+        ShaderManager::Cleanup(shader);
+
+        VkShaderModuleCreateInfo createInfo = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+        createInfo.codeSize                 = numBytes;
+        createInfo.pCode                    = code;
+
+        VkShaderModule shaderModule;
+
+        auto result = vkCreateShaderModule(m_context->device.GetLogical(), &createInfo, m_context->allocator, &shaderModule);
+        if (!VkUtils::IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create ShaderModule: '{}' with error: '{}'.", m_name, VkUtils::ResultString(result));
+            if (code)
+            {
+                Memory.Free(code);
+            }
+            return false;
+        }
+
+        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_SHADER_MODULE, shaderModule, String::FromFormat("SHADER_MODULE_{}", m_name));
+
+        if (!ReflectSPIRV(code, numBytes))
+        {
+            ERROR_LOG("Failed to reflect the SPIRV for: '{}'.", m_name);
+            if (code)
+            {
+                Memory.Free(code);
+            }
+            return false;
+        }
+
+        if (code)
+        {
+            Memory.Free(code);
+        }
+
+        // Destroy the old handle if it exists
+        if (m_handle)
+        {
+            vkDestroyShaderModule(m_context->device.GetLogical(), m_handle, m_context->allocator);
+        }
+
+        // Finally copy the new handle
+        m_handle = shaderModule;
+
+        return true;
     }
 
     void VulkanShaderModule::DetermineShaderStage()

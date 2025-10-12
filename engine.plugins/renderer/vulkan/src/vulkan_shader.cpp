@@ -1,6 +1,11 @@
 
 #include "vulkan_shader.h"
 
+#include <config/config_system.h>
+#include <events/event_system.h>
+#include <platform/platform.h>
+#include <system/system_manager.h>
+
 #include "vulkan_context.h"
 #include "vulkan_shader_module.h"
 #include "vulkan_utils.h"
@@ -11,9 +16,12 @@ namespace C3D
     {
         INFO_LOG("Creating: '{}'.", createInfo.name);
 
-        m_context   = createInfo.context;
-        m_name      = createInfo.name;
-        m_bindPoint = createInfo.bindPoint;
+        m_context           = createInfo.context;
+        m_name              = createInfo.name;
+        m_bindPoint         = createInfo.bindPoint;
+        m_pushConstantsSize = createInfo.pushConstantsSize;
+        m_constants         = createInfo.constants;
+        m_pipelineCache     = createInfo.cache;
 
         // Ensure the user provided at least 1 module
         if (createInfo.modules.size() == 0)
@@ -22,63 +30,58 @@ namespace C3D
             return false;
         }
 
+        // Get the base asset path
+        String shaderBasePath;
+        if (!Config.GetProperty("AssetBasePath", shaderBasePath))
+        {
+            ERROR_LOG("Failed to determine AssetBasePath");
+            return false;
+        }
+
+        // Append the shaders folder
+        shaderBasePath += "/shaders/";
+
         // Take over the modules provided by the user
         m_shaderModules.Reserve(createInfo.modules.size());
         for (auto module : createInfo.modules)
         {
             m_shaderModules.PushBack(module);
+
+            // Watch the file that belongs to the module for changes
+            m_shaderModuleFileIds.EmplaceBack(Platform::WatchFile(shaderBasePath + module->GetName() + ".glsl"));
         }
 
-        // Parse the provided Shader Modules
-        for (auto shader : m_shaderModules)
-        {
-            // Keep track of all modules that use push constants
-            if (shader->UsesPushConstants())
+        // Add listeners to automatically update our shader when it's modules change
+        m_watchedFilesCallback = Event.Register(EventCodeWatchedFileChanged, [this](const u16 code, void* sender, const EventContext& context) {
+            FileWatchId id = context.data.u32[0];
+
+            for (u32 i = 0; i < m_shaderModuleFileIds.Size(); ++i)
             {
-                m_pushConstantStages |= shader->GetShaderStage();
+                if (m_shaderModuleFileIds[i] == id)
+                {
+                    auto shaderModule = m_shaderModules[i];
+
+                    INFO_LOG("Module '{}' changed. Trying to recreate Shader: '{}'.", shaderModule->GetName(), m_name);
+
+                    if (!shaderModule->Recreate())
+                    {
+                        ERROR_LOG("Failed to recreate Shader: '{}' because ShaderModule: '{}' could not be recreated.", m_name, shaderModule->GetName());
+                        return false;
+                    }
+
+                    if (!Recreate())
+                    {
+                        ERROR_LOG("Failed to recreate Shader: '{}'", m_name);
+                    }
+
+                    break;
+                }
             }
-        }
 
-        if (!CreateSetLayout())
-        {
-            ERROR_LOG("Failed to create SetLayout.");
             return false;
-        }
+        });
 
-        if (!CreatePipelineLayout(createInfo.pushConstantsSize))
-        {
-            ERROR_LOG("Failed to create PipelineLayout.");
-            return false;
-        }
-
-        switch (m_bindPoint)
-        {
-            case VK_PIPELINE_BIND_POINT_GRAPHICS:
-                if (!CreateGraphicsPipeline(createInfo.cache, createInfo.constants))
-                {
-                    ERROR_LOG("Failed to create Graphics Pipeline.");
-                    return false;
-                }
-                break;
-            case VK_PIPELINE_BIND_POINT_COMPUTE:
-                if (!CreateComputePipeline(createInfo.cache, createInfo.constants))
-                {
-                    ERROR_LOG("Failed to create Compute Pipeline.");
-                    return false;
-                }
-                break;
-            default:
-                ERROR_LOG("Unknown bindpoint specified.");
-                return false;
-        }
-
-        if (!CreateDescriptorUpdateTemplate())
-        {
-            ERROR_LOG("Failed to create Descriptor Update Template.");
-            return false;
-        }
-
-        return true;
+        return Recreate();
     }
 
     void VulkanShader::Bind(VkCommandBuffer commandBuffer) const { vkCmdBindPipeline(commandBuffer, m_bindPoint, m_pipeline); }
@@ -107,16 +110,111 @@ namespace C3D
         {
             INFO_LOG("Destroying: '{}'.", m_name);
 
-            auto device = m_context->device.GetLogical();
+            Event.Unregister(m_watchedFilesCallback);
 
-            vkDestroyDescriptorUpdateTemplate(device, m_updateTemplate, m_context->allocator);
-            vkDestroyDescriptorSetLayout(device, m_setLayout, m_context->allocator);
-            vkDestroyPipelineLayout(device, m_layout, m_context->allocator);
-            vkDestroyPipeline(device, m_pipeline, m_context->allocator);
+            DestroyInternal(m_setLayout, m_layout, m_pipeline, m_updateTemplate);
 
             m_shaderModules.Destroy();
 
+            for (auto fileId : m_shaderModuleFileIds)
+            {
+                Platform::UnwatchFile(fileId);
+            }
+            m_shaderModuleFileIds.Destroy();
+
             m_name.Destroy();
+        }
+    }
+
+    bool VulkanShader::Recreate()
+    {
+        // Parse the provided Shader Modules
+        for (auto shader : m_shaderModules)
+        {
+            // Keep track of all modules that use push constants
+            if (shader->UsesPushConstants())
+            {
+                m_pushConstantStages |= shader->GetShaderStage();
+            }
+        }
+
+        auto setLayout = CreateSetLayout();
+        if (!setLayout)
+        {
+            ERROR_LOG("Failed to create SetLayout.");
+            return false;
+        }
+
+        auto pipelineLayout = CreatePipelineLayout(setLayout);
+        if (!pipelineLayout)
+        {
+            ERROR_LOG("Failed to create PipelineLayout.");
+            DestroyInternal(setLayout);
+            return false;
+        }
+
+        VkPipeline pipeline;
+        switch (m_bindPoint)
+        {
+            case VK_PIPELINE_BIND_POINT_GRAPHICS:
+                pipeline = CreateGraphicsPipeline(pipelineLayout);
+                break;
+            case VK_PIPELINE_BIND_POINT_COMPUTE:
+                pipeline = CreateComputePipeline(pipelineLayout);
+                break;
+            default:
+                ERROR_LOG("Unknown bindpoint specified.");
+                return false;
+        }
+
+        if (!pipeline)
+        {
+            ERROR_LOG("Failed to create {} Pipeline.", m_bindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS ? "Graphics" : "Compute");
+            DestroyInternal(setLayout, pipelineLayout);
+            return false;
+        }
+
+        auto updateTemplate = CreateDescriptorUpdateTemplate(pipelineLayout);
+        if (!updateTemplate)
+        {
+            ERROR_LOG("Failed to create Descriptor Update Template.");
+            DestroyInternal(setLayout, pipelineLayout, pipeline);
+            return false;
+        }
+
+        // We created everything successfully so now we can switch out everything
+        // First we destroy our current (if they exist)
+        DestroyInternal(m_setLayout, m_layout, m_pipeline, m_updateTemplate);
+
+        // Then we assign our new pointers
+        m_setLayout      = setLayout;
+        m_layout         = pipelineLayout;
+        m_pipeline       = pipeline;
+        m_updateTemplate = updateTemplate;
+
+        return true;
+    }
+
+    void VulkanShader::DestroyInternal(VkDescriptorSetLayout setLayout, VkPipelineLayout pipelineLayout, VkPipeline pipeline,
+                                       VkDescriptorUpdateTemplate updateTemplate)
+    {
+        auto device = m_context->device.GetLogical();
+
+        if (updateTemplate)
+        {
+            vkDestroyDescriptorUpdateTemplate(device, updateTemplate, m_context->allocator);
+        }
+        if (setLayout)
+        {
+            vkDestroyDescriptorSetLayout(device, setLayout, m_context->allocator);
+        }
+        if (pipelineLayout)
+        {
+            vkDestroyPipelineLayout(device, pipelineLayout, m_context->allocator);
+        }
+        if (pipeline)
+        {
+            vkDestroyPipeline(device, pipeline, m_context->allocator);
         }
     }
 
@@ -149,7 +247,7 @@ namespace C3D
         return resourceMask;
     }
 
-    bool VulkanShader::CreateSetLayout()
+    VkDescriptorSetLayout VulkanShader::CreateSetLayout()
     {
         DynamicArray<VkDescriptorSetLayoutBinding> setBindings;
 
@@ -185,47 +283,51 @@ namespace C3D
         setCreateInfo.bindingCount = setBindings.Size();
         setCreateInfo.pBindings    = setBindings.GetData();
 
-        auto result = vkCreateDescriptorSetLayout(m_context->device.GetLogical(), &setCreateInfo, m_context->allocator, &m_setLayout);
+        VkDescriptorSetLayout setLayout;
+
+        auto result = vkCreateDescriptorSetLayout(m_context->device.GetLogical(), &setCreateInfo, m_context->allocator, &setLayout);
         if (!VkUtils::IsSuccess(result))
         {
             ERROR_LOG("Failed to create DescriptorSetLayout with error: '{}'.", VkUtils::ResultString(result));
-            return false;
+            return nullptr;
         }
 
-        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, m_setLayout, String::FromFormat("DESCRIPTOR_SET_LAYOUT_{}", m_name));
+        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, setLayout, String::FromFormat("DESCRIPTOR_SET_LAYOUT_{}", m_name));
 
-        return true;
+        return setLayout;
     }
 
-    bool VulkanShader::CreatePipelineLayout(u64 pushConstantsSize)
+    VkPipelineLayout VulkanShader::CreatePipelineLayout(VkDescriptorSetLayout setLayout)
     {
         VkPipelineLayoutCreateInfo createInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
         createInfo.setLayoutCount             = 1;
-        createInfo.pSetLayouts                = &m_setLayout;
+        createInfo.pSetLayouts                = &setLayout;
 
         VkPushConstantRange pushConstantRange = {};
 
-        if (pushConstantsSize)
+        if (m_pushConstantsSize)
         {
             C3D_ASSERT_MSG(m_pushConstantStages != 0, "PushConstantsSize > 0 but no stages that use push constants were provided to the Shader.");
 
-            pushConstantRange.size       = pushConstantsSize;
+            pushConstantRange.size       = m_pushConstantsSize;
             pushConstantRange.stageFlags = m_pushConstantStages;
 
             createInfo.pushConstantRangeCount = 1;
             createInfo.pPushConstantRanges    = &pushConstantRange;
         }
 
-        auto result = vkCreatePipelineLayout(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_layout);
+        VkPipelineLayout layout;
+
+        auto result = vkCreatePipelineLayout(m_context->device.GetLogical(), &createInfo, m_context->allocator, &layout);
         if (!VkUtils::IsSuccess(result))
         {
             ERROR_LOG("Failed to create PipelineLayout with error: '{}'.", VkUtils::ResultString(result));
-            return false;
+            return nullptr;
         }
 
-        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_PIPELINE_LAYOUT, m_layout, String::FromFormat("PIPELINE_LAYOUT_{}", m_name));
+        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_PIPELINE_LAYOUT, layout, String::FromFormat("PIPELINE_LAYOUT_{}", m_name));
 
-        return true;
+        return layout;
     }
 
     static VkSpecializationInfo FillSpecializationInfo(DynamicArray<VkSpecializationMapEntry>& entries, const std::initializer_list<i32>& constants)
@@ -244,13 +346,13 @@ namespace C3D
         return result;
     }
 
-    bool VulkanShader::CreateGraphicsPipeline(VkPipelineCache pipelineCache, const std::initializer_list<i32>& constants)
+    VkPipeline VulkanShader::CreateGraphicsPipeline(VkPipelineLayout layout)
     {
         VkGraphicsPipelineCreateInfo createInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-        createInfo.layout                       = m_layout;
+        createInfo.layout                       = layout;
 
         DynamicArray<VkSpecializationMapEntry> specializationEntries;
-        VkSpecializationInfo specializationInfo = FillSpecializationInfo(specializationEntries, constants);
+        VkSpecializationInfo specializationInfo = FillSpecializationInfo(specializationEntries, m_constants);
 
         DynamicArray<VkPipelineShaderStageCreateInfo> stages;
         for (auto shader : m_shaderModules)
@@ -328,19 +430,21 @@ namespace C3D
         pipelineRenderingCreateInfo.pColorAttachmentFormats = &surfaceFormat.format;
         createInfo.pNext                                    = &pipelineRenderingCreateInfo;
 
-        auto result = vkCreateGraphicsPipelines(m_context->device.GetLogical(), pipelineCache, 1, &createInfo, m_context->allocator, &m_pipeline);
+        VkPipeline pipeline;
+
+        auto result = vkCreateGraphicsPipelines(m_context->device.GetLogical(), m_pipelineCache, 1, &createInfo, m_context->allocator, &pipeline);
         if (!VkUtils::IsSuccess(result))
         {
             ERROR_LOG("Failed to create Graphics Pipeline with error: '{}'.", VkUtils::ResultString(result));
-            return false;
+            return nullptr;
         }
 
-        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_PIPELINE, m_pipeline, String::FromFormat("PIPELINE_{}", m_name));
+        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_PIPELINE, pipeline, String::FromFormat("GRAPHICS_PIPELINE_{}", m_name));
 
-        return true;
+        return pipeline;
     }
 
-    bool VulkanShader::CreateComputePipeline(VkPipelineCache pipelineCache, const std::initializer_list<i32>& constants)
+    VkPipeline VulkanShader::CreateComputePipeline(VkPipelineLayout layout)
     {
         C3D_ASSERT_MSG(m_shaderModules.Size() == 1, "Expected only a single ShaderModule for a Compute pipeline");
 
@@ -348,7 +452,7 @@ namespace C3D
         VkPipelineShaderStageCreateInfo stageInfo = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
         DynamicArray<VkSpecializationMapEntry> specializationEntries;
-        VkSpecializationInfo specializationInfo = FillSpecializationInfo(specializationEntries, constants);
+        VkSpecializationInfo specializationInfo = FillSpecializationInfo(specializationEntries, m_constants);
 
         stageInfo.stage               = m_shaderModules[0]->GetShaderStage();
         stageInfo.module              = m_shaderModules[0]->GetHandle();
@@ -356,23 +460,27 @@ namespace C3D
         stageInfo.pSpecializationInfo = &specializationInfo;
 
         createInfo.stage  = stageInfo;
-        createInfo.layout = m_layout;
+        createInfo.layout = layout;
 
         m_localSizeX = m_shaderModules[0]->GetLocalSizeX();
         m_localSizeY = m_shaderModules[0]->GetLocalSizeY();
         m_localSizeZ = m_shaderModules[0]->GetLocalSizeZ();
 
-        auto result = vkCreateComputePipelines(m_context->device.GetLogical(), pipelineCache, 1, &createInfo, m_context->allocator, &m_pipeline);
+        VkPipeline pipeline;
+
+        auto result = vkCreateComputePipelines(m_context->device.GetLogical(), m_pipelineCache, 1, &createInfo, m_context->allocator, &pipeline);
         if (!VkUtils::IsSuccess(result))
         {
             ERROR_LOG("Failed to create Compute Pipeline with error: '{}'.", VkUtils::ResultString(result));
-            return false;
+            return nullptr;
         }
 
-        return true;
+        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_PIPELINE, pipeline, String::FromFormat("COMPUTE_PIPELINE_{}", m_name));
+
+        return pipeline;
     }
 
-    bool VulkanShader::CreateDescriptorUpdateTemplate()
+    VkDescriptorUpdateTemplate VulkanShader::CreateDescriptorUpdateTemplate(VkPipelineLayout layout)
     {
         DynamicArray<VkDescriptorUpdateTemplateEntry> entries;
 
@@ -404,18 +512,20 @@ namespace C3D
         // NOTE: We might need to change this in the future
         createInfo.templateType      = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS;
         createInfo.pipelineBindPoint = m_bindPoint;
-        createInfo.pipelineLayout    = m_layout;
+        createInfo.pipelineLayout    = layout;
 
-        auto result = vkCreateDescriptorUpdateTemplate(m_context->device.GetLogical(), &createInfo, m_context->allocator, &m_updateTemplate);
+        VkDescriptorUpdateTemplate updateTemplate;
+
+        auto result = vkCreateDescriptorUpdateTemplate(m_context->device.GetLogical(), &createInfo, m_context->allocator, &updateTemplate);
         if (!VkUtils::IsSuccess(result))
         {
             ERROR_LOG("Failed to create descriptor update template because: '{}'.", VkUtils::ResultString(result));
-            return false;
+            return nullptr;
         }
 
-        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE, m_updateTemplate,
+        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE, updateTemplate,
                                  String::FromFormat("DESCRIPTOR_UPDATE_TEMPLATE_{}", m_name));
 
-        return true;
+        return updateTemplate;
     }
 }  // namespace C3D

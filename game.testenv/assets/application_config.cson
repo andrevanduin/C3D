@@ -26,6 +26,8 @@
                 "Vsync": false,
                 "PowerSaving": true,
                 "ValidationLayers": true,
+                "ValidateBestPractices": true,
+                "ValidateSynchronization": false,
             }
         },
         {

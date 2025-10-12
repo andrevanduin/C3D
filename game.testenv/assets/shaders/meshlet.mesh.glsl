@@ -10,9 +10,10 @@
 #include "math_utils.h"
 
 #define DEBUG 0
+#define CULL 0
 
 layout (local_size_x = MESH_WGSIZE, local_size_y = 1, local_size_z = 1) in;
-layout (triangles, max_vertices = 64, max_primitives = 124) out;
+layout (triangles, max_vertices = MAX_VERTICES, max_primitives = 124) out;
 
 layout (push_constant) uniform block
 {
@@ -63,6 +64,10 @@ uint pcg_hash(uint a)
 }
 #endif
 
+#if CULL
+shared vec3 vertexClip[MAX_VERTICES];
+#endif
+
 void main()
 {
     uint ti = gl_LocalInvocationIndex;
@@ -94,18 +99,37 @@ void main()
         vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
         vec2 texCoord = vec2(v.u, v.v);
 
-        gl_MeshVerticesEXT[i].gl_Position = globals.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
+        vec4 clip = globals.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
+        gl_MeshVerticesEXT[i].gl_Position = clip;
         
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
 
-        #if DEBUG
-            color[i] = vec4(meshletColor, 1.0);
-        #endif
+    #if CULL
+        vertexClip[i] = vec3(clip.xy / clip.w, clip.w);
+    #endif
+
+    #if DEBUG
+        color[i] = vec4(meshletColor, 1.0);
+    #endif
     }
+
+#if CULL
+    barrier();
+#endif
 
     for (uint i = ti; i < triangleCount; i += MESH_WGSIZE)
     {
         uint offset = indexOffset * 4 + i * 3;
-        gl_PrimitiveTriangleIndicesEXT[i] = uvec3(meshletData8[offset + 0], meshletData8[offset + 1], meshletData8[offset + 2]);
+        uint a = uint(meshletData8[offset + 0]), b = uint(meshletData8[offset + 1]), c = uint(meshletData8[offset + 2]);
+
+        gl_PrimitiveTriangleIndicesEXT[i] = uvec3(a, b, c);
+
+    #if CULL
+        bool culled = false;
+
+        culled = culled || (vertexClip[a].z < 0 && vertexClip[b].z < 0 && vertexClip[c].z < 0);
+
+        gl_MeshPrimitivesEXT[i].gl_CullPrimitiveEXT = culled;
+    #endif
     }
 }

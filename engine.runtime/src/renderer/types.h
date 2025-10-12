@@ -22,8 +22,10 @@ namespace C3D
         FlagPowerSaving = 0x2,
         /** @brief Configure the renderer to use validation layers (if supported by the backend). */
         FlagValidationLayers = 0x4,
-        /** @brief Use PCF filtering. */
-        FlagPCF = 0x8,
+        /** @brief Configure the renderer to use best practices validation (if supported by the backend). */
+        FlagValidateBestPractices = 0x8,
+        /** @brief Configure the renderer to use synchronization validation (if supported by the backend). */
+        FlagValidateSynchronization = 0x10,
     };
 
     enum RendererSupportFlag : u8

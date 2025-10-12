@@ -2,7 +2,6 @@
 #pragma once
 #include "containers/dynamic_array.h"
 #include "defines.h"
-#include "event_context.h"
 #include "logger/logger.h"
 #include "system/system.h"
 #include "types.h"

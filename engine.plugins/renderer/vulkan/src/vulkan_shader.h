@@ -1,4 +1,6 @@
 #pragma once
+#include <events/types.h>
+#include <platform/platform_types.h>
 #include <string/string.h>
 #include <volk.h>
 
@@ -78,14 +80,19 @@ namespace C3D
         void Destroy();
 
     private:
+        bool Recreate();
+
+        void DestroyInternal(VkDescriptorSetLayout setLayout, VkPipelineLayout pipelineLayout = nullptr, VkPipeline pipeline = nullptr,
+                             VkDescriptorUpdateTemplate updateTemplate = nullptr);
+
         u32 GatherResources(VkDescriptorType (&resourceTypes)[32]);
 
-        bool CreateSetLayout();
-        bool CreatePipelineLayout(u64 pushConstantsSize);
-        bool CreateGraphicsPipeline(VkPipelineCache pipelineCache, const std::initializer_list<i32>& constants);
-        bool CreateComputePipeline(VkPipelineCache pipelineCache, const std::initializer_list<i32>& constants);
+        VkDescriptorSetLayout CreateSetLayout();
+        VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout setLayout);
+        VkPipeline CreateGraphicsPipeline(VkPipelineLayout layout);
+        VkPipeline CreateComputePipeline(VkPipelineLayout layout);
 
-        bool CreateDescriptorUpdateTemplate();
+        VkDescriptorUpdateTemplate CreateDescriptorUpdateTemplate(VkPipelineLayout layout);
 
         /** @brief The user-provided name of this Shader. Used for debugging purposes. */
         String m_name;
@@ -93,14 +100,24 @@ namespace C3D
         VkPipelineBindPoint m_bindPoint;
         /** @brief The local size x of the shader module. Used in Dispatch calls to calculate number of dispatches. */
         u32 m_localSizeX = 0, m_localSizeY = 0, m_localSizeZ = 0;
+        /** @brief The size of the push constants used by this Shader in bytes. */
+        u32 m_pushConstantsSize = 0;
+        /** @brief The constant values used by this Shader. */
+        std::initializer_list<i32> m_constants;
         /** @brief An array of VulkanShaderModules used by this Shader. */
-        DynamicArray<const VulkanShaderModule*> m_shaderModules;
+        DynamicArray<VulkanShaderModule*> m_shaderModules;
+        /** @brief An array of FileWatchIds for the VulkanShaderModules used by this Shader. */
+        DynamicArray<FileWatchId> m_shaderModuleFileIds;
+        /** @brief The registerd event callback for changes on watched files. */
+        RegisteredEventCallback m_watchedFilesCallback;
         /** @brief A handle to the set layout used by this Shader. */
         VkDescriptorSetLayout m_setLayout = nullptr;
         /** @brief A handle to the layout used by this Shader. */
         VkPipelineLayout m_layout = nullptr;
         /** @brief A handle to the pipeline used by this Shader. */
         VkPipeline m_pipeline = nullptr;
+        /** @brief A handle to the pipeline cache used by this Shader. */
+        VkPipelineCache m_pipelineCache = nullptr;
         /** @brief A field that contains all Shader stages that use Push Constants. */
         VkShaderStageFlags m_pushConstantStages = 0;
         /** @brief A handle to the Descriptor Update Template used by this Shader. */

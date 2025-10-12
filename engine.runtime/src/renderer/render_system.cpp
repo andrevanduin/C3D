@@ -30,9 +30,13 @@ namespace C3D
             {
                 if (prop.GetBool()) m_config.flags |= FlagValidationLayers;
             }
-            else if (prop.name.IEquals("PCF"))
+            else if (prop.name.IEquals("ValidateBestPractices"))
             {
-                if (prop.GetBool()) m_config.flags |= FlagPCF;
+                if (prop.GetBool()) m_config.flags |= FlagValidateBestPractices;
+            }
+            else if (prop.name.IEquals("validatesynchronization"))
+            {
+                if (prop.GetBool()) m_config.flags |= FlagValidateSynchronization;
             }
         }
 

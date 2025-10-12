@@ -1,5 +1,6 @@
 #define TASK_WGSIZE 64
 #define MESH_WGSIZE 64
+#define MAX_VERTICES 64
 
 struct Vertex
 {

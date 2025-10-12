@@ -19,7 +19,11 @@ namespace C3D
     public:
         bool Create(VulkanContext* context, const char* name);
 
+        bool Recreate();
+
         void Destroy();
+
+        const String& GetName() const { return m_name; }
 
         VkShaderModule GetHandle() const { return m_handle; }
         VkShaderStageFlagBits GetShaderStage() const { return m_shaderStage; }
@@ -34,6 +38,8 @@ namespace C3D
         u32 GetLocalSizeZ() const { return m_localSizeZ; }
 
     private:
+        bool CreateInternal();
+
         /** @brief Determines the shader stage based on the name of the input glsl file. */
         void DetermineShaderStage();
 
