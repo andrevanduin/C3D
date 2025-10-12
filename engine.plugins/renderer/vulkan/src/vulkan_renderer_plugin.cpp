@@ -848,7 +848,7 @@ namespace C3D
         titleText.Clear();
         titleText.Format(
             "Mesh Shading: {}; Cull: {}; Occlusion: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms; pyramid {:.2f} ms; cull late: {:.2f} "
-            "ms); triangles {:.3f}M; {:.1f}B tri/sec; {:.1f}M draws/sec;",
+            "ms); triangles {:.2f}M; {:.1f}B tri/sec; {:.1f}M draws/sec;",
             meshShadingEnabledAndSupported ? "ON" : "OFF", m_cullingEnabled ? "ON" : "OFF", m_occlusionCullingEnabled ? "ON" : "OFF",
             m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, pyramidGpuTime, cullLateGpuTime, triangleCount * 1e-6,
             trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
