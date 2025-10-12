@@ -336,7 +336,7 @@ namespace C3D
 
         createInfo.name              = "MESH_SHADER";
         createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        createInfo.pushConstantsSize = sizeof(Globals);
+        createInfo.pushConstantsSize = sizeof(RenderData);
         createInfo.modules           = { &m_meshShaderModule, &m_fragmentShaderModule };
 
         if (!m_meshShader.Create(createInfo))
@@ -470,7 +470,7 @@ namespace C3D
     }
 
     void VulkanRendererPlugin::RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget,
-                                          const Globals& globals, const Window& window, u32 query, bool late) const
+                                          const RenderData& renderData, const Window& window, u32 query, bool late) const
     {
         constexpr VkClearColorValue clearColor               = { 30.f / 255.f, 54.f / 255.f, 42.f / 255.f, 1 };
         constexpr VkClearDepthStencilValue clearDepthStencil = { 0.f, 0 };
@@ -493,7 +493,7 @@ namespace C3D
                 m_meshletDataBuffer.GetHandle(), m_vertexBuffer.GetHandle(),
             };
             m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
-            m_meshletShader.PushConstants(commandBuffer, &globals, sizeof(globals));
+            m_meshletShader.PushConstants(commandBuffer, &renderData, sizeof(renderData));
 
             vkCmdDrawMeshTasksIndirectCountEXT(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirectMS),
                                                m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
@@ -507,7 +507,7 @@ namespace C3D
 
             vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
 
-            m_meshShader.PushConstants(commandBuffer, &globals, sizeof(globals));
+            m_meshShader.PushConstants(commandBuffer, &renderData, sizeof(renderData));
             vkCmdDrawIndexedIndirectCount(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect),
                                           m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
         }
@@ -652,8 +652,16 @@ namespace C3D
         cullData.pyramidWidth  = depthPyramidWidth;
         cullData.pyramidHeight = depthPyramidHeight;
 
-        Globals globals    = {};
-        globals.projection = projection;
+        RenderData renderData   = {};
+        renderData.projection   = projection;
+        renderData.screenWidth  = static_cast<f32>(window.width);
+        renderData.screenHeight = static_cast<f32>(window.height);
+        renderData.zNear        = zNear;
+        renderData.zFar         = m_drawDistance;
+        renderData.frustum[0]   = frustumX.x;
+        renderData.frustum[1]   = frustumX.z;
+        renderData.frustum[2]   = frustumY.y;
+        renderData.frustum[3]   = frustumY.z;
 
         auto& colorTarget  = backendState->colorTarget;
         auto& depthTarget  = backendState->depthTarget;
@@ -674,7 +682,7 @@ namespace C3D
         CullStep(commandBuffer, m_drawCullShader, depthPyramid, cullData, 2, /* late = */ false);
 
         // Early render: render objects that were visible last frame
-        RenderStep(commandBuffer, colorTarget, depthTarget, globals, window, 0, /* late = */ false);
+        RenderStep(commandBuffer, colorTarget, depthTarget, renderData, window, 0, /* late = */ false);
 
         // Depth pyramid generation
         DepthPyramidStep(commandBuffer, depthTarget, depthPyramid);
@@ -683,7 +691,7 @@ namespace C3D
         CullStep(commandBuffer, m_drawCullLateShader, depthPyramid, cullData, 6, /* late = */ true);
 
         // Late render: render objects that are visible this frame but weren't drawn in the early pass
-        RenderStep(commandBuffer, colorTarget, depthTarget, globals, window, 1, /* late = */ true);
+        RenderStep(commandBuffer, colorTarget, depthTarget, renderData, window, 1, /* late = */ true);
 
         return true;
     }  // namespace C3D

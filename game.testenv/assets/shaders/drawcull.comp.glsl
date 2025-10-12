@@ -86,14 +86,13 @@ void main()
     float radius = mesh.radius * draws[di].scale;
 
     bool visible = true;
-
     // The left/top/right/bottom plane culling utilizes frustum symmetry to cull against two planes at the same time
-	visible = visible && center.z * cullData.frustum[1] - abs(center.x) * cullData.frustum[0] > -radius;
-	visible = visible && center.z * cullData.frustum[3] - abs(center.y) * cullData.frustum[2] > -radius;
-	// The near/far plane culling uses camera space Z directly
-	visible = visible && center.z + radius > cullData.zNear && center.z - radius < cullData.zFar;
+    visible = visible && center.z * cullData.frustum[1] - abs(center.x) * cullData.frustum[0] > -radius;
+    visible = visible && center.z * cullData.frustum[3] - abs(center.y) * cullData.frustum[2] > -radius;
+    // The near/far plane culling uses camera space Z directly
+    visible = visible && center.z + radius > cullData.zNear && center.z - radius < cullData.zFar;
 
-	visible = visible || cullData.cullingEnabled == 0;
+    visible = visible || cullData.cullingEnabled == 0;
 
     if (LATE && visible && cullData.occlusionCullingEnabled == 1)
     {

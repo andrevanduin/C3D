@@ -14,6 +14,11 @@ layout (local_size_x = TASK_WGSIZE, local_size_y = 1, local_size_z = 1) in;
 
 #define CULL 1
 
+layout (push_constant) uniform block
+{
+    RenderData renderData;
+};
+
 layout (binding = 0) readonly buffer DrawCommands
 {
     MeshDrawCommand drawCommands[];
@@ -52,9 +57,17 @@ void main()
     vec3 coneAxis = RotateVecByQuat(vec3(meshlets[mi].coneAxis[0] / 127.0, meshlets[mi].coneAxis[1] / 127.0, meshlets[mi].coneAxis[2] / 127.0), meshDraw.orientation);
     float coneCutoff = int(meshlets[mi].coneCutoff) / 127.0;
 
-    bool accept = mgi < drawCommands[gl_DrawIDARB].taskCount && !ConeCull(center, radius, coneAxis, coneCutoff, vec3(0, 0, 0));
+    bool visible = mgi < drawCommands[gl_DrawIDARB].taskCount;
 
-    if (accept)
+    // Backface cone culling
+    visible = visible && !ConeCull(center, radius, coneAxis, coneCutoff, vec3(0, 0, 0));
+    // The left/top/right/bottom plane culling utilizes frustum symmetry to cull against two planes at the same time
+    visible = visible && center.z * renderData.frustum[1] - abs(center.x) * renderData.frustum[0] > -radius;
+    visible = visible && center.z * renderData.frustum[3] - abs(center.y) * renderData.frustum[2] > -radius;
+    // The near/far plane culling uses camera space Z directly
+    visible = visible && center.z + radius > renderData.zNear && center.z - radius < renderData.zFar;
+
+    if (visible)
     {
         uint index = atomicAdd(sharedCount, 1);
         payload.meshletIndices[index] = mi;

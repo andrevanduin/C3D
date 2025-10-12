@@ -58,9 +58,12 @@ namespace C3D
         WindowRendererBackendState* backendState = nullptr;
     };
 
-    /** @brief The globals structure that is uploaded to the GPU once per frame.  */
-    struct alignas(16) Globals
+    /** @brief The RenderData structure that is uploaded to the GPU once per frame.  */
+    struct alignas(16) RenderData
     {
-        mat4 projection;
+        mat4 projection;  // Note: redundant as it's fully expressible by p00/p11/zNear
+
+        f32 screenWidth, screenHeight, zNear, zFar;
+        f32 frustum[4];  // Data for left/right/top/bottom planes
     };
 }  // namespace C3D

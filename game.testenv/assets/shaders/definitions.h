@@ -22,9 +22,12 @@ struct Meshlet
     uint8_t triangleCount;
 };
 
-struct Globals
+struct RenderData
 {
     mat4 projection;
+
+    float screenWidth, screenHeight, zNear, zFar;
+    float frustum[4];  // Data for left/right/top/bottom planes
 };
 
 struct DrawCullData

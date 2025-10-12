@@ -10,14 +10,14 @@
 #include "math_utils.h"
 
 #define DEBUG 0
-#define CULL 0
+#define CULL 1
 
 layout (local_size_x = MESH_WGSIZE, local_size_y = 1, local_size_z = 1) in;
 layout (triangles, max_vertices = MAX_VERTICES, max_primitives = 124) out;
 
 layout (push_constant) uniform block
 {
-    Globals globals;
+    RenderData renderData;
 };
 
 layout (binding = 0) readonly buffer DrawCommands
@@ -99,7 +99,7 @@ void main()
         vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
         vec2 texCoord = vec2(v.u, v.v);
 
-        vec4 clip = globals.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
+        vec4 clip = renderData.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
         gl_MeshVerticesEXT[i].gl_Position = clip;
         
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
@@ -117,6 +117,8 @@ void main()
     barrier();
 #endif
 
+    vec2 screen = vec2(renderData.screenWidth, renderData.screenHeight);
+
     for (uint i = ti; i < triangleCount; i += MESH_WGSIZE)
     {
         uint offset = indexOffset * 4 + i * 3;
@@ -127,7 +129,27 @@ void main()
     #if CULL
         bool culled = false;
 
-        culled = culled || (vertexClip[a].z < 0 && vertexClip[b].z < 0 && vertexClip[c].z < 0);
+        vec2 pa = vertexClip[a].xy, pb = vertexClip[b].xy, pc = vertexClip[c].xy;
+
+        // Backface culling + zero-area culling
+        vec2 eb = pb - pa;
+        vec2 ec = pc - pa;
+
+        culled = culled || (eb.x * ec.y >= eb.y * ec.x);
+
+        // Small primitive culling
+        vec2 bmin = (min(pa, min(pb, pc)) * 0.5 + vec2(0.5)) * screen;
+        vec2 bmax = (max(pa, max(pb, pc)) * 0.5 + vec2(0.5)) * screen;
+        float sbprec = 1.0 / 256.0; // Note: This can be set to 1/2^subpixelPrecisionBits
+
+        // Note: This is slightly imprecise (doesn't fully match hw bahavior and is both too lose and too strict)
+        culled = culled || (round(bmin.x - sbprec) == round(bmax.x + sbprec) || round(bmin.y - sbprec) == round(bmax.y + sbprec));
+
+        // TODO: Figure out why this does not work :(
+        //culled = culled || (vertexClip[a].z < 0 && vertexClip[b].z < 0 && vertexClip[c].z < 0);
+
+        // The computations above are only valid if all vertices are in front of the perspective plane
+        culled = culled && (vertexClip[a].z > 0 && vertexClip[b].z > 0 && vertexClip[c].z > 0);
 
         gl_MeshPrimitivesEXT[i].gl_CullPrimitiveEXT = culled;
     #endif
