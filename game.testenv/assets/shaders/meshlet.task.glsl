@@ -45,7 +45,7 @@ void main()
 
 #if CULL
     sharedCount = 0;
-    barrier(); // for sharedCount
+    barrier();
 
     vec3 center = RotateVecByQuat(meshlets[mi].center, meshDraw.orientation) * meshDraw.scale + meshDraw.position;
     float radius = meshlets[mi].radius * meshDraw.scale;
@@ -62,7 +62,7 @@ void main()
 
     payload.drawId = drawId;
 
-    barrier(); // for sharedCount
+    barrier();
     EmitMeshTasksEXT(sharedCount, 1, 1);
 
 #else

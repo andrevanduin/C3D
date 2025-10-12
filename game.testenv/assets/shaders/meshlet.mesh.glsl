@@ -65,11 +65,10 @@ uint pcg_hash(uint a)
 
 void main()
 {
-    uint ti = gl_LocalInvocationID.x;
+    uint ti = gl_LocalInvocationIndex;
     uint mi = payload.meshletIndices[gl_WorkGroupID.x];
     
-    uint drawId = drawCommands[gl_DrawIDARB].drawId;
-    MeshDraw meshDraw = draws[drawId];
+    MeshDraw meshDraw = draws[payload.drawId];
 
     uint vertexCount = meshlets[mi].vertexCount;
     uint triangleCount = meshlets[mi].triangleCount;
@@ -100,7 +99,7 @@ void main()
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
 
         #if DEBUG
-                color[i] = vec4(meshletColor, 1.0);
+            color[i] = vec4(meshletColor, 1.0);
         #endif
     }
 

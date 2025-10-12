@@ -144,26 +144,6 @@ namespace C3D
         }
     }
 
-    static VkDescriptorType GetDescriptorType(SpvOp op)
-    {
-        switch (op)
-        {
-            case SpvOpTypeStruct:
-                return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            case SpvOpTypeImage:
-                return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            case SpvOpTypeSampler:
-                return VK_DESCRIPTOR_TYPE_SAMPLER;
-            case SpvOpTypeSampledImage:
-                return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            case SpvOpTypeAccelerationStructureKHR:
-                return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-            default:
-                C3D_FAIL("Unknown resource type");
-                return VkDescriptorType(0);
-        }
-    }
-
     bool VulkanShaderModule::CompileIntoSPIRV(const char* source, u64 sourceSize, u32** code, u64& numBytes)
     {
         ScopedTimer timer("Compilation");
@@ -262,6 +242,24 @@ namespace C3D
             default:
                 C3D_ASSERT_MSG(false, "Unsupported exection model!");
                 return VkShaderStageFlagBits(0);
+        }
+    }
+
+    static VkDescriptorType GetDescriptorType(SpvOp op)
+    {
+        switch (op)
+        {
+            case SpvOpTypeStruct:
+                return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            case SpvOpTypeImage:
+                return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            case SpvOpTypeSampler:
+                return VK_DESCRIPTOR_TYPE_SAMPLER;
+            case SpvOpTypeSampledImage:
+                return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            default:
+                C3D_FAIL("Unknown resource type");
+                return VkDescriptorType(0);
         }
     }
 
@@ -434,25 +432,7 @@ namespace C3D
 
                 C3D_ASSERT((m_resourceMask & (1 << id.binding)) == 0 || m_resourceTypes[id.binding] == resourceType);
 
-                switch (typeKind)
-                {
-                    case SpvOpTypeStruct:
-                        m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                        break;
-                    case SpvOpTypeImage:
-                        m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-                        break;
-                    case SpvOpTypeSampler:
-                        m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_SAMPLER;
-                        break;
-                    case SpvOpTypeSampledImage:
-                        m_resourceTypes[id.binding] = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                        break;
-                    default:
-                        ERROR_LOG("Unsupported resource type.");
-                        return false;
-                }
-
+                m_resourceTypes[id.binding] = resourceType;
                 m_resourceMask |= 1 << id.binding;
             }
 

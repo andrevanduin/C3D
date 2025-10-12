@@ -137,6 +137,11 @@ namespace C3D
                 }
             }
 
+            while (m_geometry.meshlets.Size() % 64)
+            {
+                m_geometry.meshlets.EmplaceBack();
+            }
+
             m_geometry.meshes.PushBack(mesh);
         }
 
@@ -232,11 +237,6 @@ namespace C3D
             m.coneCutoff  = bounds.coneCutoffS8;
 
             m_geometry.meshlets.PushBack(m);
-        }
-
-        while (m_geometry.meshlets.Size() % 32)
-        {
-            m_geometry.meshlets.EmplaceBack();
         }
 
         return meshlets.Size();
