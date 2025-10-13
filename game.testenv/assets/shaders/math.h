@@ -16,17 +16,18 @@ bool ProjectSphere(vec3 center, float radius, float zNear, float p00, float p11,
         return false;
     }
 
-    vec2 cx   = -center.xz;
-    vec2 vx   = vec2(sqrt(dot(cx, cx) - radius * radius), radius);
-    vec2 minx = mat2(vx.x, vx.y, -vx.y, vx.x) * cx;
-    vec2 maxx = mat2(vx.x, -vx.y, vx.y, vx.x) * cx;
+    vec3 cr    = center * radius;
+    float czr2 = center.z * center.z * radius;
 
-    vec2 cy   = -center.yz;
-    vec2 vy   = vec2(sqrt(dot(cy, cy) - radius * radius), radius);
-    vec2 miny = mat2(vy.x, vy.y, -vy.y, vy.x) * cy;
-    vec2 maxy = mat2(vy.x, -vy.y, vy.y, vy.x) * cy;
+    float vx   = sqrt(center.x * center.x + czr2);
+    float minx = (vx * center.x - cr.z) / (vx * center.z + cr.x);
+    float maxx = (vx * center.x + cr.z) / (vx * center.z - cr.x);
 
-    aabb = vec4(minx.x / minx.y * p00, miny.x / miny.y * p11, maxx.x / maxx.y * p00, maxy.x / maxy.y * p11);
+    float vy   = sqrt(center.y * center.y + czr2);
+    float miny = (vy * center.y - cr.z) / (vy * center.z + cr.y);
+    float maxy = (vy * center.y + cr.z) / (vy * center.z - cr.y);
+
+    aabb = vec4(minx * p00, miny * p11, maxx * p00, maxy * p11);
     aabb = aabb.xwzy * vec4(0.5f, -0.5f, 0.5f, -0.5f) + vec4(0.5f);  // clip space -> uv space
 
     return true;
