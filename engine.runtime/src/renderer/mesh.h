@@ -8,7 +8,7 @@
 namespace C3D
 {
     constexpr auto MESHLET_MAX_VERTICES  = 64;
-    constexpr auto MESHLET_MAX_TRIANGLES = 124;
+    constexpr auto MESHLET_MAX_TRIANGLES = 64;
 
     /** @brief A collection of vertices and indices that together make up a loaded mesh asset. */
     struct MeshAsset final : IAsset
