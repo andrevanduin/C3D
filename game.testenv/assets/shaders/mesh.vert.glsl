@@ -4,7 +4,7 @@
 #extension GL_ARB_shader_draw_parameters : require
 
 #include "definitions.h"
-#include "math_utils.h"
+#include "math.h"
 
 layout (push_constant) uniform block
 {

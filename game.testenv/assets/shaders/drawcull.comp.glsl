@@ -3,7 +3,7 @@
 #extension GL_EXT_shader_explicit_arithmetic_types : require
 
 #include "definitions.h"
-#include "math_utils.h"
+#include "math.h"
 
 layout (constant_id = 0) const bool LATE = false;
 
