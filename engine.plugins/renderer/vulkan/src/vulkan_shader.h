@@ -4,6 +4,7 @@
 #include <string/string.h>
 #include <volk.h>
 
+#include "vulkan_buffer.h"
 #include "vulkan_swapchain.h"
 
 namespace C3D
@@ -34,9 +35,9 @@ namespace C3D
             buffer.range  = range;
         }
 
-        DescriptorInfo(VkBuffer buffer_)
+        DescriptorInfo(VulkanBuffer buffer_)
         {
-            buffer.buffer = buffer_;
+            buffer.buffer = buffer_.GetHandle();
             buffer.offset = 0;
             buffer.range  = VK_WHOLE_SIZE;
         }

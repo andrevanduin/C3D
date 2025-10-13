@@ -52,16 +52,17 @@ namespace C3D
 
         void CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const DrawCullData& cullData, u32 timestamp,
                       bool late) const;
-        void RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget, const RenderData& renderData,
-                        const Window& window, u32 query, bool late) const;
+        void RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget, const VulkanTexture& depthPyramid,
+                        const RenderData& renderData, const Window& window, u32 query, u32 timeStamp, bool late) const;
         void DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const;
 
-        bool m_meshShadingEnabled      = true;
-        bool m_cullingEnabled          = true;
-        bool m_occlusionCullingEnabled = true;
-        bool m_lodEnabled              = true;
-        bool m_debugPyramid            = false;
-        u32 m_debugPyramidLevel        = 0;
+        bool m_meshShadingEnabled             = true;
+        bool m_cullingEnabled                 = true;
+        bool m_occlusionCullingEnabled        = true;
+        bool m_clusterOcclusionCullingEnabled = true;
+        bool m_lodEnabled                     = true;
+        bool m_debugPyramid                   = false;
+        u32 m_debugPyramidLevel               = 0;
 
         VulkanShaderModule m_drawCullShaderModule;
         VulkanShaderModule m_depthReduceShaderModule;
@@ -72,6 +73,7 @@ namespace C3D
 
         VulkanShader m_meshShader;
         VulkanShader m_meshletShader;
+        VulkanShader m_meshletLateShader;
         VulkanShader m_drawCullShader;
         VulkanShader m_drawCullLateShader;
         VulkanShader m_depthReduceShader;
@@ -85,7 +87,9 @@ namespace C3D
 
         f64 m_frameCpuAvg = 0, m_frameGpuAvg = 0, m_frameCpuBegin = 0;
 
-        u32 m_drawCount    = 0;
+        u32 m_drawCount              = 0;
+        u32 m_meshletVisibilityBytes = 0;
+
         f32 m_sceneRadius  = 300;
         f32 m_drawDistance = 200;
 
@@ -98,6 +102,7 @@ namespace C3D
         VulkanBuffer m_drawCommandBuffer;
         VulkanBuffer m_drawCommandCountBuffer;
         VulkanBuffer m_drawVisibilityBuffer;
+        VulkanBuffer m_meshletVisibilityBuffer;
 
         VkViewport m_viewport;
         VkRect2D m_scissor;

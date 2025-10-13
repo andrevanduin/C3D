@@ -41,30 +41,6 @@ layout (binding = 4) buffer DrawVisibility
 
 layout(binding = 5) uniform sampler2D depthPyramid;
 
-/* 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere by Michael Mara and Morgan McGuire 2013. */
-bool ProjectSphere(vec3 center, float radius, float zNear, float p00, float p11, out vec4 aabb)
-{
-    if (center.z < radius + zNear)
-    {
-        return false;
-    }
-
-    vec2 cx = -center.xz;
-    vec2 vx = vec2(sqrt(dot(cx, cx) - radius * radius), radius);
-    vec2 minx = mat2(vx.x, vx.y, -vx.y, vx.x) * cx;
-    vec2 maxx = mat2(vx.x, -vx.y, vx.y, vx.x) * cx;
-
-    vec2 cy = -center.yz;
-    vec2 vy = vec2(sqrt(dot(cy, cy) - radius * radius), radius);
-    vec2 miny = mat2(vy.x, vy.y, -vy.y, vy.x) * cy;
-    vec2 maxy = mat2(vy.x, -vy.y, vy.y, vy.x) * cy;
-
-    aabb = vec4(minx.x / minx.y * p00, miny.x / miny.y * p11, maxx.x / maxx.y * p00, maxy.x / maxy.y * p11);
-    aabb = aabb.xwzy * vec4(0.5f, -0.5f, 0.5f, -0.5f) + vec4(0.5f); // clip space -> uv space
-
-    return true;
-}
-
 void main()
 {
     uint di = gl_GlobalInvocationID.x;
@@ -74,6 +50,7 @@ void main()
         return;
     }
 
+    // TODO: when occlusion culling is off, can we make sure everything is processed with LATE=false?
     if (!LATE && drawVisibility[di] == 0)
     {
         return;
@@ -112,7 +89,10 @@ void main()
         }
     }
 
-    if (visible && (!LATE || drawVisibility[di] == 0))
+    // TODO: when meshlet occlusion culling is enabled, we actually *do* need to append the draw command if vis[]==1 in LATE pass,
+	// so that we can correctly render now-visible previously-invisible meshlets. we also will need to pass drawvis[] along to
+	// task shader so that it can *reject* clusters that we *did* draw in the first pass
+    if (visible && (!LATE || (cullData.meshShadingEnabled == 1 && cullData.clusterOcclusionCullingEnabled == 1) || drawVisibility[di] == 0))
     {
         uint dci = atomicAdd(drawCommandCount, 1);
 
@@ -132,6 +112,8 @@ void main()
         drawCommands[dci].vertexOffset = mesh.vertexOffset;
         drawCommands[dci].firstInstance = 0;
 
+        drawCommands[dci].lateDrawVisibility = drawVisibility[di];
+        drawCommands[dci].meshletVisibilityOffset = draws[di].meshletVisibilityOffset;
         drawCommands[dci].taskOffset = lod.meshletOffset;
         drawCommands[dci].taskCount = lod.meshletCount;
 

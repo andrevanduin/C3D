@@ -65,5 +65,8 @@ namespace C3D
 
         f32 screenWidth, screenHeight, zNear, zFar;
         f32 frustum[4];  // Data for left/right/top/bottom planes
+
+        f32 pyramidWidth, pyramidHeight;  // Depth pyramid size in texels
+        i32 clusterOcclusionCullingEnabled = 0;
     };
 }  // namespace C3D

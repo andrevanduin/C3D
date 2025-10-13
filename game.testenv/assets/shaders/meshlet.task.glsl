@@ -10,6 +10,8 @@
 #include "definitions.h"
 #include "math_utils.h"
 
+layout (constant_id = 0) const bool LATE = false;
+
 layout (local_size_x = TASK_WGSIZE, local_size_y = 1, local_size_z = 1) in;
 
 #define CULL 1
@@ -34,6 +36,13 @@ layout (binding = 2) readonly buffer Meshlets
     Meshlet meshlets[];
 };
 
+layout (binding = 5) buffer MeshletVisibility
+{
+    uint meshletVisibility[];
+};
+
+layout (binding = 6) uniform sampler2D depthPyramid;
+
 taskPayloadSharedEXT MeshTaskPayload payload;
 
 #if CULL
@@ -44,6 +53,7 @@ void main()
 {
     uint drawId = drawCommands[gl_DrawIDARB].drawId;
     MeshDraw meshDraw = draws[drawId];
+    uint lateDrawVisibility = drawCommands[gl_DrawIDARB].lateDrawVisibility;
 
     uint mgi = gl_GlobalInvocationID.x;
     uint mi = mgi + drawCommands[gl_DrawIDARB].taskOffset;
@@ -57,7 +67,27 @@ void main()
     vec3 coneAxis = RotateVecByQuat(vec3(meshlets[mi].coneAxis[0] / 127.0, meshlets[mi].coneAxis[1] / 127.0, meshlets[mi].coneAxis[2] / 127.0), meshDraw.orientation);
     float coneCutoff = int(meshlets[mi].coneCutoff) / 127.0;
 
-    bool visible = mgi < drawCommands[gl_DrawIDARB].taskCount;
+    uint mvi = meshDraw.meshletVisibilityOffset + mgi;
+
+    bool valid = mgi < drawCommands[gl_DrawIDARB].taskCount;
+    bool visible = valid;
+
+    uint meshletVisibilityBit = meshletVisibility[mvi >> 5] & (1u << (mvi & 31));
+
+    // TODO: this might not be the most efficient way to do this
+    // occlusionEnabled=1 check is necessary because otherwise if we disable OC, cluster occlusion status becomes "sticky":
+    // for draw calls are always dispatched with LATE=0, we never update their cull status because they are skipped
+    if (!LATE && meshletVisibilityBit == 0 && renderData.clusterOcclusionCullingEnabled == 1)
+    {
+        visible = false;
+    }
+
+    bool skip = false;
+
+    if (LATE && lateDrawVisibility == 1 && meshletVisibilityBit != 0)
+    {
+        skip = true;
+    }
 
     // Backface cone culling
     visible = visible && !ConeCull(center, radius, coneAxis, coneCutoff, vec3(0, 0, 0));
@@ -67,7 +97,39 @@ void main()
     // The near/far plane culling uses camera space Z directly
     visible = visible && center.z + radius > renderData.zNear && center.z - radius < renderData.zFar;
 
-    if (visible)
+    if (LATE && visible && renderData.clusterOcclusionCullingEnabled == 1)
+    {
+        float p00 = renderData.projection[0][0], p11 = renderData.projection[1][1];
+
+        vec4 aabb;
+        if (ProjectSphere(center, radius, renderData.zNear, p00, p11, aabb))
+        {
+            float width = (aabb.z - aabb.x) * renderData.pyramidWidth;
+            float height = (aabb.w - aabb.y) * renderData.pyramidHeight;
+
+            float level = floor(log2(max(width, height)));
+
+            // Sampler is set up to do min reduction, so this computes the minimum depth of a 2x2 texel quad
+			float depth = textureLod(depthPyramid, (aabb.xy + aabb.zw) * 0.5, level).x;
+			float depthSphere = renderData.zNear / (center.z - radius);
+
+			visible = visible && depthSphere > depth;
+        }
+    }
+
+    if (LATE && valid)
+    {
+        if (visible)
+        {
+            atomicOr(meshletVisibility[mvi >> 5], 1u << (mvi & 31));
+        }
+        else
+        {
+            atomicAnd(meshletVisibility[mvi >> 5], ~(1u << (mvi & 31)));
+        }
+    }
+
+    if (visible && !skip)
     {
         uint index = atomicAdd(sharedCount, 1);
         payload.meshletIndices[index] = mi;

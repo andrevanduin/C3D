@@ -120,14 +120,23 @@ namespace C3D
         vkCmdFillBuffer(commandBuffer, m_handle, offset, size, data);
     }
 
+    VkBufferMemoryBarrier2 VulkanBuffer::Barrier(VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask, VkPipelineStageFlags2 dstStageMask,
+                                                 VkAccessFlags dstAccessMask) const
+    {
+        return VkUtils::BufferBarrier(m_handle, srcStageMask, srcAccessMask, dstStageMask, dstAccessMask);
+    }
+
     void VulkanBuffer::Destroy()
     {
-        auto device = m_context->device.GetLogical();
+        if (m_context)
+        {
+            auto device = m_context->device.GetLogical();
 
-        MetricsFree(Memory.GetId(), MemoryType::Vulkan, m_size, m_requiredSize, m_memory);
+            MetricsFree(Memory.GetId(), MemoryType::Vulkan, m_size, m_requiredSize, m_memory);
 
-        vkDestroyBuffer(device, m_handle, m_context->allocator);
-        vkFreeMemory(device, m_memory, m_context->allocator);
+            vkDestroyBuffer(device, m_handle, m_context->allocator);
+            vkFreeMemory(device, m_memory, m_context->allocator);
+        }
 
         m_name.Destroy();
     }

@@ -85,6 +85,12 @@ void TestEnv::OnUpdate(C3D::FrameData& frameData)
         context.data.u32[0] = C3D::KeyC;
         Event.Fire(C3D::EventCodeDebug0, nullptr, context);
     }
+    if (Input.IsKeyPressed(C3D::KeyK))
+    {
+        C3D::EventContext context;
+        context.data.u32[0] = C3D::KeyK;
+        Event.Fire(C3D::EventCodeDebug0, nullptr, context);
+    }
     if (Input.IsKeyPressed(C3D::KeyO))
     {
         C3D::EventContext context;
@@ -103,6 +109,7 @@ void TestEnv::OnUpdate(C3D::FrameData& frameData)
         context.data.u32[0] = C3D::KeyP;
         Event.Fire(C3D::EventCodeDebug0, nullptr, context);
     }
+
     if (Input.IsKeyPressed(C3D::Key0))
     {
         C3D::EventContext context;

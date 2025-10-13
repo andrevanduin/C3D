@@ -74,6 +74,8 @@ namespace C3D
         VkDrawIndexedIndirectCommand indirect;
 
         // Mesh shading
+        u32 lateDrawVisibility;
+        u32 meshletVisibilityOffset;
         u32 taskOffset;
         u32 taskCount;
         VkDrawMeshTasksIndirectCommandEXT indirectMS;
@@ -88,9 +90,11 @@ namespace C3D
 
         u32 drawCount = 0;
 
-        i32 cullingEnabled          = 0;
-        i32 occlusionCullingEnabled = 0;
-        i32 lodEnabled              = 0;
+        i32 cullingEnabled                 = 0;
+        i32 occlusionCullingEnabled        = 0;
+        i32 clusterOcclusionCullingEnabled = 0;
+        i32 meshShadingEnabled             = 0;
+        i32 lodEnabled                     = 0;
     };
 
     struct alignas(16) DepthReduceData

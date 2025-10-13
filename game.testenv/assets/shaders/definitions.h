@@ -28,6 +28,9 @@ struct RenderData
 
     float screenWidth, screenHeight, zNear, zFar;
     float frustum[4];  // Data for left/right/top/bottom planes
+
+    float pyramidWidth, pyramidHeight;
+    int clusterOcclusionCullingEnabled;
 };
 
 struct DrawCullData
@@ -41,6 +44,8 @@ struct DrawCullData
 
     int cullingEnabled;
     int occlusionCullingEnabled;
+    int clusterOcclusionCullingEnabled;
+    int meshShadingEnabled;
     int lodEnabled;
 };
 
@@ -73,6 +78,7 @@ struct MeshDraw
 
     uint meshIndex;
     uint vertexOffset;  // == meshes[meshIndex].vertexOffset, improves data locality in the mesh shader
+    uint meshletVisibilityOffset;
 };
 
 struct MeshDrawCommand
@@ -87,6 +93,8 @@ struct MeshDrawCommand
     uint firstInstance;
 
     // Mesh shading
+    uint lateDrawVisibility;
+    uint meshletVisibilityOffset;
     uint taskOffset;
     uint taskCount;
     uint groupCountX;

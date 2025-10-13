@@ -92,6 +92,7 @@ namespace C3D
 
         u32 meshIndex;
         u32 vertexOffset;
+        u32 meshletVisibilityOffset;
     };
 
     /** @brief A collection of vertices and indices for all meshes that we can render. */

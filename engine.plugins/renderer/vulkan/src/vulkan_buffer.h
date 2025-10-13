@@ -29,6 +29,9 @@ namespace C3D
          */
         void Fill(VkCommandBuffer commandBuffer, u64 offset, u64 size, u32 value) const;
 
+        VkBufferMemoryBarrier2 Barrier(VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask, VkPipelineStageFlags2 dstStageMask,
+                                       VkAccessFlags dstAccessMask) const;
+
         void Destroy();
 
         VkBuffer GetHandle() const { return m_handle; }

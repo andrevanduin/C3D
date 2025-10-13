@@ -119,7 +119,7 @@ namespace C3D
             return false;
         }
 
-        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", MebiBytes(64), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
                                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create draw command buffer.");
@@ -177,6 +177,9 @@ namespace C3D
                 case C3D::KeyO:
                     m_occlusionCullingEnabled ^= true;
                     break;
+                case C3D::KeyK:
+                    m_clusterOcclusionCullingEnabled ^= true;
+                    break;
                 case C3D::KeyL:
                     m_lodEnabled ^= true;
                     break;
@@ -226,6 +229,7 @@ namespace C3D
         {
             m_meshletBuffer.Destroy();
             m_meshletDataBuffer.Destroy();
+            m_meshletVisibilityBuffer.Destroy();
         }
 
         INFO_LOG("Destroying Vulkan Shaders.");
@@ -243,6 +247,8 @@ namespace C3D
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
             m_meshletShader.Destroy();
+            m_meshletLateShader.Destroy();
+
             m_meshletShaderModule.Destroy();
             m_meshletTaskShaderModule.Destroy();
         }
@@ -360,12 +366,22 @@ namespace C3D
             }
 
             // For the meshlet shader only the name and and modules change
-            createInfo.name    = "MESHLET_SHADER";
-            createInfo.modules = { &m_meshletTaskShaderModule, &m_meshletShaderModule, &m_fragmentShaderModule };
+            createInfo.name      = "MESHLET_SHADER";
+            createInfo.constants = { /* late = */ false };
+            createInfo.modules   = { &m_meshletTaskShaderModule, &m_meshletShaderModule, &m_fragmentShaderModule };
 
             if (!m_meshletShader.Create(createInfo))
             {
                 ERROR_LOG("Failed to create Meshlet shader.");
+                return false;
+            }
+
+            createInfo.name      = "MESHLET_LATE_SHADER";
+            createInfo.constants = { /* late = */ true };
+
+            if (!m_meshletLateShader.Create(createInfo))
+            {
+                ERROR_LOG("Failed to create MeshletLate shader.");
                 return false;
             }
         }
@@ -448,9 +464,9 @@ namespace C3D
         shader.Bind(commandBuffer);
 
         DescriptorInfo descriptors[] = {
-            m_drawBuffer.GetHandle(),           m_meshBuffer.GetHandle(),
-            m_drawCommandBuffer.GetHandle(),    m_drawCommandCountBuffer.GetHandle(),
-            m_drawVisibilityBuffer.GetHandle(), DescriptorInfo(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL),
+            m_drawBuffer,           m_meshBuffer,
+            m_drawCommandBuffer,    m_drawCommandCountBuffer,
+            m_drawVisibilityBuffer, DescriptorInfo(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL),
         };
         shader.PushDescriptorSet(commandBuffer, descriptors);
 
@@ -470,10 +486,13 @@ namespace C3D
     }
 
     void VulkanRendererPlugin::RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget,
-                                          const RenderData& renderData, const Window& window, u32 query, bool late) const
+                                          const VulkanTexture& depthPyramid, const RenderData& renderData, const Window& window, u32 query, u32 timeStamp,
+                                          bool late) const
     {
         constexpr VkClearColorValue clearColor               = { 30.f / 255.f, 54.f / 255.f, 42.f / 255.f, 1 };
         constexpr VkClearDepthStencilValue clearDepthStencil = { 0.f, 0 };
+
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, timeStamp + 0);
 
         // Begin quering our pipeline statistics
         vkCmdBeginQuery(commandBuffer, m_queryPoolStatistics, query, 0);
@@ -486,11 +505,18 @@ namespace C3D
 
         if (m_meshShadingEnabled)
         {
-            m_meshletShader.Bind(commandBuffer);
+            if (late)
+            {
+                m_meshletLateShader.Bind(commandBuffer);
+            }
+            else
+            {
+                m_meshletShader.Bind(commandBuffer);
+            }
 
+            DescriptorInfo pyramidDesc(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL);
             DescriptorInfo descriptors[] = {
-                m_drawCommandBuffer.GetHandle(), m_drawBuffer.GetHandle(),   m_meshletBuffer.GetHandle(),
-                m_meshletDataBuffer.GetHandle(), m_vertexBuffer.GetHandle(),
+                m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_meshletVisibilityBuffer, pyramidDesc,
             };
             m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
             m_meshletShader.PushConstants(commandBuffer, &renderData, sizeof(renderData));
@@ -502,7 +528,11 @@ namespace C3D
         {
             m_meshShader.Bind(commandBuffer);
 
-            DescriptorInfo descriptors[] = { m_drawCommandBuffer.GetHandle(), m_drawBuffer.GetHandle(), m_vertexBuffer.GetHandle() };
+            DescriptorInfo descriptors[] = {
+                m_drawCommandBuffer,
+                m_drawBuffer,
+                m_vertexBuffer,
+            };
             m_meshShader.PushDescriptorSet(commandBuffer, descriptors);
 
             vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
@@ -516,6 +546,8 @@ namespace C3D
         vkCmdEndRendering(commandBuffer);
 
         vkCmdEndQuery(commandBuffer, m_queryPoolStatistics, query);
+
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, timeStamp + 1);
     }
 
     void VulkanRendererPlugin::DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const
@@ -609,12 +641,22 @@ namespace C3D
         static bool firstFrame = false;
         if (!firstFrame)
         {
-            m_drawVisibilityBuffer.Fill(commandBuffer, 0, 4 * m_drawCount, 0);
+            m_drawVisibilityBuffer.Fill(commandBuffer, 0, sizeof(u32) * m_drawCount, 0);
 
-            auto fillBarrier = VkUtils::BufferBarrier(m_drawVisibilityBuffer.GetHandle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-                                                      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+            auto fillBarrier = m_drawVisibilityBuffer.Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                                                              VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
 
             VkUtils::PipelineBarrier(commandBuffer, 0, 1, &fillBarrier, 0, nullptr);
+
+            if (m_meshShadingEnabled)
+            {
+                m_meshletVisibilityBuffer.Fill(commandBuffer, 0, m_meshletVisibilityBytes, 0);
+
+                auto fillBarrier =
+                    m_meshletVisibilityBuffer.Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT,
+                                                      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+                VkUtils::PipelineBarrier(commandBuffer, 0, 1, &fillBarrier, 0, nullptr);
+            }
 
             firstFrame = true;
         }
@@ -625,8 +667,8 @@ namespace C3D
 
         mat4 projectionT = glm::transpose(projection);
 
-        u32 depthPyramidWidth  = backendState->depthPyramid.GetWidth();
-        u32 depthPyramidHeight = backendState->depthPyramid.GetHeight();
+        f32 depthPyramidWidth  = static_cast<f32>(backendState->depthPyramid.GetWidth());
+        f32 depthPyramidHeight = static_cast<f32>(backendState->depthPyramid.GetHeight());
 
         vec4 frustumX = NormalizePlane(projectionT[3] + projectionT[0]);  // x + w < 0
         vec4 frustumY = NormalizePlane(projectionT[3] + projectionT[1]);  // y + w < 0
@@ -643,25 +685,30 @@ namespace C3D
 
         cullData.drawCount = m_drawCount;
 
-        cullData.cullingEnabled          = m_cullingEnabled;
-        cullData.occlusionCullingEnabled = m_occlusionCullingEnabled;
-        cullData.lodEnabled              = m_lodEnabled;
-        cullData.lodBase                 = 10.f;
-        cullData.lodStep                 = 1.5f;
+        cullData.cullingEnabled                 = m_cullingEnabled;
+        cullData.occlusionCullingEnabled        = m_occlusionCullingEnabled;
+        cullData.meshShadingEnabled             = m_meshShadingEnabled;
+        cullData.clusterOcclusionCullingEnabled = m_occlusionCullingEnabled && m_clusterOcclusionCullingEnabled;
+        cullData.lodEnabled                     = m_lodEnabled;
+        cullData.lodBase                        = 10.f;
+        cullData.lodStep                        = 1.5f;
 
         cullData.pyramidWidth  = depthPyramidWidth;
         cullData.pyramidHeight = depthPyramidHeight;
 
-        RenderData renderData   = {};
-        renderData.projection   = projection;
-        renderData.screenWidth  = static_cast<f32>(window.width);
-        renderData.screenHeight = static_cast<f32>(window.height);
-        renderData.zNear        = zNear;
-        renderData.zFar         = m_drawDistance;
-        renderData.frustum[0]   = frustumX.x;
-        renderData.frustum[1]   = frustumX.z;
-        renderData.frustum[2]   = frustumY.y;
-        renderData.frustum[3]   = frustumY.z;
+        RenderData renderData                     = {};
+        renderData.projection                     = projection;
+        renderData.screenWidth                    = static_cast<f32>(window.width);
+        renderData.screenHeight                   = static_cast<f32>(window.height);
+        renderData.zNear                          = zNear;
+        renderData.zFar                           = m_drawDistance;
+        renderData.frustum[0]                     = frustumX.x;
+        renderData.frustum[1]                     = frustumX.z;
+        renderData.frustum[2]                     = frustumY.y;
+        renderData.frustum[3]                     = frustumY.z;
+        renderData.pyramidWidth                   = depthPyramidWidth;
+        renderData.pyramidHeight                  = depthPyramidHeight;
+        renderData.clusterOcclusionCullingEnabled = m_occlusionCullingEnabled && m_clusterOcclusionCullingEnabled;
 
         auto& colorTarget  = backendState->colorTarget;
         auto& depthTarget  = backendState->depthTarget;
@@ -682,7 +729,7 @@ namespace C3D
         CullStep(commandBuffer, m_drawCullShader, depthPyramid, cullData, 2, /* late = */ false);
 
         // Early render: render objects that were visible last frame
-        RenderStep(commandBuffer, colorTarget, depthTarget, renderData, window, 0, /* late = */ false);
+        RenderStep(commandBuffer, colorTarget, depthTarget, depthPyramid, renderData, window, 0, 8, /* late = */ false);
 
         // Depth pyramid generation
         DepthPyramidStep(commandBuffer, depthTarget, depthPyramid);
@@ -691,7 +738,7 @@ namespace C3D
         CullStep(commandBuffer, m_drawCullLateShader, depthPyramid, cullData, 6, /* late = */ true);
 
         // Late render: render objects that are visible this frame but weren't drawn in the early pass
-        RenderStep(commandBuffer, colorTarget, depthTarget, renderData, window, 1, /* late = */ true);
+        RenderStep(commandBuffer, colorTarget, depthTarget, depthPyramid, renderData, window, 1, 10, /* late = */ true);
 
         return true;
     }  // namespace C3D
@@ -818,7 +865,7 @@ namespace C3D
         VK_CHECK(vkWaitForFences(device, 1, &frameFence, VK_TRUE, UINT64_MAX));
         VK_CHECK(vkResetFences(device, 1, &frameFence));
 
-        u64 timestampResults[8] = {};
+        u64 timestampResults[12] = {};
         VK_CHECK(vkGetQueryPoolResults(device, m_queryPoolTimestamps, 0, ARRAY_SIZE(timestampResults), sizeof(timestampResults), timestampResults,
                                        sizeof(timestampResults[0]), VK_QUERY_RESULT_64_BIT));
 
@@ -832,6 +879,9 @@ namespace C3D
         f64 cullGpuTime     = static_cast<f64>(timestampResults[3] - timestampResults[2]) * props.limits.timestampPeriod * 1e-6;
         f64 pyramidGpuTime  = static_cast<f64>(timestampResults[5] - timestampResults[4]) * props.limits.timestampPeriod * 1e-6;
         f64 cullLateGpuTime = static_cast<f64>(timestampResults[7] - timestampResults[6]) * props.limits.timestampPeriod * 1e-6;
+
+        f64 renderGpuTime     = static_cast<f64>(timestampResults[9] - timestampResults[8]) * props.limits.timestampPeriod * 1e-6;
+        f64 renderLateGpuTime = static_cast<f64>(timestampResults[11] - timestampResults[10]) * props.limits.timestampPeriod * 1e-6;
 
         f64 frameCpuEnd = Platform::GetAbsoluteTime() * 1000;
 
@@ -847,11 +897,11 @@ namespace C3D
 
         titleText.Clear();
         titleText.Format(
-            "Mesh Shading: {}; Cull: {}; Occlusion: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms; pyramid {:.2f} ms; cull late: {:.2f} "
-            "ms); triangles {:.2f}M; {:.1f}B tri/sec; {:.1f}M draws/sec;",
+            "Mesh Shading: {}; Cull: {}; Occlusion: {}; Cluster Occlusion: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms; render {:.2f}; "
+            "pyramid {:.2f} ms; cull late: {:.2f} ms; render late {:.2f} ms); triangles {:.2f}M; {:.1f}B tri/sec; {:.1f}M draws/sec;",
             meshShadingEnabledAndSupported ? "ON" : "OFF", m_cullingEnabled ? "ON" : "OFF", m_occlusionCullingEnabled ? "ON" : "OFF",
-            m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, pyramidGpuTime, cullLateGpuTime, triangleCount * 1e-6,
-            trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
+            m_clusterOcclusionCullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, renderGpuTime,
+            pyramidGpuTime, cullLateGpuTime, renderLateGpuTime, triangleCount * 1e-6, trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
 
         Platform::SetWindowTitle(window, titleText);
 
@@ -1134,6 +1184,7 @@ namespace C3D
         m_drawCount = 1000000;
         m_draws.Resize(m_drawCount);
 
+        u32 meshletVisibilityCount = 0;
         for (auto& draw : m_draws)
         {
             u64 meshIndex    = Random.Generate(static_cast<u64>(0), geometry.meshes.Size() - 1);
@@ -1148,8 +1199,31 @@ namespace C3D
             f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));
             draw.orientation = glm::rotate(glm::quat(1, 0, 0, 0), angle, axis);
 
-            draw.meshIndex    = static_cast<u32>(meshIndex);
-            draw.vertexOffset = mesh.vertexOffset;
+            draw.meshIndex               = static_cast<u32>(meshIndex);
+            draw.vertexOffset            = mesh.vertexOffset;
+            draw.meshletVisibilityOffset = meshletVisibilityCount;
+
+            u32 meshletCount = 0;
+            for (u32 i = 0; i < mesh.lodCount; ++i)
+            {
+                meshletCount = Max(meshletCount, mesh.lods[i].meshletCount);
+            }
+
+            meshletVisibilityCount += meshletCount;
+        }
+
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+        {
+            m_meshletVisibilityBytes = (meshletVisibilityCount + 31) / 32 * sizeof(u32);
+
+            INFO_LOG("Total meshlet visiblity count: {}; Size is: {}MB.", meshletVisibilityCount, BytesToMebiBytes(m_meshletVisibilityBytes));
+
+            if (!m_meshletVisibilityBuffer.Create(&m_context, "MESHLET_VISIBILITY", m_meshletVisibilityBytes,
+                                                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+            {
+                ERROR_LOG("Failed to create meshlet visibility buffer.");
+                return false;
+            }
         }
 
         return m_drawBuffer.Upload(commandBuffer, commandPool, m_draws.GetData(), sizeof(MeshDraw) * m_draws.Size());
