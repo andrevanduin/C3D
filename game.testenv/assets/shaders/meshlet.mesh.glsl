@@ -82,6 +82,8 @@ void main()
     vec3 meshletColor = vec3(meshletHash & 255, (meshletHash >> 8) & 255, (meshletHash >> 16) & 225) / 255;
 #endif
 
+    vec2 screen = vec2(renderData.screenWidth, renderData.screenHeight);
+
     if (ti < vertexCount)
     {
         uint i = ti;
@@ -99,7 +101,7 @@ void main()
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
 
     #if CULL
-        vertexClip[i] = vec3(clip.xy / clip.w, clip.w);
+        vertexClip[i] = vec3((clip.xy / clip.w * 0.5 + vec2(0.5)) * screen, clip.w);
     #endif
 
     #if DEBUG
@@ -111,9 +113,6 @@ void main()
     barrier();
 #endif
 
-    vec2 screen = vec2(renderData.screenWidth, renderData.screenHeight);
-
-    //for (uint i = ti; i < triangleCount; i += MESH_WGSIZE)
     if (ti < triangleCount)
     {
         uint i = ti;
@@ -134,8 +133,8 @@ void main()
         culled = culled || (eb.x * ec.y >= eb.y * ec.x);
 
         // Small primitive culling
-        vec2 bmin = (min(pa, min(pb, pc)) * 0.5 + vec2(0.5)) * screen;
-        vec2 bmax = (max(pa, max(pb, pc)) * 0.5 + vec2(0.5)) * screen;
+        vec2 bmin = min(pa, min(pb, pc));
+        vec2 bmax = max(pa, max(pb, pc));
         float sbprec = 1.0 / 256.0; // Note: This can be set to 1/2^subpixelPrecisionBits
 
         // Note: This is slightly imprecise (doesn't fully match hw bahavior and is both too lose and too strict)

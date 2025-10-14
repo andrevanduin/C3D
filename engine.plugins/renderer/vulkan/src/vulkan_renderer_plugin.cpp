@@ -126,7 +126,7 @@ namespace C3D
             return false;
         }
 
-        if (!m_drawCommandCountBuffer.Create(&m_context, "DRAW_COMMAND_COUNT", 12,
+        if (!m_drawCommandCountBuffer.Create(&m_context, "DRAW_COMMAND_COUNT", 16,
                                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                              VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
@@ -246,6 +246,9 @@ namespace C3D
         m_depthReduceShader.Destroy();
         m_depthReduceShaderModule.Destroy();
 
+        m_taskSubmitShader.Destroy();
+        m_taskSubmitShaderModule.Destroy();
+
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
             m_meshletShader.Destroy();
@@ -283,7 +286,7 @@ namespace C3D
 
     bool VulkanRendererPlugin::CreateResources()
     {
-        if (!m_cullShaderModule.Create(&m_context, "drawcull.comp"))
+        if (!m_cullShaderModule.Create(&m_context, "draw_cull.comp"))
         {
             ERROR_LOG("Failed to create drawcull ShaderModule");
             return false;
@@ -304,6 +307,12 @@ namespace C3D
         if (!m_fragmentShaderModule.Create(&m_context, "mesh.frag"))
         {
             ERROR_LOG("Failed to create mesh.frag ShaderModule.");
+            return false;
+        }
+
+        if (!m_taskSubmitShaderModule.Create(&m_context, "task_submit.comp"))
+        {
+            ERROR_LOG("Failed to create task_submit ShaderModule.");
             return false;
         }
 
@@ -357,6 +366,16 @@ namespace C3D
         if (!m_depthReduceShader.Create(createInfo))
         {
             ERROR_LOG("Failed to create DepthReduce shader.");
+            return false;
+        }
+
+        createInfo.name              = "TASK_SUBMIT_SHADER";
+        createInfo.pushConstantsSize = 0;
+        createInfo.modules           = { &m_taskSubmitShaderModule };
+
+        if (!m_taskSubmitShader.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create Task Submits shader.");
             return false;
         }
 
@@ -464,9 +483,7 @@ namespace C3D
 
         VkUtils::PipelineBarrier(commandBuffer, 0, 1, &prefillBarrier, 0, nullptr);
 
-        // Zero initialize our draw command count buffer
-        m_drawCommandCountBuffer.Fill(commandBuffer, 0, 4, 0);  // Fills groupCountX for taskSubmit *or* indirect draw count for regular submit
-        m_drawCommandCountBuffer.Fill(commandBuffer, 4, 8, 1);  // Fills groupCountY/Z for taskSubmit
+        m_drawCommandCountBuffer.Fill(commandBuffer, 0, 4, 0);
 
         auto pyramidBarrier = VkUtils::ImageBarrier(depthPyramid.GetImage(), late ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : 0,
                                                     late ? VK_ACCESS_SHADER_WRITE_BIT : 0, late ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED,
@@ -482,17 +499,32 @@ namespace C3D
 
         VkUtils::PipelineBarrier(commandBuffer, 0, ARRAY_SIZE(fillBarriers), fillBarriers, 1, &pyramidBarrier);
 
-        shader.Bind(commandBuffer);
+        {
+            shader.Bind(commandBuffer);
+            DescriptorInfo descriptors[] = {
+                m_drawBuffer,           m_meshBuffer,
+                m_drawCommandBuffer,    m_drawCommandCountBuffer,
+                m_drawVisibilityBuffer, DescriptorInfo(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL),
+            };
+            shader.PushDescriptorSet(commandBuffer, descriptors);
 
-        DescriptorInfo descriptors[] = {
-            m_drawBuffer,           m_meshBuffer,
-            m_drawCommandBuffer,    m_drawCommandCountBuffer,
-            m_drawVisibilityBuffer, DescriptorInfo(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL),
-        };
-        shader.PushDescriptorSet(commandBuffer, descriptors);
+            shader.PushConstants(commandBuffer, &cullData, sizeof(DrawCullData));
+            shader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()), 1, 1);
+        }
 
-        shader.PushConstants(commandBuffer, &cullData, sizeof(DrawCullData));
-        shader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()), 1, 1);
+        if (m_meshShadingEnabled)
+        {
+            auto syncBarrier = m_drawCommandCountBuffer.Barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+                                                                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+
+            VkUtils::PipelineBarrier(commandBuffer, 0, 1, &syncBarrier, 0, nullptr);
+
+            m_taskSubmitShader.Bind(commandBuffer);
+
+            DescriptorInfo descriptors[] = { m_drawCommandCountBuffer, m_drawCommandBuffer };
+            m_taskSubmitShader.PushDescriptorSet(commandBuffer, descriptors);
+            m_taskSubmitShader.Dispatch(commandBuffer, 1, 1, 1);
+        }
 
         VkBufferMemoryBarrier2 cullBarriers[] = {
             m_drawCommandBuffer.Barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
@@ -537,7 +569,7 @@ namespace C3D
             shader.PushDescriptorSet(commandBuffer, descriptors);
             shader.PushConstants(commandBuffer, &renderData, sizeof(renderData));
 
-            vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_drawCommandCountBuffer.GetHandle(), 0, 1, 0);
+            vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_drawCommandCountBuffer.GetHandle(), 4, 1, 0);
         }
         else
         {

@@ -132,6 +132,9 @@ constexpr u64 BytesToMebiBytes(const u64 amount) { return amount / 1024 / 1024; 
 /** @brief Converts the provided number of bytes to kibibytes. */
 constexpr u64 BytesToKibiBytes(const u64 amount) { return amount / 1024; }
 
+/** @brief Converts the provided number of mebibytes to gibibytes. */
+constexpr u64 MebiBytesToGibiBytes(const u64 amount) { return amount / 1024; }
+
 /** @brief Gets the number of bytes from amount of gigabytes (GB) (amount * 1000 * 1000 * 1000) */
 constexpr u64 GigaBytes(const u64 amount) { return amount * 1000 * 1000 * 1000; }
 /** @brief Gets the number of bytes from amount of megabytes (MB) (amount * 1000 * 1000) */

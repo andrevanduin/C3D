@@ -368,15 +368,15 @@ namespace C3D
             auto& props = m_physical.properties;
             INFO_LOG("GPU            - {}", props.deviceName);
             INFO_LOG("Type           - {}", VkPhysicalDeviceTypeToString(props.deviceType));
-            INFO_LOG("GPU Memory     - {}GiB", gpuMemory / 1024);
+            INFO_LOG("GPU Memory     - {}GiB", MebiBytesToGibiBytes(gpuMemory));
             INFO_LOG("Driver Version - {}.{}.{}", VK_VERSION_MAJOR(props.driverVersion), VK_VERSION_MINOR(props.driverVersion),
                      VK_VERSION_PATCH(props.driverVersion));
             INFO_LOG("API Version    - {}.{}.{}", VK_API_VERSION_MAJOR(props.apiVersion), VK_API_VERSION_MINOR(props.apiVersion),
                      VK_API_VERSION_PATCH(props.apiVersion));
             INFO_LOG("Features:");
-            INFO_LOG("Mesh Shading      : {}", IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) ? "Supported" : "Not Supported");
-            INFO_LOG("Push Descriptors  : {}", IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PUSH_DESCRIPTORS) ? "Supported" : "Not Supported");
-            INFO_LOG("Performance Query : {}", IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PERFORMANCE_QUERY) ? "Supported" : "Not Supported");
+            INFO_LOG("Mesh Shading      :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) ? " Not" : "");
+            INFO_LOG("Push Descriptors  :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PUSH_DESCRIPTORS) ? " Not" : "");
+            INFO_LOG("Performance Query :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PERFORMANCE_QUERY) ? " Not" : "");
             INFO_LOG("Limits:");
             INFO_LOG("Max PushConstants size: {} Bytes", props.limits.maxPushConstantsSize);
             INFO_LOG("Max DrawIndirect count: {}", props.limits.maxDrawIndirectCount);
