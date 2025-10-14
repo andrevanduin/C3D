@@ -8,7 +8,8 @@
 namespace C3D
 {
     constexpr auto MESHLET_MAX_VERTICES  = 64;
-    constexpr auto MESHLET_MAX_TRIANGLES = 64;
+    constexpr auto MESHLET_MAX_TRIANGLES = 96;
+    constexpr auto MESHLET_CONE_WEIGHT   = 0.5f;
 
     /** @brief A collection of vertices and indices that together make up a loaded mesh asset. */
     struct MeshAsset final : IAsset
@@ -64,6 +65,8 @@ namespace C3D
         u32 meshletOffset = 0;
         /** @brief The number of meshlets in this lod. */
         u32 meshletCount = 0;
+        /** @brief The error introduced by this lod. */
+        f32 error = 0.f;
     };
 
     struct alignas(16) Mesh

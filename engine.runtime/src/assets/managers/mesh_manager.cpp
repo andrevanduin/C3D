@@ -1,10 +1,11 @@
 
 #include "mesh_manager.h"
 
+#include <meshoptimizer/src/meshoptimizer.h>
+
 #include "exceptions.h"
 #include "math/c3d_math.h"
 #include "platform/file_system.h"
-#include "renderer/utils/mesh_utils.h"
 #include "renderer/vertex.h"
 #include "string/string_utils.h"
 #include "system/system_manager.h"
@@ -157,14 +158,14 @@ namespace C3D
         {
             ScopedTimer timer(String::FromFormat("Remap optimization of: '{}'.", asset.name));
 
-            DynamicArray<u32> remap;
-            u32 uniqueVertexCount = MeshUtils::GenerateVertexRemap(vertices, indexCount, remap);
+            DynamicArray<u32> remap(indexCount);
+            u32 uniqueVertexCount = meshopt_generateVertexRemap(remap.GetData(), nullptr, indexCount, vertices.GetData(), indexCount, sizeof(Vertex));
 
             asset.vertices.Resize(uniqueVertexCount);
             asset.indices.Resize(indexCount);
 
-            MeshUtils::RemapVertices(asset, indexCount, vertices, remap);
-            MeshUtils::RemapIndices(asset, indexCount, remap);
+            meshopt_remapVertexBuffer(asset.vertices.GetData(), vertices.GetData(), indexCount, sizeof(Vertex), remap.GetData());
+            meshopt_remapIndexBuffer(asset.indices.GetData(), nullptr, indexCount, remap.GetData());
 
             INFO_LOG("Went from {} to {} vertices (reduced by {:.2f}%).", vertices.Size(), uniqueVertexCount,
                      (static_cast<f32>(uniqueVertexCount) - vertices.Size()) / vertices.Size() * -100);
@@ -173,8 +174,9 @@ namespace C3D
         {
             ScopedTimer timer(String::FromFormat("Optimization for Vertex Cache and Fetch of: '{}'.", asset.name));
 
-            MeshUtils::OptimizeForVertexCache(asset);
-            MeshUtils::OptimizeForVertexFetch(asset);
+            meshopt_optimizeVertexCache(asset.indices.GetData(), asset.indices.GetData(), indexCount, asset.vertices.Size());
+            meshopt_optimizeVertexFetch(asset.vertices.GetData(), asset.indices.GetData(), indexCount, asset.vertices.GetData(), asset.vertices.Size(),
+                                        sizeof(Vertex));
         }
 
         // Cleanup our internal data and reset our counters etc.

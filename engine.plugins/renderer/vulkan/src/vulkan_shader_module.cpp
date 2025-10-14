@@ -147,17 +147,21 @@ namespace C3D
         {
             m_shaderStage = VK_SHADER_STAGE_FRAGMENT_BIT;
         }
+        else if (m_name.Contains(".geom"))
+        {
+            m_shaderStage = VK_SHADER_STAGE_GEOMETRY_BIT;
+        }
         else if (m_name.Contains(".mesh"))
         {
             m_shaderStage = VK_SHADER_STAGE_MESH_BIT_EXT;
         }
-        else if (m_name.Contains(".comp"))
-        {
-            m_shaderStage = VK_SHADER_STAGE_COMPUTE_BIT;
-        }
         else if (m_name.Contains(".task"))
         {
             m_shaderStage = VK_SHADER_STAGE_TASK_BIT_EXT;
+        }
+        else if (m_name.Contains(".comp"))
+        {
+            m_shaderStage = VK_SHADER_STAGE_COMPUTE_BIT;
         }
         else
         {
@@ -177,6 +181,8 @@ namespace C3D
                 return shaderc_glsl_default_mesh_shader;
             case VK_SHADER_STAGE_COMPUTE_BIT:
                 return shaderc_glsl_default_compute_shader;
+            case VK_SHADER_STAGE_GEOMETRY_BIT:
+                return shaderc_glsl_default_geometry_shader;
             case VK_SHADER_STAGE_TASK_BIT_EXT:
                 return shaderc_glsl_default_task_shader;
             default:

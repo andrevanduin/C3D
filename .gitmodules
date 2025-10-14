@@ -1,3 +1,6 @@
 [submodule "engine.plugins/renderer/vulkan/vendor/volk"]
 	path = engine.plugins/renderer/vulkan/vendor/volk
 	url = https://github.com/zeux/volk.git
+[submodule "engine.runtime/vendor/meshoptimizer"]
+	path = engine.runtime/vendor/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer.git

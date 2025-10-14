@@ -10,7 +10,6 @@
 #include <platform/platform.h>
 #include <platform/platform_types.h>
 #include <random/random.h>
-#include <renderer/utils/mesh_utils.h>
 #include <shaderc/shaderc.h>
 #include <system/system_manager.h>
 
@@ -737,8 +736,7 @@ namespace C3D
         cullData.meshShadingEnabled             = m_meshShadingEnabled;
         cullData.clusterOcclusionCullingEnabled = m_occlusionCullingEnabled && m_clusterOcclusionCullingEnabled;
         cullData.lodEnabled                     = m_lodEnabled;
-        cullData.lodBase                        = 10.f;
-        cullData.lodStep                        = 1.5f;
+        cullData.lodTarget                      = (2 / cullData.p11) * (1.f / static_cast<f32>(window.height));  // 1px
 
         cullData.pyramidWidth  = depthPyramidWidth;
         cullData.pyramidHeight = depthPyramidHeight;

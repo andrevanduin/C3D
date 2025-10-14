@@ -1,7 +1,7 @@
 #define TASK_WGSIZE 64
 #define MESH_WGSIZE 64
 #define MESHLET_MAX_VERTICES 64
-#define MESHLET_MAX_TRIANGLES 64
+#define MESHLET_MAX_TRIANGLES 96
 #define TASK_WGLIMIT (1 << 22)
 
 struct Vertex
@@ -39,7 +39,7 @@ struct DrawCullData
 {
     float p00, p11, zNear, zFar;        // Symmertric projection parameters
     float frustum[4];                   // Data for left/right/top/bottom planes
-    float lodBase, lodStep;             // Lod distance i = base * pow(step, i)
+    float lodTarget;                    // lod target error at z=1
     float pyramidWidth, pyramidHeight;  // Depth pyramid size in texels
 
     uint drawCount;
@@ -58,6 +58,7 @@ struct MeshLod
 
     uint meshletOffset;
     uint meshletCount;
+    float error;
 };
 
 struct Mesh

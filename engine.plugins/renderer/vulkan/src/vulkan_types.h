@@ -85,7 +85,7 @@ namespace C3D
     {
         f32 p00, p11, zNear, zFar;        // Symmertric projection parameters
         f32 frustum[4];                   // Data for left/right/top/bottom planes
-        f32 lodBase, lodStep;             // Lod distance i = base * pow(step, i)
+        f32 lodTarget;                    // Lod target error at z=1
         f32 pyramidWidth, pyramidHeight;  // Depth pyramid size in texels
 
         u32 drawCount = 0;

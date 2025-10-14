@@ -85,7 +85,10 @@ void main()
             float width = (aabb.z - aabb.x) * cullData.pyramidWidth;
             float height = (aabb.w - aabb.y) * cullData.pyramidHeight;
 
-            float level = floor(log2(max(width, height)));
+            // Because we only consider 2x2 pixels, we need to make sure we are sampling from a mip that reduces the rectangle to 1x1 texel or smaller.
+            // Due to the rectangle being arbitrarily offset, a 1x1 rectangle may cover 2x2 texel area. Using floor() here would require sampling 4 corners
+            // of AABB (using bilinear fetch), which is a little slower.
+            float level = ceil(log2(max(width, height)));
 
             // Sampler is set up to do min reduction, so this computes the minimum depth of a 2x2 texel quad
             float depth = textureLod(depthPyramid, (aabb.xy + aabb.zw) * 0.5, level).x;
@@ -100,12 +103,21 @@ void main()
     // so that it can *reject* clusters that we *did* draw in the first pass.
     if (visible && (!LATE || (cullData.meshShadingEnabled == 1 && cullData.clusterOcclusionCullingEnabled == 1) || drawVisibility[di] == 0))
     {
-        // Lod distance i = base * pow(step, i)
-		// i = log2(distance / base) / log2(step)
-		float lodIndexF = log2(length(center) / cullData.lodBase) / log2(cullData.lodStep);
-		uint lodIndex = min(uint(max(lodIndexF + 1, 0)), mesh.lodCount - 1);
+        uint lodIndex = 0;
+        
+        if (cullData.lodEnabled == 1)
+        {
+            float distance = max(length(center) - radius, 0);
+            float threshold = distance * cullData.lodTarget / draws[di].scale;
 
-        lodIndex = cullData.lodEnabled == 1 ? lodIndex : 0;
+            for (uint i = 1; i < mesh.lodCount; ++i)
+            {
+                if (mesh.lods[i].error < threshold)
+                {
+                    lodIndex = i;
+                }
+            }
+        }
 
         MeshLod lod = meshes[meshIndex].lods[lodIndex];
 
