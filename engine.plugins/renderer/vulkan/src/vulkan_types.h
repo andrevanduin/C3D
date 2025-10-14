@@ -69,16 +69,16 @@ namespace C3D
     struct MeshDrawCommand
     {
         u32 drawId;
-
-        // Traditional rasterizer
         VkDrawIndexedIndirectCommand indirect;
+    };
 
-        // Mesh shading
-        u32 lateDrawVisibility;
-        u32 meshletVisibilityOffset;
+    struct MeshTaskCommand
+    {
+        u32 drawId;
         u32 taskOffset;
         u32 taskCount;
-        VkDrawMeshTasksIndirectCommandEXT indirectMS;
+        u32 lateDrawVisibility;
+        u32 meshletVisibilityOffset;
     };
 
     struct alignas(16) DrawCullData

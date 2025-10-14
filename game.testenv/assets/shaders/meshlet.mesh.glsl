@@ -4,7 +4,6 @@
 
 #extension GL_EXT_shader_explicit_arithmetic_types : require
 #extension GL_EXT_mesh_shader : require
-#extension GL_ARB_shader_draw_parameters : require
 
 #include "definitions.h"
 #include "math.h"
@@ -18,11 +17,6 @@ layout (triangles, max_vertices = MAX_VERTICES, max_primitives = 64) out;
 layout (push_constant) uniform block
 {
     RenderData renderData;
-};
-
-layout (binding = 0) readonly buffer DrawCommands
-{
-    MeshDrawCommand drawCommands[];
 };
 
 layout (binding = 1) readonly buffer Draws 

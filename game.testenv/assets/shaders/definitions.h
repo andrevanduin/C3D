@@ -85,21 +85,21 @@ struct MeshDrawCommand
 {
     uint drawId;
 
-    // Traditional rasterizer
+    // VkDrawIndexedIndirectCommand
     uint indexCount;
     uint instanceCount;
     uint firstIndex;
     uint vertexOffset;
     uint firstInstance;
+};
 
-    // Mesh shading
-    uint lateDrawVisibility;
-    uint meshletVisibilityOffset;
+struct MeshTaskCommand
+{
+    uint drawId;
     uint taskOffset;
     uint taskCount;
-    uint groupCountX;
-    uint groupCountY;
-    uint groupCountZ;
+    uint lateDrawVisibility;
+    uint meshletVisibilityOffset;
 };
 
 struct MeshTaskPayload

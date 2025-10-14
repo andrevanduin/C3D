@@ -64,7 +64,7 @@ namespace C3D
         bool m_debugPyramid                   = false;
         u32 m_debugPyramidLevel               = 0;
 
-        VulkanShaderModule m_drawCullShaderModule;
+        VulkanShaderModule m_cullShaderModule;
         VulkanShaderModule m_depthReduceShaderModule;
         VulkanShaderModule m_meshShaderModule;
         VulkanShaderModule m_meshletShaderModule;
@@ -74,9 +74,11 @@ namespace C3D
         VulkanShader m_meshShader;
         VulkanShader m_meshletShader;
         VulkanShader m_meshletLateShader;
-        VulkanShader m_drawCullShader;
-        VulkanShader m_drawCullLateShader;
         VulkanShader m_depthReduceShader;
+        VulkanShader m_drawCullShader;
+        VulkanShader m_taskCullShader;
+        VulkanShader m_drawCullLateShader;
+        VulkanShader m_taskCullLateShader;
 
         VkSampler m_depthSampler;
 

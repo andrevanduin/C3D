@@ -4,8 +4,6 @@
 
 #extension GL_EXT_shader_explicit_arithmetic_types : require
 #extension GL_EXT_mesh_shader : require
-#extension GL_KHR_shader_subgroup_ballot : require
-#extension GL_ARB_shader_draw_parameters : require
 
 #include "definitions.h"
 #include "math.h"
@@ -21,9 +19,9 @@ layout (push_constant) uniform block
     RenderData renderData;
 };
 
-layout (binding = 0) readonly buffer DrawCommands
+layout (binding = 0) readonly buffer TaskCommands
 {
-    MeshDrawCommand drawCommands[];
+    MeshTaskCommand taskCommands[];
 };
 
 layout (binding = 1) readonly buffer Draws
@@ -51,42 +49,47 @@ shared int sharedCount;
 
 void main()
 {
-    uint drawId = drawCommands[gl_DrawIDARB].drawId;
+    MeshTaskCommand command = taskCommands[gl_WorkGroupID.x];
+    uint drawId = command.drawId;
     MeshDraw meshDraw = draws[drawId];
-    uint lateDrawVisibility = drawCommands[gl_DrawIDARB].lateDrawVisibility;
 
-    uint mgi = gl_GlobalInvocationID.x;
-    uint mi = mgi + drawCommands[gl_DrawIDARB].taskOffset;
+    uint lateDrawVisibility = command.lateDrawVisibility;
+    uint taskCount = command.taskCount;
+
+    uint mgi = gl_LocalInvocationID.x;
+    uint mi = mgi + command.taskOffset;
+    uint mvi = mgi + command.meshletVisibilityOffset;
 
 #if CULL
     sharedCount = 0;
-    barrier();
+    barrier();  // For sharedCount
 
     vec3 center = RotateVecByQuat(meshlets[mi].center, meshDraw.orientation) * meshDraw.scale + meshDraw.position;
     float radius = meshlets[mi].radius * meshDraw.scale;
     vec3 coneAxis = RotateVecByQuat(vec3(meshlets[mi].coneAxis[0] / 127.0, meshlets[mi].coneAxis[1] / 127.0, meshlets[mi].coneAxis[2] / 127.0), meshDraw.orientation);
     float coneCutoff = int(meshlets[mi].coneCutoff) / 127.0;
 
-    uint mvi = meshDraw.meshletVisibilityOffset + mgi;
-
-    bool valid = mgi < drawCommands[gl_DrawIDARB].taskCount;
+    bool valid = mgi < taskCount;
     bool visible = valid;
-
-    uint meshletVisibilityBit = meshletVisibility[mvi >> 5] & (1u << (mvi & 31));
-
-    // TODO: this might not be the most efficient way to do this
-    // occlusionEnabled=1 check is necessary because otherwise if we disable OC, cluster occlusion status becomes "sticky":
-    // for draw calls are always dispatched with LATE=0, we never update their cull status because they are skipped
-    if (!LATE && meshletVisibilityBit == 0 && renderData.clusterOcclusionCullingEnabled == 1)
-    {
-        visible = false;
-    }
-
     bool skip = false;
 
-    if (LATE && lateDrawVisibility == 1 && meshletVisibilityBit != 0)
+    if (renderData.clusterOcclusionCullingEnabled == 1)
     {
-        skip = true;
+        uint meshletVisibilityBit = meshletVisibility[mvi >> 5] & (1u << (mvi & 31));
+
+        // In early pass, we have to *only* render clusters that were visible last frame, to build a reasonable depth pyramid out of visible triangles
+        if (!LATE && meshletVisibilityBit == 0)
+        {
+            visible = false;
+        }
+
+        // In the late pass, we have to process objects visible last frame again (after rendering them in early pass)
+        // in early pass, per above test, we render previously visible clusters
+        // in late pass, we must invert the above test to *not* render previously visible clusters of previously visible objects because they were rendered in early pass.
+        if (LATE && lateDrawVisibility == 1 && meshletVisibilityBit != 0)
+        {
+            skip = true;
+        }
     }
 
     // Backface cone culling
@@ -97,7 +100,7 @@ void main()
     // The near/far plane culling uses camera space Z directly
     visible = visible && center.z + radius > renderData.zNear && center.z - radius < renderData.zFar;
 
-    if (LATE && visible && renderData.clusterOcclusionCullingEnabled == 1)
+    if (LATE && renderData.clusterOcclusionCullingEnabled == 1 && visible)
     {
         float p00 = renderData.projection[0][0], p11 = renderData.projection[1][1];
 
@@ -117,7 +120,7 @@ void main()
         }
     }
 
-    if (LATE && valid)
+    if (LATE && renderData.clusterOcclusionCullingEnabled == 1 && valid)
     {
         if (visible)
         {
@@ -137,14 +140,14 @@ void main()
 
     payload.drawId = drawId;
 
-    barrier();
+    barrier(); // For sharedCount
     EmitMeshTasksEXT(sharedCount, 1, 1);
 
 #else
     payload.drawId = drawId;
     payload.meshletIndices[gl_LocalInvocationIndex] = mi;
 
-    uint count = min(TASK_WGSIZE, drawCommands[gl_DrawIDARB].taskCount - gl_WorkGroupID.x * TASK_WGSIZE);
+    uint count = min(TASK_WGSIZE, taskCount - gl_WorkGroupID.x * TASK_WGSIZE);
     EmitMeshTasksEXT(count, 1, 1);
 #endif
 }

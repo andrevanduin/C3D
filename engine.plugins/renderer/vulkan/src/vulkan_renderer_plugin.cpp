@@ -126,7 +126,7 @@ namespace C3D
             return false;
         }
 
-        if (!m_drawCommandCountBuffer.Create(&m_context, "DRAW_COMMAND_COUNT", 4,
+        if (!m_drawCommandCountBuffer.Create(&m_context, "DRAW_COMMAND_COUNT", 12,
                                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                              VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
@@ -238,8 +238,10 @@ namespace C3D
         m_fragmentShaderModule.Destroy();
 
         m_drawCullShader.Destroy();
+        m_taskCullShader.Destroy();
         m_drawCullLateShader.Destroy();
-        m_drawCullShaderModule.Destroy();
+        m_taskCullLateShader.Destroy();
+        m_cullShaderModule.Destroy();
 
         m_depthReduceShader.Destroy();
         m_depthReduceShaderModule.Destroy();
@@ -281,7 +283,7 @@ namespace C3D
 
     bool VulkanRendererPlugin::CreateResources()
     {
-        if (!m_drawCullShaderModule.Create(&m_context, "drawcull.comp"))
+        if (!m_cullShaderModule.Create(&m_context, "drawcull.comp"))
         {
             ERROR_LOG("Failed to create drawcull ShaderModule");
             return false;
@@ -311,8 +313,8 @@ namespace C3D
         createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_COMPUTE;
         createInfo.pushConstantsSize = sizeof(DrawCullData);
         createInfo.cache             = VK_NULL_HANDLE;
-        createInfo.modules           = { &m_drawCullShaderModule };
-        createInfo.constants         = { /* late = */ false };
+        createInfo.modules           = { &m_cullShaderModule };
+        createInfo.constants         = { /* late = */ false, /* task = */ false };
 
         if (!m_drawCullShader.Create(createInfo))
         {
@@ -320,10 +322,28 @@ namespace C3D
             return false;
         }
 
+        createInfo.name      = "TASK_CULL_SHADER";
+        createInfo.constants = { /* late = */ false, /* task = */ true };
+
+        if (!m_taskCullShader.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create DrawCull shader.");
+            return false;
+        }
+
         createInfo.name      = "DRAW_CULL_LATE_SHADER";
-        createInfo.constants = { /* late = */ true };
+        createInfo.constants = { /* late = */ true, /* task = */ false };
 
         if (!m_drawCullLateShader.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create DrawCull Late shader.");
+            return false;
+        }
+
+        createInfo.name      = "TASK_CULL_LATE_SHADER";
+        createInfo.constants = { /* late = */ true, /* task = */ true };
+
+        if (!m_taskCullLateShader.Create(createInfo))
         {
             ERROR_LOG("Failed to create DrawCull Late shader.");
             return false;
@@ -439,24 +459,25 @@ namespace C3D
         u32 rasterizationStage =
             m_meshShadingEnabled ? VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT : VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
 
-        auto prefillBarrier = VkUtils::BufferBarrier(m_drawCommandCountBuffer.GetHandle(), VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
-                                                     VK_ACCESS_INDIRECT_COMMAND_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+        auto prefillBarrier = m_drawCommandCountBuffer.Barrier(VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+                                                               VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
 
         VkUtils::PipelineBarrier(commandBuffer, 0, 1, &prefillBarrier, 0, nullptr);
 
         // Zero initialize our draw command count buffer
-        m_drawCommandCountBuffer.Fill(commandBuffer, 0, 4, 0);
+        m_drawCommandCountBuffer.Fill(commandBuffer, 0, 4, 0);  // Fills groupCountX for taskSubmit *or* indirect draw count for regular submit
+        m_drawCommandCountBuffer.Fill(commandBuffer, 4, 8, 1);  // Fills groupCountY/Z for taskSubmit
 
         auto pyramidBarrier = VkUtils::ImageBarrier(depthPyramid.GetImage(), late ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : 0,
                                                     late ? VK_ACCESS_SHADER_WRITE_BIT : 0, late ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED,
                                                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
         VkBufferMemoryBarrier2 fillBarriers[] = {
-            VkUtils::BufferBarrier(m_drawCommandBuffer.GetHandle(), VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | rasterizationStage,
-                                   VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                                   VK_ACCESS_SHADER_WRITE_BIT),
-            VkUtils::BufferBarrier(m_drawCommandCountBuffer.GetHandle(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-                                   VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
+            m_drawCommandBuffer.Barrier(VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | rasterizationStage,
+                                        VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                        VK_ACCESS_SHADER_WRITE_BIT),
+            m_drawCommandCountBuffer.Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                             VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
         };
 
         VkUtils::PipelineBarrier(commandBuffer, 0, ARRAY_SIZE(fillBarriers), fillBarriers, 1, &pyramidBarrier);
@@ -474,10 +495,11 @@ namespace C3D
         shader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()), 1, 1);
 
         VkBufferMemoryBarrier2 cullBarriers[] = {
-            VkUtils::BufferBarrier(m_drawCommandBuffer.GetHandle(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
-                                   VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | rasterizationStage, VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT),
-            VkUtils::BufferBarrier(m_drawCommandCountBuffer.GetHandle(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
-                                   VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT),
+            m_drawCommandBuffer.Barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+                                        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | rasterizationStage,
+                                        VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT),
+            m_drawCommandCountBuffer.Barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+                                             VK_ACCESS_INDIRECT_COMMAND_READ_BIT),
         };
 
         VkUtils::PipelineBarrier(commandBuffer, 0, ARRAY_SIZE(cullBarriers), cullBarriers, 0, nullptr);
@@ -505,24 +527,17 @@ namespace C3D
 
         if (m_meshShadingEnabled)
         {
-            if (late)
-            {
-                m_meshletLateShader.Bind(commandBuffer);
-            }
-            else
-            {
-                m_meshletShader.Bind(commandBuffer);
-            }
+            auto& shader = late ? m_meshletLateShader : m_meshletShader;
+            shader.Bind(commandBuffer);
 
             DescriptorInfo pyramidDesc(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL);
             DescriptorInfo descriptors[] = {
                 m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_meshletVisibilityBuffer, pyramidDesc,
             };
-            m_meshletShader.PushDescriptorSet(commandBuffer, descriptors);
-            m_meshletShader.PushConstants(commandBuffer, &renderData, sizeof(renderData));
+            shader.PushDescriptorSet(commandBuffer, descriptors);
+            shader.PushConstants(commandBuffer, &renderData, sizeof(renderData));
 
-            vkCmdDrawMeshTasksIndirectCountEXT(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirectMS),
-                                               m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
+            vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_drawCommandCountBuffer.GetHandle(), 0, 1, 0);
         }
         else
         {
@@ -726,7 +741,7 @@ namespace C3D
         VkUtils::PipelineBarrier(commandBuffer, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, ARRAY_SIZE(renderBeginBarriers), renderBeginBarriers);
 
         // Early cull: frustum cull & fill objects that *were* visible last frame
-        CullStep(commandBuffer, m_drawCullShader, depthPyramid, cullData, 2, /* late = */ false);
+        CullStep(commandBuffer, m_meshShadingEnabled ? m_taskCullShader : m_drawCullShader, depthPyramid, cullData, 2, /* late = */ false);
 
         // Early render: render objects that were visible last frame
         RenderStep(commandBuffer, colorTarget, depthTarget, depthPyramid, renderData, window, 0, 8, /* late = */ false);
@@ -735,7 +750,7 @@ namespace C3D
         DepthPyramidStep(commandBuffer, depthTarget, depthPyramid);
 
         // Late cull: frustum + occlusion cull & fill object that were *not* visible last frame
-        CullStep(commandBuffer, m_drawCullLateShader, depthPyramid, cullData, 6, /* late = */ true);
+        CullStep(commandBuffer, m_meshShadingEnabled ? m_taskCullLateShader : m_drawCullLateShader, depthPyramid, cullData, 6, /* late = */ true);
 
         // Late render: render objects that are visible this frame but weren't drawn in the early pass
         RenderStep(commandBuffer, colorTarget, depthTarget, depthPyramid, renderData, window, 1, 10, /* late = */ true);
