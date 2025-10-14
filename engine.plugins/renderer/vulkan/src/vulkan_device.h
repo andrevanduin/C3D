@@ -18,8 +18,10 @@ namespace C3D
 
     enum PhysicalDeviceSupportFlag : u8
     {
-        PHYSICAL_DEVICE_SUPPORT_NONE              = 0x0,
-        PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING = 0x1,
+        PHYSICAL_DEVICE_SUPPORT_NONE                   = 0x0,
+        PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING      = 0x1,
+        PHYSICAL_DEVICE_SUPPORT_FLAG_PUSH_DESCRIPTORS  = 0x2,
+        PHYSICAL_DEVICE_SUPPORT_FLAG_PERFORMANCE_QUERY = 0x4,
     };
     using PhysicalDeviceSupportFlags = u8;
 

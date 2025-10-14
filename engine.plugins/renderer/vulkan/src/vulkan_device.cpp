@@ -311,6 +311,14 @@ namespace C3D
                 m_physical.supportFlags |= PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING;
                 break;
             }
+            if (StringUtils::Equals(extension.extensionName, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME))
+            {
+                m_physical.supportFlags |= PHYSICAL_DEVICE_SUPPORT_FLAG_PUSH_DESCRIPTORS;
+            }
+            if (StringUtils::Equals(extension.extensionName, VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME))
+            {
+                m_physical.supportFlags |= PHYSICAL_DEVICE_SUPPORT_FLAG_PERFORMANCE_QUERY;
+            }
         }
 
         return true;
@@ -365,6 +373,11 @@ namespace C3D
                      VK_VERSION_PATCH(props.driverVersion));
             INFO_LOG("API Version    - {}.{}.{}", VK_API_VERSION_MAJOR(props.apiVersion), VK_API_VERSION_MINOR(props.apiVersion),
                      VK_API_VERSION_PATCH(props.apiVersion));
+            INFO_LOG("Features:");
+            INFO_LOG("Mesh Shading      : {}", IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) ? "Supported" : "Not Supported");
+            INFO_LOG("Push Descriptors  : {}", IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PUSH_DESCRIPTORS) ? "Supported" : "Not Supported");
+            INFO_LOG("Performance Query : {}", IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PERFORMANCE_QUERY) ? "Supported" : "Not Supported");
+            INFO_LOG("Limits:");
             INFO_LOG("Max PushConstants size: {} Bytes", props.limits.maxPushConstantsSize);
             INFO_LOG("Max DrawIndirect count: {}", props.limits.maxDrawIndirectCount);
 
