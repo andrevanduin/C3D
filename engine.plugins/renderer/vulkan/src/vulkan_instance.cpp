@@ -149,6 +149,7 @@ namespace C3D
     void VulkanInstance::Destroy(VulkanContext& context)
     {
         vkDestroyInstance(context.instance, context.allocator);
+        volkFinalize();
         INFO_LOG("Vulkan Instance destroyed.");
     }
 }  // namespace C3D

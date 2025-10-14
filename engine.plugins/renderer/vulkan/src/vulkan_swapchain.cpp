@@ -66,6 +66,7 @@ namespace C3D
     bool VulkanSwapchain::Present(WindowRendererBackendState* backendState)
     {
         auto presentSemaphore = backendState->GetPresentSemaphore();
+        auto frameFence       = backendState->GetFence();
 
         // Return the image to the SwapChain for presentation
         VkPresentInfoKHR presentInfo   = { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
@@ -77,6 +78,12 @@ namespace C3D
 
         auto presentQueue = m_context->device.GetDeviceQueue();
         VK_CHECK_SWAPCHAIN(vkQueuePresentKHR(presentQueue, &presentInfo), "vkQueuePresentKHR returned an unexpected result.");
+
+        // Wait for our fences
+        auto device = m_context->device.GetLogical();
+        VK_CHECK(vkWaitForFences(device, 1, &frameFence, VK_TRUE, UINT64_MAX));
+        VK_CHECK(vkResetFences(device, 1, &frameFence));
+
         return true;
     }
 

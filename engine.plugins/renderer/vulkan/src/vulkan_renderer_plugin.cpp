@@ -906,11 +906,7 @@ namespace C3D
 
         auto result = backendState->swapchain.Present(backendState);
 
-        auto device     = m_context.device.GetLogical();
-        auto frameFence = backendState->GetFence();
-
-        VK_CHECK(vkWaitForFences(device, 1, &frameFence, VK_TRUE, UINT64_MAX));
-        VK_CHECK(vkResetFences(device, 1, &frameFence));
+        auto device = m_context.device.GetLogical();
 
         u64 timestampResults[12] = {};
         VK_CHECK(vkGetQueryPoolResults(device, m_queryPoolTimestamps, 0, ARRAY_SIZE(timestampResults), sizeof(timestampResults), timestampResults,

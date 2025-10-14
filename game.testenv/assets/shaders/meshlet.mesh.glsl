@@ -12,7 +12,7 @@
 #define CULL 1
 
 layout (local_size_x = MESH_WGSIZE, local_size_y = 1, local_size_z = 1) in;
-layout (triangles, max_vertices = MAX_VERTICES, max_primitives = 64) out;
+layout (triangles, max_vertices = MESHLET_MAX_VERTICES, max_primitives = MESHLET_MAX_TRIANGLES) out;
 
 layout (push_constant) uniform block
 {
@@ -59,7 +59,7 @@ uint pcg_hash(uint a)
 #endif
 
 #if CULL
-shared vec3 vertexClip[MAX_VERTICES];
+shared vec3 vertexClip[MESHLET_MAX_VERTICES];
 #endif
 
 void main()
@@ -84,9 +84,8 @@ void main()
 
     vec2 screen = vec2(renderData.screenWidth, renderData.screenHeight);
 
-    if (ti < vertexCount)
+    for (uint i = ti; i < vertexCount; )
     {
-        uint i = ti;
         uint vi = meshletData[vertexOffset + i] + meshDraw.vertexOffset;
         
         Vertex v = vertices[vi];
@@ -107,15 +106,20 @@ void main()
     #if DEBUG
         color[i] = vec4(meshletColor, 1.0);
     #endif
+
+    #if MESH_MAX_VERTICES <= MESH_WGSIZE
+        break;
+    #else
+        i += MESH_WGSIZE;
+    #endif
     }
 
 #if CULL
     barrier();
 #endif
 
-    if (ti < triangleCount)
+    for (uint i = ti; i < triangleCount; )
     {
-        uint i = ti;
         uint offset = indexOffset * 4 + i * 3;
         uint a = uint(meshletData8[offset + 0]), b = uint(meshletData8[offset + 1]), c = uint(meshletData8[offset + 2]);
 
@@ -144,6 +148,12 @@ void main()
         culled = culled && (vertexClip[a].z > 0 && vertexClip[b].z > 0 && vertexClip[c].z > 0);
 
         gl_MeshPrimitivesEXT[i].gl_CullPrimitiveEXT = culled;
+    #endif
+
+    #if MESHLET_MAX_TRIANGLES <= MESH_WGSIZE
+        break;
+    #else
+        i += MESH_WGSIZE;
     #endif
     }
 }
