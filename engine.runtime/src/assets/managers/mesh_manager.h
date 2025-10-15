@@ -85,12 +85,12 @@ namespace C3D
     public:
         MeshManager();
 
-        bool Read(const String& name, MeshAsset& resource);
+        bool Read(const String& name, MeshAsset& asset);
 
-        static void Cleanup(MeshAsset& resource);
+        static void Cleanup(MeshAsset& asset);
 
     private:
-        bool ImportObjFile(MeshAsset& resource);
+        bool ImportObjFile(MeshAsset& asset);
 
         void ObjParseLine(const char* line);
 
