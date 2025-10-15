@@ -124,6 +124,7 @@ namespace C3D
             DynamicArray<u32> lodIndices = asset.indices;
 
             f32 lodError         = 0.f;
+            f32 lodScale         = meshopt_simplifyScale(&asset.vertices[0].pos.x, vertexCount, sizeof(Vertex));
             f32 normalWeights[3] = { 1.f, 1.f, 1.f };
 
             while (mesh.lodCount < ARRAY_SIZE(mesh.lods))
@@ -132,7 +133,7 @@ namespace C3D
 
                 lod.indexOffset = static_cast<u32>(m_geometry.indices.Size());
                 lod.indexCount  = static_cast<u32>(lodIndices.Size());
-                lod.error       = lodError;
+                lod.error       = lodError * lodScale;
 
                 m_geometry.indices.Insert(m_geometry.indices.end(), lodIndices.begin(), lodIndices.end());
 

@@ -109,36 +109,21 @@ void TestEnv::OnUpdate(C3D::FrameData& frameData)
         context.data.u32[0] = C3D::KeyP;
         Event.Fire(C3D::EventCodeDebug0, nullptr, context);
     }
+    if (Input.IsKeyPressed(C3D::KeyT))
+    {
+        C3D::EventContext context;
+        context.data.u32[0] = C3D::KeyT;
+        Event.Fire(C3D::EventCodeDebug0, nullptr, context);
+    }
 
-    if (Input.IsKeyPressed(C3D::Key0))
+    for (u32 i = 0; i < 9; i++)
     {
-        C3D::EventContext context;
-        context.data.u32[0] = 0;
-        Event.Fire(C3D::EventCodeDebug1, nullptr, context);
-    }
-    if (Input.IsKeyPressed(C3D::Key1))
-    {
-        C3D::EventContext context;
-        context.data.u32[0] = 1;
-        Event.Fire(C3D::EventCodeDebug1, nullptr, context);
-    }
-    if (Input.IsKeyPressed(C3D::Key2))
-    {
-        C3D::EventContext context;
-        context.data.u32[0] = 2;
-        Event.Fire(C3D::EventCodeDebug1, nullptr, context);
-    }
-    if (Input.IsKeyPressed(C3D::Key3))
-    {
-        C3D::EventContext context;
-        context.data.u32[0] = 3;
-        Event.Fire(C3D::EventCodeDebug1, nullptr, context);
-    }
-    if (Input.IsKeyPressed(C3D::Key4))
-    {
-        C3D::EventContext context;
-        context.data.u32[0] = 4;
-        Event.Fire(C3D::EventCodeDebug1, nullptr, context);
+        if (Input.IsKeyPressed(C3D::Key0 + i))
+        {
+            C3D::EventContext context;
+            context.data.u32[0] = i;
+            Event.Fire(C3D::EventCodeDebug1, nullptr, context);
+        }
     }
 }
 

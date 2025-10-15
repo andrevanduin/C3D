@@ -57,16 +57,4 @@ namespace C3D
         /** @brief A pointer to the renderer backend state. */
         WindowRendererBackendState* backendState = nullptr;
     };
-
-    /** @brief The RenderData structure that is uploaded to the GPU once per frame.  */
-    struct alignas(16) RenderData
-    {
-        mat4 projection;  // Note: redundant as it's fully expressible by p00/p11/zNear
-
-        f32 screenWidth, screenHeight, zNear, zFar;
-        f32 frustum[4];  // Data for left/right/top/bottom planes
-
-        f32 pyramidWidth, pyramidHeight;  // Depth pyramid size in texels
-        i32 clusterOcclusionCullingEnabled = 0;
-    };
 }  // namespace C3D

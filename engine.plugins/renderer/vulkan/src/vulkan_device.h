@@ -103,10 +103,10 @@ namespace C3D
 
     private:
         /** @brief Checks that the device supports all requirements.*/
-        bool DeviceSupportsMandatoryRequirements(VkPhysicalDevice device, const DynamicArray<const char*>& requiredExtensions);
+        bool DeviceSupportsMandatoryRequirements(VkPhysicalDevice device, DynamicArray<const char*>& requiredExtensions);
 
         /** @brief Selects the ideal physical GPU present on the system. */
-        bool SelectPhyiscalDevice(const DynamicArray<const char*>& requiredExtensions);
+        bool SelectPhyiscalDevice(DynamicArray<const char*>& requiredExtensions);
 
         /** @brief Finds the index of the graphics queue family. */
         u32 SelectGraphicsFamilyIndex(VkPhysicalDevice handle);

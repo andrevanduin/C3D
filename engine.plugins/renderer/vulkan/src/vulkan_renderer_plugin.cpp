@@ -118,8 +118,8 @@ namespace C3D
             return false;
         }
 
-        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", TASK_WGLIMIT * sizeof(MeshTaskCommand),
+                                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create draw command buffer.");
             return false;
@@ -155,6 +155,21 @@ namespace C3D
                 ERROR_LOG("Failed to create mesh buffer.");
                 return false;
             }
+
+            if (!m_clusterIndexBuffer.Create(&m_context, "CLUSTER_INDEX_BUFFER", CLUSTER_LIMIT * sizeof(u32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+            {
+                ERROR_LOG("Failed to create cluster index buffer.");
+                return false;
+            }
+
+            if (!m_clusterCountBuffer.Create(&m_context, "CLUSTER_COUNT_BUFFER", 16,
+                                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+            {
+                ERROR_LOG("Failed to create cluster count buffer.");
+                return false;
+            }
         }
 
         Event.Register(EventCodeDebug0, [this](const u16 code, void* sender, const EventContext& context) {
@@ -184,6 +199,9 @@ namespace C3D
                     break;
                 case C3D::KeyP:
                     m_debugPyramid ^= true;
+                    break;
+                case C3D::KeyT:
+                    m_taskShadingEnabled ^= true;
                     break;
             }
 
@@ -229,6 +247,8 @@ namespace C3D
             m_meshletBuffer.Destroy();
             m_meshletDataBuffer.Destroy();
             m_meshletVisibilityBuffer.Destroy();
+            m_clusterIndexBuffer.Destroy();
+            m_clusterCountBuffer.Destroy();
         }
 
         INFO_LOG("Destroying Vulkan Shaders.");
@@ -238,9 +258,14 @@ namespace C3D
 
         m_drawCullShader.Destroy();
         m_taskCullShader.Destroy();
+        m_clusterCullShader.Destroy();
+
         m_drawCullLateShader.Destroy();
         m_taskCullLateShader.Destroy();
+        m_clusterCullLateShader.Destroy();
+
         m_cullShaderModule.Destroy();
+        m_clusterCullShaderModule.Destroy();
 
         m_depthReduceShader.Destroy();
         m_depthReduceShaderModule.Destroy();
@@ -248,10 +273,14 @@ namespace C3D
         m_taskSubmitShader.Destroy();
         m_taskSubmitShaderModule.Destroy();
 
+        m_clusterSubmitShader.Destroy();
+        m_clusterSubmitShaderModule.Destroy();
+
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
             m_meshletShader.Destroy();
             m_meshletLateShader.Destroy();
+            m_clusterMeshletShader.Destroy();
 
             m_meshletShaderModule.Destroy();
             m_meshletTaskShaderModule.Destroy();
@@ -287,13 +316,19 @@ namespace C3D
     {
         if (!m_cullShaderModule.Create(&m_context, "draw_cull.comp"))
         {
-            ERROR_LOG("Failed to create drawcull ShaderModule");
+            ERROR_LOG("Failed to create draw_cull.comp ShaderModule");
+            return false;
+        }
+
+        if (!m_clusterCullShaderModule.Create(&m_context, "cluster_cull.comp"))
+        {
+            ERROR_LOG("Failed to create cluster_cull.comp ShaderModule");
             return false;
         }
 
         if (!m_depthReduceShaderModule.Create(&m_context, "depth_reduce.comp"))
         {
-            ERROR_LOG("Failed to create depth_reduce ShaderModule");
+            ERROR_LOG("Failed to create depth_reduce.comp ShaderModule");
             return false;
         }
 
@@ -311,7 +346,13 @@ namespace C3D
 
         if (!m_taskSubmitShaderModule.Create(&m_context, "task_submit.comp"))
         {
-            ERROR_LOG("Failed to create task_submit ShaderModule.");
+            ERROR_LOG("Failed to create task_submit.comp ShaderModule.");
+            return false;
+        }
+
+        if (!m_clusterSubmitShaderModule.Create(&m_context, "cluster_submit.comp"))
+        {
+            ERROR_LOG("Failed to create cluster_submit.comp ShaderModule.");
             return false;
         }
 
@@ -319,7 +360,7 @@ namespace C3D
         createInfo.context           = &m_context;
         createInfo.name              = "DRAW_CULL_SHADER";
         createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_COMPUTE;
-        createInfo.pushConstantsSize = sizeof(DrawCullData);
+        createInfo.pushConstantsSize = sizeof(CullData);
         createInfo.cache             = VK_NULL_HANDLE;
         createInfo.modules           = { &m_cullShaderModule };
         createInfo.constants         = { /* late = */ false, /* task = */ false };
@@ -330,30 +371,58 @@ namespace C3D
             return false;
         }
 
-        createInfo.name      = "TASK_CULL_SHADER";
-        createInfo.constants = { /* late = */ false, /* task = */ true };
+        createInfo.name              = "TASK_CULL_SHADER";
+        createInfo.pushConstantsSize = sizeof(CullData);
+        createInfo.modules           = { &m_cullShaderModule };
+        createInfo.constants         = { /* late = */ false, /* task = */ true };
 
         if (!m_taskCullShader.Create(createInfo))
         {
-            ERROR_LOG("Failed to create DrawCull shader.");
+            ERROR_LOG("Failed to create TaskCull shader.");
             return false;
         }
 
-        createInfo.name      = "DRAW_CULL_LATE_SHADER";
-        createInfo.constants = { /* late = */ true, /* task = */ false };
+        createInfo.name              = "CLUSTER_CULL_SHADER";
+        createInfo.pushConstantsSize = sizeof(CullData);
+        createInfo.modules           = { &m_clusterCullShaderModule };
+        createInfo.constants         = { /* late = */ false };
+
+        if (!m_clusterCullShader.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create ClusterCull shader.");
+            return false;
+        }
+
+        createInfo.name              = "DRAW_CULL_LATE_SHADER";
+        createInfo.pushConstantsSize = sizeof(CullData);
+        createInfo.modules           = { &m_cullShaderModule };
+        createInfo.constants         = { /* late = */ true, /* task = */ false };
 
         if (!m_drawCullLateShader.Create(createInfo))
         {
-            ERROR_LOG("Failed to create DrawCull Late shader.");
+            ERROR_LOG("Failed to create DrawCullLate shader.");
             return false;
         }
 
-        createInfo.name      = "TASK_CULL_LATE_SHADER";
-        createInfo.constants = { /* late = */ true, /* task = */ true };
+        createInfo.name              = "TASK_CULL_LATE_SHADER";
+        createInfo.pushConstantsSize = sizeof(CullData);
+        createInfo.modules           = { &m_cullShaderModule };
+        createInfo.constants         = { /* late = */ true, /* task = */ true };
 
         if (!m_taskCullLateShader.Create(createInfo))
         {
-            ERROR_LOG("Failed to create DrawCull Late shader.");
+            ERROR_LOG("Failed to create TaskCullLate shader.");
+            return false;
+        }
+
+        createInfo.name              = "CLUSTER_CULL_LATE_SHADER";
+        createInfo.pushConstantsSize = sizeof(CullData);
+        createInfo.modules           = { &m_clusterCullShaderModule };
+        createInfo.constants         = { /* late = */ true };
+
+        if (!m_clusterCullLateShader.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create ClusterCullLate shader.");
             return false;
         }
 
@@ -374,13 +443,22 @@ namespace C3D
 
         if (!m_taskSubmitShader.Create(createInfo))
         {
-            ERROR_LOG("Failed to create Task Submits shader.");
+            ERROR_LOG("Failed to create Task Submit shader.");
+            return false;
+        }
+
+        createInfo.name    = "CLUSTER_SUBMIT_SHADER";
+        createInfo.modules = { &m_clusterSubmitShaderModule };
+
+        if (!m_clusterSubmitShader.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create Cluster Submit shader.");
             return false;
         }
 
         createInfo.name              = "MESH_SHADER";
         createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        createInfo.pushConstantsSize = sizeof(RenderData);
+        createInfo.pushConstantsSize = sizeof(Globals);
         createInfo.modules           = { &m_meshShaderModule, &m_fragmentShaderModule };
 
         if (!m_meshShader.Create(createInfo))
@@ -404,9 +482,10 @@ namespace C3D
             }
 
             // For the meshlet shader only the name and and modules change
-            createInfo.name      = "MESHLET_SHADER";
-            createInfo.constants = { /* late = */ false };
-            createInfo.modules   = { &m_meshletTaskShaderModule, &m_meshletShaderModule, &m_fragmentShaderModule };
+            createInfo.name              = "MESHLET_SHADER";
+            createInfo.pushConstantsSize = sizeof(Globals);
+            createInfo.constants         = { /* late = */ false, /* task = */ true };
+            createInfo.modules           = { &m_meshletTaskShaderModule, &m_meshletShaderModule, &m_fragmentShaderModule };
 
             if (!m_meshletShader.Create(createInfo))
             {
@@ -414,12 +493,25 @@ namespace C3D
                 return false;
             }
 
-            createInfo.name      = "MESHLET_LATE_SHADER";
-            createInfo.constants = { /* late = */ true };
+            createInfo.name              = "MESHLET_LATE_SHADER";
+            createInfo.pushConstantsSize = sizeof(Globals);
+            createInfo.constants         = { /* late = */ true, /* task = */ true };
+            createInfo.modules           = { &m_meshletTaskShaderModule, &m_meshletShaderModule, &m_fragmentShaderModule };
 
             if (!m_meshletLateShader.Create(createInfo))
             {
                 ERROR_LOG("Failed to create MeshletLate shader.");
+                return false;
+            }
+
+            createInfo.name              = "CLUSTER_MESHLET_SHADER";
+            createInfo.pushConstantsSize = sizeof(Globals);
+            createInfo.constants         = { /* late = */ false, /* task = */ false };
+            createInfo.modules           = { &m_meshletShaderModule, &m_fragmentShaderModule };
+
+            if (!m_clusterMeshletShader.Create(createInfo))
+            {
+                ERROR_LOG("Failed to create ClusterMeshlet shader.");
                 return false;
             }
         }
@@ -469,13 +561,13 @@ namespace C3D
         vkCmdBeginRendering(commandBuffer, &renderInfo);
     }
 
-    void VulkanRendererPlugin::CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const DrawCullData& cullData,
-                                        u32 timestamp, bool late) const
+    void VulkanRendererPlugin::CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const CullData& cullData,
+                                        u32 timestamp, bool taskSubmit, bool late) const
     {
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, timestamp + 0);
 
         u32 rasterizationStage =
-            m_meshShadingEnabled ? VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT : VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+            taskSubmit ? VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT : VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
 
         auto prefillBarrier = m_drawCommandCountBuffer.Barrier(VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
                                                                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -507,11 +599,11 @@ namespace C3D
             };
             shader.PushDescriptorSet(commandBuffer, descriptors);
 
-            shader.PushConstants(commandBuffer, &cullData, sizeof(DrawCullData));
+            shader.PushConstants(commandBuffer, &cullData, sizeof(CullData));
             shader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()), 1, 1);
         }
 
-        if (m_meshShadingEnabled)
+        if (taskSubmit)  // We are doing task shading
         {
             auto syncBarrier = m_drawCommandCountBuffer.Barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
                                                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
@@ -539,8 +631,8 @@ namespace C3D
     }
 
     void VulkanRendererPlugin::RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget,
-                                          const VulkanTexture& depthPyramid, const RenderData& renderData, const Window& window, u32 query, u32 timeStamp,
-                                          bool late) const
+                                          const VulkanTexture& depthPyramid, const Globals& globals, const Window& window, u32 query, u32 timeStamp,
+                                          bool taskSubmit, bool clusterSubmit, bool late) const
     {
         constexpr VkClearColorValue clearColor               = { 30.f / 255.f, 54.f / 255.f, 42.f / 255.f, 1 };
         constexpr VkClearDepthStencilValue clearDepthStencil = { 0.f, 0 };
@@ -550,13 +642,73 @@ namespace C3D
         // Begin quering our pipeline statistics
         vkCmdBeginQuery(commandBuffer, m_queryPoolStatistics, query, 0);
 
+        if (clusterSubmit)  // We are doing cluster submit
+        {
+            auto prefillBarrier = m_clusterCountBuffer.Barrier(VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+                                                               VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+            VkUtils::PipelineBarrier(commandBuffer, 0, 1, &prefillBarrier, 0, nullptr);
+
+            m_clusterCountBuffer.Fill(commandBuffer, 0, 4, 0);
+
+            VkBufferMemoryBarrier2 fillBarriers[] = {
+                m_clusterIndexBuffer.Barrier(VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                             VK_ACCESS_SHADER_WRITE_BIT),
+                m_clusterCountBuffer.Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                             VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
+            };
+            VkUtils::PipelineBarrier(commandBuffer, 0, ARRAY_SIZE(fillBarriers), fillBarriers, 0, nullptr);
+
+            auto& shader = late ? m_clusterCullLateShader : m_clusterCullShader;
+
+            shader.Bind(commandBuffer);
+
+            DescriptorInfo pyramidDesc(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL);
+            DescriptorInfo descriptors[] = {
+                m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletVisibilityBuffer, pyramidDesc, m_clusterIndexBuffer, m_clusterCountBuffer,
+            };
+
+            shader.PushDescriptorSet(commandBuffer, descriptors);
+            shader.PushConstants(commandBuffer, &globals.cullData, sizeof(globals.cullData));
+            shader.DispatchIndirect(commandBuffer, m_drawCommandCountBuffer, 4);
+
+            auto syncBarrier = m_clusterCountBuffer.Barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+                                                            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+
+            VkUtils::PipelineBarrier(commandBuffer, 0, 1, &syncBarrier, 0, nullptr);
+
+            m_clusterSubmitShader.Bind(commandBuffer);
+
+            DescriptorInfo descriptors2[] = { m_clusterCountBuffer, m_clusterIndexBuffer };
+            m_clusterSubmitShader.PushDescriptorSet(commandBuffer, descriptors2);
+            m_clusterSubmitShader.Dispatch(commandBuffer, 1, 1, 1);
+
+            VkBufferMemoryBarrier2 cullBarriers[] = {
+                m_clusterIndexBuffer.Barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT,
+                                             VK_ACCESS_SHADER_READ_BIT),
+                m_clusterCountBuffer.Barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+                                             VK_ACCESS_INDIRECT_COMMAND_READ_BIT),
+            };
+
+            VkUtils::PipelineBarrier(commandBuffer, 0, ARRAY_SIZE(cullBarriers), cullBarriers, 0, nullptr);
+        }
+
         BeginRendering(commandBuffer, colorTarget.GetView(), depthTarget.GetView(), clearColor, clearDepthStencil, window.width, window.height, late);
 
         // First commands are to set the viewport and scissor
         vkCmdSetViewport(commandBuffer, 0, 1, &m_viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &m_scissor);
 
-        if (m_meshShadingEnabled)
+        if (clusterSubmit)
+        {
+            m_clusterMeshletShader.Bind(commandBuffer);
+
+            DescriptorInfo descriptors[] = { m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_clusterIndexBuffer };
+            m_clusterMeshletShader.PushDescriptorSet(commandBuffer, descriptors);
+            m_clusterMeshletShader.PushConstants(commandBuffer, &globals, sizeof(globals));
+
+            vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_clusterCountBuffer.GetHandle(), 4, 1, 0);
+        }
+        else if (taskSubmit)
         {
             auto& shader = late ? m_meshletLateShader : m_meshletShader;
             shader.Bind(commandBuffer);
@@ -566,7 +718,7 @@ namespace C3D
                 m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_meshletVisibilityBuffer, pyramidDesc,
             };
             shader.PushDescriptorSet(commandBuffer, descriptors);
-            shader.PushConstants(commandBuffer, &renderData, sizeof(renderData));
+            shader.PushConstants(commandBuffer, &globals, sizeof(globals));
 
             vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_drawCommandCountBuffer.GetHandle(), 4, 1, 0);
         }
@@ -583,7 +735,7 @@ namespace C3D
 
             vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
 
-            m_meshShader.PushConstants(commandBuffer, &renderData, sizeof(renderData));
+            m_meshShader.PushConstants(commandBuffer, &globals, sizeof(globals));
             vkCmdDrawIndexedIndirectCount(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect),
                                           m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
         }
@@ -719,15 +871,15 @@ namespace C3D
         vec4 frustumX = NormalizePlane(projectionT[3] + projectionT[0]);  // x + w < 0
         vec4 frustumY = NormalizePlane(projectionT[3] + projectionT[1]);  // y + w < 0
 
-        DrawCullData cullData = {};
-        cullData.p00          = projection[0][0];
-        cullData.p11          = projection[1][1];
-        cullData.zNear        = zNear;
-        cullData.zFar         = m_drawDistance;
-        cullData.frustum[0]   = frustumX.x;
-        cullData.frustum[1]   = frustumX.z;
-        cullData.frustum[2]   = frustumY.y;
-        cullData.frustum[3]   = frustumY.z;
+        CullData cullData   = {};
+        cullData.p00        = projection[0][0];
+        cullData.p11        = projection[1][1];
+        cullData.zNear      = zNear;
+        cullData.zFar       = m_drawDistance;
+        cullData.frustum[0] = frustumX.x;
+        cullData.frustum[1] = frustumX.z;
+        cullData.frustum[2] = frustumY.y;
+        cullData.frustum[3] = frustumY.z;
 
         cullData.drawCount = m_drawCount;
 
@@ -741,19 +893,11 @@ namespace C3D
         cullData.pyramidWidth  = depthPyramidWidth;
         cullData.pyramidHeight = depthPyramidHeight;
 
-        RenderData renderData                     = {};
-        renderData.projection                     = projection;
-        renderData.screenWidth                    = static_cast<f32>(window.width);
-        renderData.screenHeight                   = static_cast<f32>(window.height);
-        renderData.zNear                          = zNear;
-        renderData.zFar                           = m_drawDistance;
-        renderData.frustum[0]                     = frustumX.x;
-        renderData.frustum[1]                     = frustumX.z;
-        renderData.frustum[2]                     = frustumY.y;
-        renderData.frustum[3]                     = frustumY.z;
-        renderData.pyramidWidth                   = depthPyramidWidth;
-        renderData.pyramidHeight                  = depthPyramidHeight;
-        renderData.clusterOcclusionCullingEnabled = m_occlusionCullingEnabled && m_clusterOcclusionCullingEnabled;
+        Globals globals      = {};
+        globals.projection   = projection;
+        globals.cullData     = cullData;
+        globals.screenWidth  = static_cast<f32>(window.width);
+        globals.screenHeight = static_cast<f32>(window.height);
 
         auto& colorTarget  = backendState->colorTarget;
         auto& depthTarget  = backendState->depthTarget;
@@ -770,20 +914,24 @@ namespace C3D
 
         VkUtils::PipelineBarrier(commandBuffer, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, ARRAY_SIZE(renderBeginBarriers), renderBeginBarriers);
 
+        // TODO: Refactor this to be false when m_taskShadidingEnabled is false
+        auto taskSubmit    = m_meshShadingEnabled;
+        auto clusterSubmit = m_meshShadingEnabled && !m_taskShadingEnabled;
+
         // Early cull: frustum cull & fill objects that *were* visible last frame
-        CullStep(commandBuffer, m_meshShadingEnabled ? m_taskCullShader : m_drawCullShader, depthPyramid, cullData, 2, /* late = */ false);
+        CullStep(commandBuffer, taskSubmit ? m_taskCullShader : m_drawCullShader, depthPyramid, cullData, 2, taskSubmit, /* late = */ false);
 
         // Early render: render objects that were visible last frame
-        RenderStep(commandBuffer, colorTarget, depthTarget, depthPyramid, renderData, window, 0, 8, /* late = */ false);
+        RenderStep(commandBuffer, colorTarget, depthTarget, depthPyramid, globals, window, 0, 8, taskSubmit, clusterSubmit, /* late = */ false);
 
         // Depth pyramid generation
         DepthPyramidStep(commandBuffer, depthTarget, depthPyramid);
 
         // Late cull: frustum + occlusion cull & fill object that were *not* visible last frame
-        CullStep(commandBuffer, m_meshShadingEnabled ? m_taskCullLateShader : m_drawCullLateShader, depthPyramid, cullData, 6, /* late = */ true);
+        CullStep(commandBuffer, taskSubmit ? m_taskCullLateShader : m_drawCullLateShader, depthPyramid, cullData, 6, taskSubmit, /* late = */ true);
 
         // Late render: render objects that are visible this frame but weren't drawn in the early pass
-        RenderStep(commandBuffer, colorTarget, depthTarget, depthPyramid, renderData, window, 1, 10, /* late = */ true);
+        RenderStep(commandBuffer, colorTarget, depthTarget, depthPyramid, globals, window, 1, 10, taskSubmit, clusterSubmit, /* late = */ true);
 
         return true;
     }  // namespace C3D
@@ -938,9 +1086,9 @@ namespace C3D
 
         titleText.Clear();
         titleText.Format(
-            "Mesh Shading: {}; Cull: {}; Occlusion: {}; Cluster Occlusion: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms; render {:.2f}; "
-            "pyramid {:.2f} ms; cull late: {:.2f} ms; render late {:.2f} ms); triangles {:.2f}M; {:.1f}B tri/sec; {:.1f}M draws/sec;",
-            meshShadingEnabledAndSupported ? "ON" : "OFF", m_cullingEnabled ? "ON" : "OFF", m_occlusionCullingEnabled ? "ON" : "OFF",
+            "Mesh Shading: {}; Task Shading: {}; Cull: {}; Occlusion: {}; Cluster Occlusion: {}; LOD: {}; cpu: {:.2f} ms; gpu: {:.2f} ms; (cull {:.2f} ms; "
+            "render {:.2f}; pyramid {:.2f} ms; cull late: {:.2f} ms; render late {:.2f} ms); triangles {:.2f}M; {:.1f}B tri/sec; {:.1f}M draws/sec;",
+            m_meshShadingEnabled ? "ON" : "OFF", m_taskShadingEnabled ? "ON" : "OFF", m_cullingEnabled ? "ON" : "OFF", m_occlusionCullingEnabled ? "ON" : "OFF",
             m_clusterOcclusionCullingEnabled ? "ON" : "OFF", m_lodEnabled ? "ON" : "OFF", m_frameCpuAvg, m_frameGpuAvg, cullGpuTime, renderGpuTime,
             pyramidGpuTime, cullLateGpuTime, renderLateGpuTime, triangleCount * 1e-6, trianglesPerSecond * 1e-9, drawsPerSecond * 1e-6);
 

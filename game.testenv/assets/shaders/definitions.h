@@ -2,7 +2,12 @@
 #define MESH_WGSIZE 64
 #define MESHLET_MAX_VERTICES 64
 #define MESHLET_MAX_TRIANGLES 96
+
+/** @brief Maximum number of total task shader workgroups; 4M workgroups ~= 256M meshlets ~= 16B triangles if TASK_WGSIZE=64 and MESH_MAX_TRIANGLES=64 */
 #define TASK_WGLIMIT (1 << 22)
+
+/** @brief Maximum number of total visible clusters; 16M meshlets ~= 64MB buffer with cluster indices */
+#define CLUSTER_LIMIT (1 << 24)
 
 struct Vertex
 {
@@ -24,18 +29,7 @@ struct Meshlet
     uint8_t triangleCount;
 };
 
-struct RenderData
-{
-    mat4 projection;
-
-    float screenWidth, screenHeight, zNear, zFar;
-    float frustum[4];  // Data for left/right/top/bottom planes
-
-    float pyramidWidth, pyramidHeight;
-    int clusterOcclusionCullingEnabled;
-};
-
-struct DrawCullData
+struct CullData
 {
     float p00, p11, zNear, zFar;        // Symmertric projection parameters
     float frustum[4];                   // Data for left/right/top/bottom planes
@@ -49,6 +43,13 @@ struct DrawCullData
     int clusterOcclusionCullingEnabled;
     int meshShadingEnabled;
     int lodEnabled;
+};
+
+struct Globals
+{
+    mat4 projection;
+    CullData cullData;
+    float screenWidth, screenHeight;
 };
 
 struct MeshLod
@@ -107,6 +108,5 @@ struct MeshTaskCommand
 
 struct MeshTaskPayload
 {
-    uint drawId;
-    uint meshletIndices[TASK_WGSIZE];
+    uint clusterIndices[TASK_WGSIZE];
 };

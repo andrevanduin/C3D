@@ -10,6 +10,8 @@ namespace C3D
     constexpr auto MESHLET_MAX_VERTICES  = 64;
     constexpr auto MESHLET_MAX_TRIANGLES = 96;
     constexpr auto MESHLET_CONE_WEIGHT   = 0.5f;
+    constexpr auto TASK_WGLIMIT          = (1 << 22);
+    constexpr auto CLUSTER_LIMIT         = (1 << 24);
 
     /** @brief A collection of vertices and indices that together make up a loaded mesh asset. */
     struct MeshAsset final : IAsset

@@ -8,7 +8,7 @@
 
 layout (push_constant) uniform block
 {
-    RenderData renderData;
+    Globals globals;
 };
 
 layout (binding = 0) readonly buffer DrawCommands
@@ -38,7 +38,7 @@ void main()
     vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
     vec2 texCoord = vec2(v.u, v.v);
 
-    gl_Position = renderData.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
+    gl_Position = globals.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
 
     color = vec4(normal * 0.5 + vec3(0.5), 1.0);
 }

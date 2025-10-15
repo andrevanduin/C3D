@@ -17,8 +17,6 @@ namespace C3D
         DynamicArray<const char*> requiredExtensions = {
             // We always require the swapchain extension
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-            // We always want to use push descriptors
-            VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
         };
 
         // First we select the ideal phyiscal device
@@ -28,6 +26,7 @@ namespace C3D
             return false;
         }
 
+        // Enable mesh shading extension if it's supported
         if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
             requiredExtensions.PushBack(VK_EXT_MESH_SHADER_EXTENSION_NAME);
@@ -237,7 +236,7 @@ namespace C3D
         return VK_QUEUE_FAMILY_IGNORED;
     }
 
-    bool VulkanDevice::DeviceSupportsMandatoryRequirements(VkPhysicalDevice device, const DynamicArray<const char*>& requiredExtensions)
+    bool VulkanDevice::DeviceSupportsMandatoryRequirements(VkPhysicalDevice device, DynamicArray<const char*>& requiredExtensions)
     {
         // Ensure we aren't trying to use a CPU
         if (m_physical.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
@@ -273,6 +272,13 @@ namespace C3D
         {
             INFO_LOG("Device does not support Vulkan 1.3");
             return false;
+        }
+
+        // We only need the push descriptors extension when we are in Vulkan 1.3 or earlier
+        if (m_physical.properties.apiVersion < VK_API_VERSION_1_4)
+        {
+            INFO_LOG("Vulkan version < 1.4 - Enabling push descriptors extension.");
+            requiredExtensions.PushBack(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
         }
 
         // Iterate over all available extensions and check if we support all required ones
@@ -324,7 +330,7 @@ namespace C3D
         return true;
     }
 
-    bool VulkanDevice::SelectPhyiscalDevice(const DynamicArray<const char*>& requiredExtensions)
+    bool VulkanDevice::SelectPhyiscalDevice(DynamicArray<const char*>& requiredExtensions)
     {
         // Get the number of phyiscal devices connected to the computer
         u32 physicalDeviceCount = 0;

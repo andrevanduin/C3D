@@ -50,37 +50,60 @@ namespace C3D
         void BeginRendering(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
                             const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height, bool late) const;
 
-        void CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const DrawCullData& cullData, u32 timestamp,
-                      bool late) const;
+        void CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const CullData& cullData, u32 timestamp,
+                      bool taskSubmit, bool late) const;
         void RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget, const VulkanTexture& depthPyramid,
-                        const RenderData& renderData, const Window& window, u32 query, u32 timeStamp, bool late) const;
+                        const Globals& globals, const Window& window, u32 query, u32 timeStamp, bool taskSubmit, bool clusterSubmit, bool late) const;
         void DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const;
 
-        bool m_meshShadingEnabled             = true;
-        bool m_cullingEnabled                 = true;
-        bool m_occlusionCullingEnabled        = true;
+        /** @brief A boolean indicating if we are using mesh shading. */
+        bool m_meshShadingEnabled = true;
+        /** @brief A boolean indicating if we are using task shaders during mesh shading.
+         * This works well on Nvidia but gives bad performance on AMD */
+        bool m_taskShadingEnabled = false;
+        /** @brief A boolean indicating if we are doing any culling. */
+        bool m_cullingEnabled = true;
+        /** @brief A boolean indicating if we are doing occlusion culling. */
+        bool m_occlusionCullingEnabled = true;
+        /** @brief A boolean indicating ifwe are doing occlusion culling on a cluster (meshlet) level. */
         bool m_clusterOcclusionCullingEnabled = true;
-        bool m_lodEnabled                     = true;
-        bool m_debugPyramid                   = false;
-        u32 m_debugPyramidLevel               = 0;
+        /** @brief A boolean indicating if we are doing LODs for meshes. */
+        bool m_lodEnabled = true;
+        /** @brief A boolean indicating if we are rendering our depth pyramid for debugging. */
+        bool m_debugPyramid = false;
+        /** @brief The (mip) level we are displaying of our depth pyramid. */
+        u32 m_debugPyramidLevel = 0;
 
         VulkanShaderModule m_cullShaderModule;
+        VulkanShaderModule m_clusterCullShaderModule;
+
         VulkanShaderModule m_taskSubmitShaderModule;
+        VulkanShaderModule m_clusterSubmitShaderModule;
+
         VulkanShaderModule m_depthReduceShaderModule;
         VulkanShaderModule m_meshShaderModule;
-        VulkanShaderModule m_meshletShaderModule;
         VulkanShaderModule m_fragmentShaderModule;
+        VulkanShaderModule m_meshletShaderModule;
         VulkanShaderModule m_meshletTaskShaderModule;
+
+        VulkanShader m_depthReduceShader;
 
         VulkanShader m_meshShader;
         VulkanShader m_meshletShader;
         VulkanShader m_meshletLateShader;
-        VulkanShader m_depthReduceShader;
+        VulkanShader m_clusterMeshletShader;
+
         VulkanShader m_drawCullShader;
-        VulkanShader m_taskCullShader;
         VulkanShader m_drawCullLateShader;
+
+        VulkanShader m_taskCullShader;
         VulkanShader m_taskCullLateShader;
+
+        VulkanShader m_clusterCullShader;
+        VulkanShader m_clusterCullLateShader;
+
         VulkanShader m_taskSubmitShader;
+        VulkanShader m_clusterSubmitShader;
 
         VkSampler m_depthSampler;
 
@@ -107,6 +130,8 @@ namespace C3D
         VulkanBuffer m_drawCommandCountBuffer;
         VulkanBuffer m_drawVisibilityBuffer;
         VulkanBuffer m_meshletVisibilityBuffer;
+        VulkanBuffer m_clusterIndexBuffer;
+        VulkanBuffer m_clusterCountBuffer;
 
         VkViewport m_viewport;
         VkRect2D m_scissor;

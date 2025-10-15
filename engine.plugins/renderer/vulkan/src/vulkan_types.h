@@ -81,7 +81,8 @@ namespace C3D
         u32 meshletVisibilityOffset;
     };
 
-    struct alignas(16) DrawCullData
+    /** @brief Data used for culling in the shaders. */
+    struct alignas(16) CullData
     {
         f32 p00, p11, zNear, zFar;        // Symmertric projection parameters
         f32 frustum[4];                   // Data for left/right/top/bottom planes
@@ -95,6 +96,14 @@ namespace C3D
         i32 clusterOcclusionCullingEnabled = 0;
         i32 meshShadingEnabled             = 0;
         i32 lodEnabled                     = 0;
+    };
+
+    /** @brief The Globals structure that is uploaded to the GPU once per frame.  */
+    struct alignas(16) Globals
+    {
+        mat4 projection;
+        CullData cullData;
+        f32 screenWidth, screenHeight;
     };
 
     struct alignas(16) DepthReduceData

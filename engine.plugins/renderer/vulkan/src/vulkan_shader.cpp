@@ -94,9 +94,15 @@ namespace C3D
         vkCmdDispatch(commandBuffer, dispatchX, dispatchY, dispatchZ);
     }
 
+    void VulkanShader::DispatchIndirect(VkCommandBuffer commandBuffer, const VulkanBuffer& buffer, VkDeviceSize offset) const
+    {
+        vkCmdDispatchIndirect(commandBuffer, buffer.GetHandle(), offset);
+    }
+
     void VulkanShader::PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const
     {
-        vkCmdPushDescriptorSetWithTemplateKHR(commandBuffer, m_updateTemplate, m_layout, 0, descriptors);
+        // TODO: In vulkan < 1.4 this will cause us problems
+        vkCmdPushDescriptorSetWithTemplate(commandBuffer, m_updateTemplate, m_layout, 0, descriptors);
     }
 
     void VulkanShader::PushConstants(VkCommandBuffer commandBuffer, const void* data, u64 size) const

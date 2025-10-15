@@ -74,6 +74,7 @@ namespace C3D
 
         void Bind(VkCommandBuffer commandBuffer) const;
         void Dispatch(VkCommandBuffer commandBuffer, u32 countX, u32 countY, u32 countZ) const;
+        void DispatchIndirect(VkCommandBuffer commandBuffer, const VulkanBuffer& buffer, VkDeviceSize offset) const;
 
         void PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const;
         void PushConstants(VkCommandBuffer commandBuffer, const void* data, u64 size) const;

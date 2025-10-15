@@ -11,12 +11,19 @@
 #define DEBUG 0
 #define CULL 1
 
+layout (constant_id = 1) const bool TASK = false;
+
 layout (local_size_x = MESH_WGSIZE, local_size_y = 1, local_size_z = 1) in;
 layout (triangles, max_vertices = MESHLET_MAX_VERTICES, max_primitives = MESHLET_MAX_TRIANGLES) out;
 
 layout (push_constant) uniform block
 {
-    RenderData renderData;
+    Globals globals;
+};
+
+layout (binding = 0) readonly buffer TaskCommands
+{
+    MeshTaskCommand taskCommands[];
 };
 
 layout (binding = 1) readonly buffer Draws 
@@ -31,13 +38,13 @@ layout (binding = 2) readonly buffer Meshlets
 
 layout(binding = 3) readonly buffer MeshletData
 {
-	uint meshletData[];
+    uint meshletData[];
 };
 
 // Same binding as before but now interpret it as u8 data
 layout(binding = 3) readonly buffer MeshletData8
 {
-	uint8_t meshletData8[];
+    uint8_t meshletData8[];
 };
 
 layout (binding = 4) readonly buffer Vertices 
@@ -45,6 +52,12 @@ layout (binding = 4) readonly buffer Vertices
     Vertex vertices[];
 };
 
+layout (binding = 5) readonly buffer ClusterIndices
+{
+    uint clusterIndices[];
+};
+
+// Only usable with task shader (TASK=true)
 taskPayloadSharedEXT MeshTaskPayload payload;
 
 layout (location = 0) out vec4 color[];
@@ -65,9 +78,20 @@ shared vec3 vertexClip[MESHLET_MAX_VERTICES];
 void main()
 {
     uint ti = gl_LocalInvocationIndex;
-    uint mi = payload.meshletIndices[gl_WorkGroupID.x];
     
-    MeshDraw meshDraw = draws[payload.drawId];
+    // We convert 2D index to 1D index using a fixed * 256 factor, see cluster_submit.comp.glsl
+    uint ci = TASK ? payload.clusterIndices[gl_WorkGroupID.x] : clusterIndices[gl_WorkGroupID.x * 256 + gl_WorkGroupID.y];
+
+    if (ci == ~0)
+    {
+        SetMeshOutputsEXT(0, 0);
+        return;
+    }
+
+    MeshTaskCommand	command = taskCommands[ci & 0xffffff];
+    uint mi = command.taskOffset + (ci >> 24);
+
+    MeshDraw meshDraw = draws[command.drawId];
 
     uint vertexCount = meshlets[mi].vertexCount;
     uint triangleCount = meshlets[mi].triangleCount;
@@ -82,7 +106,7 @@ void main()
     vec3 meshletColor = vec3(meshletHash & 255, (meshletHash >> 8) & 255, (meshletHash >> 16) & 225) / 255;
 #endif
 
-    vec2 screen = vec2(renderData.screenWidth, renderData.screenHeight);
+    vec2 screen = vec2(globals.screenWidth, globals.screenHeight);
 
     for (uint i = ti; i < vertexCount; )
     {
@@ -94,7 +118,7 @@ void main()
         vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
         vec2 texCoord = vec2(v.u, v.v);
 
-        vec4 clip = renderData.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
+        vec4 clip = globals.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
         gl_MeshVerticesEXT[i].gl_Position = clip;
         
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
