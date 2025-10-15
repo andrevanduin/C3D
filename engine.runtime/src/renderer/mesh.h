@@ -9,7 +9,7 @@ namespace C3D
 {
     constexpr auto MESHLET_MAX_VERTICES  = 64;
     constexpr auto MESHLET_MAX_TRIANGLES = 96;
-    constexpr auto MESHLET_CONE_WEIGHT   = 0.5f;
+    constexpr auto MESHLET_CONE_WEIGHT   = 0.25f;
     constexpr auto TASK_WGLIMIT          = (1 << 22);
     constexpr auto CLUSTER_LIMIT         = (1 << 24);
 

@@ -52,6 +52,7 @@ namespace C3D
         switch (c)
         {
             case ' ':
+            case '\t':
                 // Switch to parsing whitespace
                 m_tokenizeMode = CSONTokenizeMode::Whitespace;
                 outToken       = CSONToken(CSONTokenType::Whitespace, index, line);
@@ -196,8 +197,19 @@ namespace C3D
                     }
                     else if (c == '.')
                     {
-                        // We have found a dot, which means we are dealing with a double here
+                        // We have found a dot, which means we are dealing with a double/float here
                         token.type = CSONTokenType::Float;
+                        token.end++;
+                    }
+                    else if (c == 'e')
+                    {
+                        // We have found an e in the number, which means we are dealing with scientific notation
+                        token.type = CSONTokenType::Scientific;
+                        token.end++;
+                    }
+                    else if ((c == '-' || c == '+') && token.type == CSONTokenType::Scientific)
+                    {
+                        // Scientific notation uses + or -.
                         token.end++;
                     }
                     else
@@ -266,8 +278,17 @@ namespace C3D
             {
                 // If we do we continue parsing for the parent
                 m_pCurrentObject = m_pCurrentObject->parent;
-                // We are expecting a comma
-                m_parseMode = CSONParseMode::CommaOrEndOfObject;
+
+                if (m_pCurrentObject->type == CSONObjectType::Array)
+                {
+                    // We are expecting a comma or the end of this array
+                    m_parseMode = CSONParseMode::ArraySeparatorOrEnd;
+                }
+                else
+                {
+                    // We are expecting a comma or the end of this object
+                    m_parseMode = CSONParseMode::CommaOrEndOfObject;
+                }
             }
             else
             {
@@ -305,6 +326,7 @@ namespace C3D
                 return true;
             }
             case CSONTokenType::Float:
+            case CSONTokenType::Scientific:
             {
                 // Set the value to the last property (which we named in the ParseKey stage)
                 m_pCurrentObject->properties.Last().value = m_pInput->SubStr(token.start, token.end + 1).ToF64();
@@ -441,6 +463,7 @@ namespace C3D
                 return true;
             }
             case CSONTokenType::Float:
+            case CSONTokenType::Scientific:
             {
                 auto value = m_pInput->SubStr(token.start, token.end + 1).ToF64();
                 m_pCurrentObject->properties.EmplaceBack(value);
@@ -504,6 +527,7 @@ namespace C3D
                 return true;
             }
             case CSONTokenType::Float:
+            case CSONTokenType::Scientific:
             {
                 // Start the string 1 token earlier to account for the minus sign
                 auto value = m_pInput->SubStr(token.start - 1, token.end + 1).ToF64();

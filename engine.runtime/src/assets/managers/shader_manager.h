@@ -24,8 +24,8 @@ namespace C3D
     public:
         ShaderManager();
 
-        bool Read(const String& name, ShaderAsset& resource);
-        static void Cleanup(ShaderAsset& resource);
+        bool Read(const String& name, ShaderAsset& asset);
+        static void Cleanup(ShaderAsset& asset);
 
     private:
         bool LoadShaderSource(const String& path, const String& name, ShaderAsset& import);

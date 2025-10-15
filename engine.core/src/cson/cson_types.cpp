@@ -38,7 +38,7 @@ namespace C3D
     bool CSONObject::GetPropertyValueByName(const String& propertyName, u16& value) const
     {
         CSONProperty prop;
-        if (!GetPropertyByName(propertyName, prop))
+        if (!GetPropertyByName(propertyName, prop) || !prop.HoldsInteger())
         {
             return false;
         }
@@ -49,7 +49,7 @@ namespace C3D
     bool CSONObject::GetPropertyValueByName(const String& propertyName, u32& value) const
     {
         CSONProperty prop;
-        if (!GetPropertyByName(propertyName, prop))
+        if (!GetPropertyByName(propertyName, prop) || !prop.HoldsInteger())
         {
             return false;
         }
@@ -60,7 +60,7 @@ namespace C3D
     bool CSONObject::GetPropertyValueByName(const String& propertyName, u64& value) const
     {
         CSONProperty prop;
-        if (!GetPropertyByName(propertyName, prop))
+        if (!GetPropertyByName(propertyName, prop) || !prop.HoldsInteger())
         {
             return false;
         }
@@ -71,7 +71,7 @@ namespace C3D
     bool CSONObject::GetPropertyValueByName(const String& propertyName, i32& value) const
     {
         CSONProperty prop;
-        if (!GetPropertyByName(propertyName, prop))
+        if (!GetPropertyByName(propertyName, prop) || !prop.HoldsInteger())
         {
             return false;
         }
@@ -82,7 +82,7 @@ namespace C3D
     bool CSONObject::GetPropertyValueByName(const String& propertyName, i64& value) const
     {
         CSONProperty prop;
-        if (!GetPropertyByName(propertyName, prop))
+        if (!GetPropertyByName(propertyName, prop) || !prop.HoldsInteger())
         {
             return false;
         }
@@ -97,8 +97,17 @@ namespace C3D
         {
             return false;
         }
-        value = prop.GetF32();
-        return true;
+        if (prop.HoldsInteger())
+        {
+            value = static_cast<f32>(prop.GetI64());
+            return true;
+        }
+        if (prop.HoldsFloat())
+        {
+            value = static_cast<f32>(prop.GetF64());
+            return true;
+        }
+        return false;
     }
 
     bool CSONObject::GetPropertyValueByName(const String& propertyName, f64& value) const
@@ -108,50 +117,50 @@ namespace C3D
         {
             return false;
         }
-        value = prop.GetF64();
-        return true;
+        if (prop.HoldsInteger())
+        {
+            value = static_cast<f64>(prop.GetI64());
+            return true;
+        }
+        if (prop.HoldsFloat())
+        {
+            value = prop.GetF64();
+            return true;
+        }
+        return false;
     }
 
     bool CSONObject::GetPropertyValueByName(const String& propertyName, String& value) const
     {
-        for (auto& p : properties)
+        CSONProperty prop;
+        if (!GetPropertyByName(propertyName, prop) || !prop.HoldsString())
         {
-            if (p.name == propertyName)
-            {
-                value = p.GetString();
-                return true;
-            }
+            return false;
         }
-
-        return false;
+        value = prop.GetString();
+        return true;
     }
 
     bool CSONObject::GetPropertyValueByName(const String& propertyName, DynamicArray<CSONProperty>& value) const
     {
-        for (auto& p : properties)
+        CSONProperty prop;
+        if (!GetPropertyByName(propertyName, prop) || !prop.HoldsArray())
         {
-            if (p.name == propertyName)
-            {
-                value = p.GetArray().properties;
-                return true;
-            }
+            return false;
         }
-
-        return false;
+        value = prop.GetArray().properties;
+        return true;
     }
 
     bool CSONObject::GetPropertyValueByName(const String& propertyName, CSONObject& value) const
     {
-        for (auto& p : properties)
+        CSONProperty prop;
+        if (!GetPropertyByName(propertyName, prop) || !prop.HoldsObject())
         {
-            if (p.name == propertyName)
-            {
-                value = p.GetObject();
-                return true;
-            }
+            return false;
         }
-
-        return false;
+        value = prop.GetObject();
+        return true;
     }
 
     CSONProperty::CSONProperty(u32 num) : value(static_cast<i64>(num)) {}
@@ -198,105 +207,29 @@ namespace C3D
         return false;
     }
 
-    u16 CSONProperty::GetU16() const
-    {
-        if (std::holds_alternative<i64>(value))
-        {
-            return static_cast<u16>(std::get<i64>(value));
-        }
-        ERROR_LOG("Property: '{}' does not hold a i64. Returning 0.", name);
-        return 0;
-    }
+    u16 CSONProperty::GetU16() const { return static_cast<u16>(std::get<i64>(value)); }
+    u32 CSONProperty::GetU32() const { return static_cast<u32>(std::get<i64>(value)); }
+    u64 CSONProperty::GetU64() const { return static_cast<u64>(std::get<i64>(value)); }
 
-    u32 CSONProperty::GetU32() const
-    {
-        if (std::holds_alternative<i64>(value))
-        {
-            return static_cast<u32>(std::get<i64>(value));
-        }
-        ERROR_LOG("Property: '{}' does not hold a i64. Returning 0.", name);
-        return 0;
-    }
+    i16 CSONProperty::GetI16() const { return static_cast<i16>(std::get<i64>(value)); }
+    i32 CSONProperty::GetI32() const { return static_cast<i32>(std::get<i64>(value)); }
+    i64 CSONProperty::GetI64() const { return std::get<i64>(value); }
 
-    u64 CSONProperty::GetU64() const
-    {
-        if (std::holds_alternative<i64>(value))
-        {
-            return static_cast<u64>(std::get<i64>(value));
-        }
-        ERROR_LOG("Property: '{}' does not hold a i64. Returning 0.", name);
-        return 0;
-    }
+    bool CSONProperty::HoldsInteger() const { return std::holds_alternative<i64>(value); }
 
-    i32 CSONProperty::GetI32() const
-    {
-        if (std::holds_alternative<i64>(value))
-        {
-            return static_cast<i32>(std::get<i64>(value));
-        }
-        ERROR_LOG("Property: '{}' does not hold a i64. Returning 0.", name);
-        return 0;
-    }
+    f32 CSONProperty::GetF32() const { return static_cast<f32>(std::get<f64>(value)); }
 
-    i64 CSONProperty::GetI64() const
-    {
-        if (std::holds_alternative<i64>(value))
-        {
-            return std::get<i64>(value);
-        }
-        ERROR_LOG("Property: '{}' does not hold a i64. Returning 0.", name);
-        return 0;
-    }
+    f64 CSONProperty::GetF64() const { return std::get<f64>(value); }
+    bool CSONProperty::HoldsFloat() const { return std::holds_alternative<f64>(value); }
 
-    f32 CSONProperty::GetF32() const
-    {
-        if (std::holds_alternative<f64>(value))
-        {
-            return static_cast<f32>(std::get<f64>(value));
-        }
-        ERROR_LOG("Property: '{}' does not hold a f64. Returning 0.0.", name);
-        return 0.0;
-    }
+    const String& CSONProperty::GetString() const { return std::get<String>(value); }
+    bool CSONProperty::HoldsString() const { return std::holds_alternative<String>(value); };
 
-    f64 CSONProperty::GetF64() const
-    {
-        if (std::holds_alternative<f64>(value))
-        {
-            return std::get<f64>(value);
-        }
-        ERROR_LOG("Property: '{}' does not hold a f64. Returning 0.0.", name);
-        return 0.0;
-    }
+    const CSONObject& CSONProperty::GetObject() const { return std::get<CSONObject>(value); }
+    bool CSONProperty::HoldsObject() const { return std::holds_alternative<CSONObject>(value); }
 
-    const String& CSONProperty::GetString() const
-    {
-        if (std::holds_alternative<String>(value))
-        {
-            return std::get<String>(value);
-        }
-        ERROR_LOG("Property: '{}' does not hold a String. Returning empty string.", name);
-        return empty;
-    }
-
-    const CSONObject& CSONProperty::GetObject() const
-    {
-        if (std::holds_alternative<CSONObject>(value))
-        {
-            return std::get<CSONObject>(value);
-        }
-        ERROR_LOG("Property: '{}' does not hold a CSONObject. Returning empty CSONObject.", name);
-        return emptyObject;
-    }
-
-    const CSONArray& CSONProperty::GetArray() const
-    {
-        if (std::holds_alternative<CSONArray>(value))
-        {
-            return std::get<CSONArray>(value);
-        }
-        ERROR_LOG("Property: '{}' does not hold a CSONArray. Returning empty CSONArray.", name);
-        return emptyArray;
-    }
+    const CSONArray& CSONProperty::GetArray() const { return std::get<CSONArray>(value); }
+    bool CSONProperty::HoldsArray() const { return std::holds_alternative<CSONArray>(value); }
 
     vec4 CSONProperty::GetVec4() const
     {
