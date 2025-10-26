@@ -13,6 +13,7 @@ if (WIN32)
 endif()
 
 target_compile_definitions(TestEnvLib PUBLIC C3D_EXPORT)
+target_compile_definitions(TestEnvLib PRIVATE GLM_FORCE_XYZW_ONLY)
 
 target_link_libraries(TestEnvLib PUBLIC C3DEngineRuntime)
 

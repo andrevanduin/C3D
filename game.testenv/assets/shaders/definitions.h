@@ -3,6 +3,12 @@
 #define MESHLET_MAX_VERTICES 64
 #define MESHLET_MAX_TRIANGLES 96
 
+// Should we do meshlet frustum, occlusion and backface culling in task shader?
+#define TASK_CULL 1
+
+// Should we do triangle frustum and backface culling in mesh shader?
+#define MESH_CULL 0
+
 /** @brief Maximum number of total task shader workgroups; 4M workgroups ~= 256M meshlets ~= 16B triangles if TASK_WGSIZE=64 and MESH_MAX_TRIANGLES=64 */
 #define TASK_WGLIMIT (1 << 22)
 
@@ -31,6 +37,8 @@ struct Meshlet
 
 struct CullData
 {
+    mat4 view;
+
     float p00, p11, zNear, zFar;        // Symmertric projection parameters
     float frustum[4];                   // Data for left/right/top/bottom planes
     float lodTarget;                    // lod target error at z=1
@@ -41,7 +49,6 @@ struct CullData
     int cullingEnabled;
     int occlusionCullingEnabled;
     int clusterOcclusionCullingEnabled;
-    int meshShadingEnabled;
     int lodEnabled;
 };
 

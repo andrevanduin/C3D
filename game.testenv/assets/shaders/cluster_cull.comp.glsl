@@ -7,7 +7,7 @@
 
 layout (constant_id = 0) const bool LATE = false;
 
-#define CULL 1
+#define CULL TASK_CULL
 
 layout(local_size_x = TASK_WGSIZE, local_size_y = 1, local_size_z = 1) in;
 
@@ -65,8 +65,13 @@ void main()
 
 #if CULL
     vec3 center = RotateVecByQuat(meshlets[mi].center, meshDraw.orientation) * meshDraw.scale + meshDraw.position;
+    center = (cullData.view * vec4(center, 1)).xyz;
+
     float radius = meshlets[mi].radius * meshDraw.scale;
+
     vec3 coneAxis = RotateVecByQuat(vec3(int(meshlets[mi].coneAxis[0]) / 127.0, int(meshlets[mi].coneAxis[1]) / 127.0, int(meshlets[mi].coneAxis[2]) / 127.0), meshDraw.orientation);
+    coneAxis = mat3(cullData.view) * coneAxis;
+
     float coneCutoff = int(meshlets[mi].coneCutoff) / 127.0;
 
     bool valid = mgi < taskCount;

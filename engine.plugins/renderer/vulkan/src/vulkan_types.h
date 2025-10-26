@@ -84,6 +84,8 @@ namespace C3D
     /** @brief Data used for culling in the shaders. */
     struct alignas(16) CullData
     {
+        mat4 view;
+
         f32 p00, p11, zNear, zFar;        // Symmertric projection parameters
         f32 frustum[4];                   // Data for left/right/top/bottom planes
         f32 lodTarget;                    // Lod target error at z=1

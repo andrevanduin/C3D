@@ -84,7 +84,8 @@ namespace C3D
 
         virtual bool UploadGeometry(const Window& window, const Geometry& geometry) = 0;
 
-        virtual bool GenerateDrawCommands(const Window& window, const Geometry& geometry) = 0;
+        virtual bool GenerateDrawCommands(const Window& window, const Geometry& geometry)                                    = 0;
+        virtual bool UploadDrawCommands(const Window& window, const Geometry& geometry, const DynamicArray<MeshDraw>& draws) = 0;
 
         /**
          * @brief Sets the viewport.
@@ -107,6 +108,8 @@ namespace C3D
          * @param height The height of the scissor
          */
         virtual void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) = 0;
+
+        virtual void SetCamera(const Camera& camera) = 0;
 
         /**
          * @brief Method that returns if the requested feature is supported by the current renderer backend.

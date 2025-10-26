@@ -96,8 +96,6 @@ namespace C3D
             if (m_capacity >= initialCapacity)
             {
                 // Reserve is not needed since our capacity is already as large or larger
-                // Logger::Trace("[DYNAMIC_ARRAY] - Reserve() - Was called with initialCapacity <= currentCapacity.
-                // Doing nothing");
                 return;
             }
 
@@ -126,11 +124,11 @@ namespace C3D
 
         /**
          * @brief Resizes the array to at least the requested size.
-         * There are 3 scenarios:
-         * - requested_size == current_size: Nothing will change
-         * - requested_size > current_size: The array will reallocate memory and default construct elements in all newly created empty slots up to
+         * @note There are 3 scenarios:
+         * @note requested_size == current_size: Nothing will change
+         * @note requested_size > current_size: The array will reallocate memory and default construct elements in all newly created empty slots up to
          * requested_size - 1
-         * - requested_size < current_size: The elements after requested_size will be destroyed
+         * @note requested_size < current_size: The elements after requested_size will be destroyed
          *
          * In all cases after calling this method the size will equal the requested size
          */

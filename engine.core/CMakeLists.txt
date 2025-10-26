@@ -21,7 +21,7 @@ if (UNIX)
     set(OS_SPECIFIC_LIBS xcb X11-xcb "${X11_LIBRARIES}")
 endif()
 
-target_link_libraries(C3DEngineCore PUBLIC fmt::fmt spdlog::spdlog glm::glm OpenAL::OpenAL "${OS_SPECIFIC_LIBS}")
+target_link_libraries(C3DEngineCore PUBLIC fmt::fmt spdlog::spdlog glm::glm "${OS_SPECIFIC_LIBS}")
 
 target_include_directories(C3DEngineCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src" "${spdlog_SOURCE_DIR}/include" "${fmt_SOURCE_DIR}/include" "${glm_SOURCE_DIR}")
 

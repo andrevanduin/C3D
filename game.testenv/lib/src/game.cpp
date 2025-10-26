@@ -2,6 +2,7 @@
 #include "game.h"
 
 #include <assets/managers/mesh_manager.h>
+#include <assets/managers/scene/scene_manager.h>
 #include <config/config_system.h>
 #include <engine.h>
 #include <events/event_system.h>
@@ -32,40 +33,82 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
         return false;
     }
 
-    // Prepare an array for all the mesh assets
-    C3D::DynamicArray<C3D::MeshAsset> meshes(meshNames.Size());
-    // Load/read in all the mesh assets
-    C3D::MeshManager meshManager;
-    for (u32 i = 0; i < meshNames.Size(); ++i)
+    if (!meshNames.Empty())
     {
-        auto& name  = meshNames[i];
-        auto& asset = meshes[i];
-
-        if (!meshManager.Read(name, asset))
+        // Prepare an array for all the mesh assets
+        C3D::DynamicArray<C3D::MeshAsset> meshes(meshNames.Size());
+        // Load/read in all the mesh assets
+        C3D::MeshManager meshManager;
+        for (u32 i = 0; i < meshNames.Size(); ++i)
         {
-            INFO_LOG("Failed to read: '{}' mesh.", name);
+            auto& name  = meshNames[i];
+            auto& asset = meshes[i];
+
+            if (!meshManager.Read(name, asset))
+            {
+                INFO_LOG("Failed to read: '{}' mesh.", name);
+            }
+        }
+
+        auto window = C3D::Engine::GetCurrentWindow();
+
+        // Upload our mesh assets to the renderer
+        if (!Renderer.UploadMeshes(window, meshes))
+        {
+            ERROR_LOG("Failed to upload meshes.");
+            return false;
+        }
+
+        if (!Renderer.GenerateDrawCommands(window))
+        {
+            ERROR_LOG("Failed to generate draw commands.");
+            return false;
+        }
+
+        // Cleanup our assets since we no longer need them
+        for (auto& mesh : meshes)
+        {
+            meshManager.Cleanup(mesh);
         }
     }
-
-    auto window = C3D::Engine::GetCurrentWindow();
-
-    // Upload our mesh assets to the renderer
-    if (!Renderer.UploadMeshes(window, meshes))
+    else
     {
-        ERROR_LOG("Failed to upload meshes.");
-        return false;
-    }
+        C3D::String sceneName;
+        if (!Config.GetProperty("Scene", sceneName))
+        {
+            ERROR_LOG("Failed to read scene name from configuration.");
+            return false;
+        }
 
-    if (!Renderer.GenerateDrawCommands(window))
-    {
-        ERROR_LOG("Failed to generate draw commands.");
-        return false;
-    }
+        // Load the scene
+        C3D::SceneManager sceneManager;
+        C3D::SceneAsset sceneAsset;
+        if (!sceneManager.Read(sceneName, sceneAsset))
+        {
+            ERROR_LOG("Failed to read: '{}' scene.", sceneName);
+            return false;
+        }
 
-    // Cleanup our assets since we no longer need them
-    for (auto& mesh : meshes)
-    {
-        meshManager.Cleanup(mesh);
+        auto window = C3D::Engine::GetCurrentWindow();
+
+        // Upload our mesh assets to the renderer
+        if (!Renderer.UploadMeshes(window, sceneAsset.meshes))
+        {
+            ERROR_LOG("Failed to upload meshes.");
+            return false;
+        }
+
+        if (!Renderer.UploadDrawCommands(window, sceneAsset.draws))
+        {
+            ERROR_LOG("Failed to generate draw commands.");
+            return false;
+        }
+
+        // Finally set out camera
+        Renderer.SetCamera(sceneAsset.camera);
+
+        // Cleanup our scene asset since we are done with it
+        sceneManager.Cleanup(sceneAsset);
     }
 
     return true;

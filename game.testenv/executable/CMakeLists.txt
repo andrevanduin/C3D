@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 add_executable (TestEnv "src/main.cpp")
 
 target_link_libraries(TestEnv PUBLIC C3DEngineRuntime)
+target_compile_definitions(TestEnv PRIVATE GLM_FORCE_XYZW_ONLY GLM_FORCE_QUAT_DATA_XYZW GLM_FORCE_QUAT_CTOR_XYZW)
 
 if (WIN32)
 	target_link_options(TestEnv PUBLIC /MANIFEST:NO)
@@ -32,20 +33,6 @@ add_custom_target(CopyVulkanRenderDLL
 	DEPENDS C3DVulkanRenderer
 )
 
-add_custom_target(CopyOpenALDLL
-	COMMAND ${CMAKE_COMMAND} -E copy 
-	"${OpenAL_BINARY_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}OpenAL32${CMAKE_SHARED_LIBRARY_SUFFIX}"
-	"${CMAKE_BINARY_DIR}/game.testenv/executable/"
-	DEPENDS C3DOpenAL
-)
-
-add_custom_target(CopyOpenALPluginDLL
-	COMMAND ${CMAKE_COMMAND} -E copy 
-	"${CMAKE_BINARY_DIR}/engine.plugins/audio/open_al/${CMAKE_SHARED_LIBRARY_PREFIX}C3DOpenAL${CMAKE_SHARED_LIBRARY_SUFFIX}" 
-	"${CMAKE_BINARY_DIR}/game.testenv/executable/"
-	DEPENDS C3DOpenAL
-)
-
 add_custom_target(CopyGameDLL
 	COMMAND ${CMAKE_COMMAND} -E copy
 	"${CMAKE_BINARY_DIR}/game.testenv/lib/${CMAKE_SHARED_LIBRARY_PREFIX}TestEnvLib${CMAKE_SHARED_LIBRARY_SUFFIX}" 
@@ -53,4 +40,4 @@ add_custom_target(CopyGameDLL
 	DEPENDS TestEnvLib
 )
 
-add_dependencies(TestEnv CopyEngineCoreDLL CopyEngineRuntimeDLL CopyVulkanRenderDLL CopyOpenALDLL CopyOpenALPluginDLL CopyGameDLL)
+add_dependencies(TestEnv CopyEngineCoreDLL CopyEngineRuntimeDLL CopyVulkanRenderDLL CopyGameDLL)

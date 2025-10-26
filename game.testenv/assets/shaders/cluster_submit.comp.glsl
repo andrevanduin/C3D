@@ -30,7 +30,7 @@ void main()
     if (tid == 0)
     {
         groupCountX = 16;
-        groupCountY = min((count + 255) / 256, 65535);;
+        groupCountY = min((count + 255) / 256, 65535);
         groupCountZ = 16;
     }
 

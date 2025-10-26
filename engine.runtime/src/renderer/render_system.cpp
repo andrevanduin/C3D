@@ -7,6 +7,8 @@
 #include "math/c3d_math.h"
 #include "mesh.h"
 #include "renderer_plugin.h"
+#include "time/clock.h"
+#include "time/scoped_timer.h"
 
 namespace C3D
 {
@@ -85,11 +87,15 @@ namespace C3D
 
     bool RenderSystem::UploadMeshes(const Window& window, const DynamicArray<MeshAsset>& meshAssets)
     {
+        ScopedTimer timer("UploadMeshes");
+        Clock centerRadiusClock;
+        Clock meshletGenerationClock;
+
         for (const auto& asset : meshAssets)
         {
             u64 vertexCount = asset.vertices.Size();
 
-            Mesh mesh = {};
+            Mesh& mesh = m_geometry.meshes.EmplaceBack();
 
             mesh.vertexOffset = m_geometry.vertices.Size();
             mesh.vertexCount  = vertexCount;
@@ -104,16 +110,23 @@ namespace C3D
             }
 
             vec3 center = vec3(0);
-            for (const auto& v : asset.vertices)
-            {
-                center += v.pos;
-            }
-            center /= static_cast<f32>(vertexCount);
+            f32 radius  = 0.f;
 
-            f32 radius = 0.f;
-            for (const auto& v : asset.vertices)
             {
-                radius = Max(radius, glm::distance(center, v.pos));
+                centerRadiusClock.Begin();
+
+                for (const auto& v : asset.vertices)
+                {
+                    center += v.pos;
+                }
+                center /= static_cast<f32>(vertexCount);
+
+                for (const auto& v : asset.vertices)
+                {
+                    radius = Max(radius, glm::distance(center, v.pos));
+                }
+
+                centerRadiusClock.End();
             }
 
             mesh.center = center;
@@ -138,21 +151,40 @@ namespace C3D
                 m_geometry.indices.Insert(m_geometry.indices.end(), lodIndices.begin(), lodIndices.end());
 
                 lod.meshletOffset = static_cast<u32>(m_geometry.meshlets.Size());
-                lod.meshletCount  = buildMeshlets ? GenerateMeshlets(lodIndices, asset.vertices) : 0;
+
+                meshletGenerationClock.Begin();
+                lod.meshletCount = buildMeshlets ? GenerateMeshlets(lodIndices, asset.vertices) : 0;
+                meshletGenerationClock.End();
 
                 if (mesh.lodCount < ARRAY_SIZE(mesh.lods))
                 {
-                    u64 nextIndicesSizeTarget = static_cast<u64>(static_cast<f64>(lodIndices.Size() * 0.65));
+                    // NOTE: we're using the same value for all LODs; if this changes, we need to remove/change 95% exit criteria below
+                    constexpr f32 maxError = 1e-1f;
+                    constexpr u32 options  = 0;
+
+                    f32 nextError = 0.f;
+
+                    u64 nextIndicesSizeTarget = (static_cast<u64>(static_cast<f64>(lodIndices.Size()) * 0.65) / 3) * 3;
                     u64 nextIndicesSize       = meshopt_simplifyWithAttributes(lodIndices.GetData(), lodIndices.GetData(), lodIndices.Size(),
                                                                                &asset.vertices[0].pos.x, vertexCount, sizeof(Vertex), &normals[0].x, sizeof(vec3),
-                                                                               normalWeights, 3, nullptr, nextIndicesSizeTarget, 1e-2f, 0, &lodError);
-                    if (nextIndicesSize == lodIndices.Size())
+                                                                               normalWeights, 3, nullptr, nextIndicesSizeTarget, maxError, options, &nextError);
+
+                    if (nextIndicesSize == lodIndices.Size() || nextIndicesSize == 0)
                     {
                         // We have reached our error bound (so we can't simplify further)
                         break;
                     }
 
+                    if (nextIndicesSize >= static_cast<u64>(static_cast<f64>(lodIndices.Size()) * 0.95))
+                    {
+                        // While we could keep this LOD, it's too close to the last one (and it can't go below that due to constant error bound above)
+                        break;
+                    }
+
                     lodIndices.Resize(nextIndicesSize);
+                    // important! Since we start from last LOD, we need to accumulate the error
+                    lodError = std::max(lodError, nextError);
+
                     meshopt_optimizeVertexCache(lodIndices.GetData(), lodIndices.GetData(), lodIndices.Size(), vertexCount);
                 }
             }
@@ -161,14 +193,20 @@ namespace C3D
             {
                 m_geometry.meshlets.EmplaceBack();
             }
-
-            m_geometry.meshes.PushBack(mesh);
         }
+
+        INFO_LOG("Center + radius took: {:2.f}ms", centerRadiusClock.GetTotalElapsedMs());
+        INFO_LOG("Meshlet generation took: {:2.f}ms", meshletGenerationClock.GetTotalElapsedMs());
 
         return m_backendPlugin->UploadGeometry(window, m_geometry);
     }
 
     bool RenderSystem::GenerateDrawCommands(const Window& window) const { return m_backendPlugin->GenerateDrawCommands(window, m_geometry); }
+
+    bool RenderSystem::UploadDrawCommands(const Window& window, const DynamicArray<MeshDraw>& draws) const
+    {
+        return m_backendPlugin->UploadDrawCommands(window, m_geometry, draws);
+    }
 
     bool RenderSystem::Begin(Window& window) const { return m_backendPlugin->Begin(window); }
 
@@ -210,6 +248,8 @@ namespace C3D
     }
 
     void RenderSystem::SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) const { m_backendPlugin->SetScissor(offsetX, offsetY, width, height); }
+
+    void RenderSystem::SetCamera(const Camera& camera) const { m_backendPlugin->SetCamera(camera); }
 
     u32 RenderSystem::GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<Vertex>& vertices)
     {

@@ -134,6 +134,8 @@ namespace C3D
 
     bool VulkanShader::Recreate()
     {
+        m_context->device.WaitIdle();
+
         // Parse the provided Shader Modules
         for (auto shader : m_shaderModules)
         {
@@ -390,7 +392,7 @@ namespace C3D
 
         VkPipelineRasterizationStateCreateInfo rasterizationState = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
         rasterizationState.lineWidth                              = 1.f;
-        rasterizationState.frontFace                              = VK_FRONT_FACE_CLOCKWISE;
+        rasterizationState.frontFace                              = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizationState.cullMode                               = VK_CULL_MODE_BACK_BIT;
         createInfo.pRasterizationState                            = &rasterizationState;
 

@@ -57,4 +57,11 @@ namespace C3D
         /** @brief A pointer to the renderer backend state. */
         WindowRendererBackendState* backendState = nullptr;
     };
+
+    struct Camera
+    {
+        vec3 position;
+        quat orientation;
+        f32 fovY = 0.f;
+    };
 }  // namespace C3D

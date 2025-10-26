@@ -35,6 +35,7 @@ namespace C3D
         StringLiteral,
         Integer,
         Float,
+        Scientific,
         Boolean,
         Comment,
         NewLine,
@@ -91,12 +92,14 @@ namespace C3D
         bool GetPropertyValueByName(const String& propertyName, u32& value) const;
         bool GetPropertyValueByName(const String& propertyName, u64& value) const;
 
+        bool GetPropertyValueByName(const String& propertyName, i16& value) const;
         bool GetPropertyValueByName(const String& propertyName, i32& value) const;
         bool GetPropertyValueByName(const String& propertyName, i64& value) const;
 
         bool GetPropertyValueByName(const String& propertyName, f32& value) const;
         bool GetPropertyValueByName(const String& propertyName, f64& value) const;
 
+        bool GetPropertyValueByName(const String& propertyName, bool& value) const;
         bool GetPropertyValueByName(const String& propertyName, String& value) const;
         bool GetPropertyValueByName(const String& propertyName, DynamicArray<CSONProperty>& value) const;
         bool GetPropertyValueByName(const String& propertyName, CSONObject& value) const;
@@ -154,22 +157,52 @@ namespace C3D
         u32 GetType() const;
         bool IsBasicType() const;
 
+        /** @brief Gets a bool from the CSONProperty. Will throw if no bool is held by this property. */
         bool GetBool() const;
+        /** @brief Checks if this property is holding bool.  */
+        bool HoldsBool() const;
 
+        /** @brief Gets a u16 from the CSONProperty. Will throw if no integer is held by this property. */
         u16 GetU16() const;
+        /** @brief Gets a u32 from the CSONProperty. Will throw if no integer is held by this property. */
         u32 GetU32() const;
+        /** @brief Gets a u64 from the CSONProperty. Will throw if no integer is held by this property. */
         u64 GetU64() const;
-
+        /** @brief Gets a i16 from the CSONProperty. Will throw if no integer is held by this property. */
+        i16 GetI16() const;
+        /** @brief Gets a i32 from the CSONProperty. Will throw if no integer is held by this property. */
         i32 GetI32() const;
+        /** @brief Gets a i64 from the CSONProperty. Will throw if no integer is held by this property. */
         i64 GetI64() const;
 
+        /** @brief Checks if this property is holding an integer value.  */
+        bool HoldsInteger() const;
+
+        /** @brief Gets a f32 from the CSONProperty. Will throw if no float is held by this property. */
         f32 GetF32() const;
+        /** @brief Gets a f64 from the CSONProperty. Will throw if no float is held by this property. */
         f64 GetF64() const;
 
-        const String& GetString() const;
+        /** @brief Checks if this property is holding a floating point value. */
+        bool HoldsFloat() const;
 
+        /** @brief Checks if this property is holding a floating point or integer value. */
+        bool HoldsNumber() const;
+
+        /** @brief Gets a string from the CSONProperty. Will throw if no string is held by this property. */
+        const String& GetString() const;
+        /** @brief Checks if this property is holding a string.  */
+        bool HoldsString() const;
+
+        /** @brief Gets an object from the CSONProperty. Will throw if no object is held by this property. */
         const CSONObject& GetObject() const;
+        /** @brief Checks if this property is holding an object.  */
+        bool HoldsObject() const;
+
+        /** @brief Gets an array from the CSONProperty. Will throw if no array is held by this property. */
         const CSONArray& GetArray() const;
+        /** @brief Checks if this property is holding an array.  */
+        bool HoldsArray() const;
 
         vec4 GetVec4() const;
 
