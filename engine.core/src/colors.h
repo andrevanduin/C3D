@@ -28,7 +28,7 @@ namespace C3D
         RGB() = default;
         RGB(u32 rgb) : r(rgb >> 16 & 0x0FF), g(rgb >> 8 & 0x0FF), b(rgb & 0x0FF) {}
         RGB(f32 r, f32 g, f32 b) : r(r), g(g), b(b) {}
-        RGB(const vec3& vec) : r(static_cast<u32>(vec.r) * 255), g(static_cast<u32>(vec.g) * 255), b(static_cast<u32>(vec.b) * 255) {}
+        RGB(const vec3& vec) : r(static_cast<u32>(vec.x) * 255), g(static_cast<u32>(vec.y) * 255), b(static_cast<u32>(vec.z) * 255) {}
 
         u32 ToU32() const;
         vec3 ToVec3() const;

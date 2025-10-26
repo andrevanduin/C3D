@@ -90,7 +90,7 @@ namespace C3D
             return false;
         }
 
-        if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create vertex buffer.");
@@ -142,14 +142,14 @@ namespace C3D
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
-            if (!m_meshletBuffer.Create(&m_context, "MESHLET", MebiBytes(32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            if (!m_meshletBuffer.Create(&m_context, "MESHLET", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
             {
                 ERROR_LOG("Failed to create mesh buffer.");
                 return false;
             }
 
-            if (!m_meshletDataBuffer.Create(&m_context, "MESHLET_DATA", MebiBytes(32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            if (!m_meshletDataBuffer.Create(&m_context, "MESHLET_DATA", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
             {
                 ERROR_LOG("Failed to create mesh buffer.");
@@ -195,7 +195,8 @@ namespace C3D
                     m_clusterOcclusionCullingEnabled ^= true;
                     break;
                 case C3D::KeyL:
-                    m_lodEnabled ^= true;
+                    m_debugLods ^= true;
+                    m_debugLodStep = 0;
                     break;
                 case C3D::KeyP:
                     m_debugPyramid ^= true;
@@ -208,9 +209,22 @@ namespace C3D
             return true;
         });
         Event.Register(EventCodeDebug1, [this](const u16 code, void* sender, const EventContext& context) {
-            m_debugPyramidLevel = context.data.u32[0];
+            if (m_debugPyramid)
+            {
+                m_debugPyramidLevel = context.data.u32[0];
+            }
+            else if (m_debugLods)
+            {
+                m_debugLodStep = context.data.u32[0];
+            }
+
             return true;
         });
+
+        // Setup a default camera
+        m_camera.position    = vec3(0);
+        m_camera.orientation = quat(1, 0, 0, 0);
+        m_camera.fovY        = glm::radians(70.0f);
 
         INFO_LOG("Initialized successfully.");
         return true;
@@ -839,7 +853,7 @@ namespace C3D
         static bool firstFrame = false;
         if (!firstFrame)
         {
-            m_drawVisibilityBuffer.Fill(commandBuffer, 0, sizeof(u32) * m_drawCount, 0);
+            m_drawVisibilityBuffer.Fill(commandBuffer, 0, sizeof(u32) * m_draws.Size(), 0);
 
             auto fillBarrier = m_drawVisibilityBuffer.Barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
                                                               VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
@@ -859,10 +873,14 @@ namespace C3D
             firstFrame = true;
         }
 
+        mat4 view = glm::mat4_cast(m_camera.orientation);
+        view[3]   = vec4(m_camera.position, 1.0f);
+        view      = glm::inverse(view);
+        view      = glm::scale(glm::identity<glm::mat4>(), vec3(1, 1, -1)) * view;
+
         constexpr f32 zNear = 0.5f;
 
-        auto projection = MakePerspectiveProjection(glm::radians(70.0f), static_cast<f32>(window.width) / static_cast<f32>(window.height), zNear);
-
+        auto projection  = MakePerspectiveProjection(m_camera.fovY, static_cast<f32>(window.width) / static_cast<f32>(window.height), zNear);
         mat4 projectionT = glm::transpose(projection);
 
         f32 depthPyramidWidth  = static_cast<f32>(backendState->depthPyramid.GetWidth());
@@ -872,6 +890,7 @@ namespace C3D
         vec4 frustumY = NormalizePlane(projectionT[3] + projectionT[1]);  // y + w < 0
 
         CullData cullData   = {};
+        cullData.view       = view;
         cullData.p00        = projection[0][0];
         cullData.p11        = projection[1][1];
         cullData.zNear      = zNear;
@@ -881,14 +900,14 @@ namespace C3D
         cullData.frustum[2] = frustumY.y;
         cullData.frustum[3] = frustumY.z;
 
-        cullData.drawCount = m_drawCount;
+        cullData.drawCount = m_draws.Size();
 
         cullData.cullingEnabled                 = m_cullingEnabled;
         cullData.occlusionCullingEnabled        = m_occlusionCullingEnabled;
         cullData.meshShadingEnabled             = m_meshShadingEnabled;
         cullData.clusterOcclusionCullingEnabled = m_occlusionCullingEnabled && m_clusterOcclusionCullingEnabled;
         cullData.lodEnabled                     = m_lodEnabled;
-        cullData.lodTarget                      = (2 / cullData.p11) * (1.f / static_cast<f32>(window.height));  // 1px
+        cullData.lodTarget                      = (2 / cullData.p11) * (1.f / static_cast<f32>(window.height)) * (1 << m_debugLodStep);  // 1px
 
         cullData.pyramidWidth  = depthPyramidWidth;
         cullData.pyramidHeight = depthPyramidHeight;
@@ -1080,7 +1099,7 @@ namespace C3D
         f64 triangleCount = static_cast<f64>(statResults[0] + statResults[1]);
 
         f64 trianglesPerSecond = triangleCount / (m_frameGpuAvg * 1e-3);
-        f64 drawsPerSecond     = static_cast<f64>(m_drawCount) / (m_frameGpuAvg * 1e-3);
+        f64 drawsPerSecond     = static_cast<f64>(m_draws.Size()) / (m_frameGpuAvg * 1e-3);
 
         auto meshShadingEnabledAndSupported = m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) && m_meshShadingEnabled;
 
@@ -1370,8 +1389,8 @@ namespace C3D
         auto commandBuffer = backend->GetCommandBuffer();
         auto commandPool   = backend->GetCommandPool();
 
-        m_drawCount = 1000000;
-        m_draws.Resize(m_drawCount);
+        constexpr auto drawCount = 1000000;
+        m_draws.Resize(drawCount);
 
         u32 meshletVisibilityCount = 0;
         for (auto& draw : m_draws)
@@ -1386,9 +1405,55 @@ namespace C3D
 
             vec3 axis        = vec3(Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f), Random.Generate(-1.0f, 1.0f));
             f32 angle        = glm::radians(Random.Generate(0.f, 90.0f));
-            draw.orientation = glm::rotate(glm::quat(1, 0, 0, 0), angle, axis);
+            draw.orientation = glm::rotate(glm::quat(0, 0, 0, 1), angle, axis);
 
             draw.meshIndex               = static_cast<u32>(meshIndex);
+            draw.vertexOffset            = mesh.vertexOffset;
+            draw.meshletVisibilityOffset = meshletVisibilityCount;
+
+            u32 meshletCount = 0;
+            for (u32 i = 0; i < mesh.lodCount; ++i)
+            {
+                meshletCount = Max(meshletCount, mesh.lods[i].meshletCount);
+            }
+
+            meshletVisibilityCount += meshletCount;
+        }
+
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+        {
+            m_meshletVisibilityBytes = (meshletVisibilityCount + 31) / 32 * sizeof(u32);
+
+            INFO_LOG("Total meshlet visiblity count: {}; Size is: {}MB.", meshletVisibilityCount, BytesToMebiBytes(m_meshletVisibilityBytes));
+
+            if (!m_meshletVisibilityBuffer.Create(&m_context, "MESHLET_VISIBILITY", m_meshletVisibilityBytes,
+                                                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+            {
+                ERROR_LOG("Failed to create meshlet visibility buffer.");
+                return false;
+            }
+        }
+
+        return m_drawBuffer.Upload(commandBuffer, commandPool, m_draws.GetData(), sizeof(MeshDraw) * m_draws.Size());
+    }
+
+    bool VulkanRendererPlugin::UploadDrawCommands(const Window& window, const Geometry& geometry, const DynamicArray<MeshDraw>& draws)
+    {
+        ScopedTimer timer("UploadDrawCommands");
+
+        auto backend = window.rendererState->backendState;
+
+        auto commandBuffer = backend->GetCommandBuffer();
+        auto commandPool   = backend->GetCommandPool();
+
+        // Copy over the draws
+        m_draws = draws;
+
+        u32 meshletVisibilityCount = 0;
+        for (auto& draw : m_draws)
+        {
+            const auto& mesh = geometry.meshes[draw.meshIndex];
+
             draw.vertexOffset            = mesh.vertexOffset;
             draw.meshletVisibilityOffset = meshletVisibilityCount;
 
@@ -1429,6 +1494,8 @@ namespace C3D
         VkExtent2D extent = { width, height };
         m_scissor         = { offset, extent };
     }
+
+    void VulkanRendererPlugin::SetCamera(const Camera& camera) { m_camera = camera; }
 
     bool VulkanRendererPlugin::SupportsFeature(RendererSupportFlag feature) const
     {

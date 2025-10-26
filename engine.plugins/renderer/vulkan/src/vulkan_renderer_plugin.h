@@ -40,9 +40,11 @@ namespace C3D
         bool UploadGeometry(const Window& window, const Geometry& geometry) override;
 
         bool GenerateDrawCommands(const Window& window, const Geometry& geometry) override;
+        bool UploadDrawCommands(const Window& window, const Geometry& geometry, const DynamicArray<MeshDraw>& draws) override;
 
         void SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth) override;
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) override;
+        void SetCamera(const Camera& camera) override;
 
         bool SupportsFeature(RendererSupportFlag feature) const override;
 
@@ -71,8 +73,12 @@ namespace C3D
         bool m_lodEnabled = true;
         /** @brief A boolean indicating if we are rendering our depth pyramid for debugging. */
         bool m_debugPyramid = false;
-        /** @brief The (mip) level we are displaying of our depth pyramid. */
+        /** @brief The (mip) level we are displaying as part of our depth pyramid debugging. */
         u32 m_debugPyramidLevel = 0;
+        /** @brief A boolean indicating if we are rendering debug lods. */
+        bool m_debugLods = false;
+        /** @brief The lod level we are displaying as part of our lod debugging. */
+        u32 m_debugLodStep = 0;
 
         VulkanShaderModule m_cullShaderModule;
         VulkanShaderModule m_clusterCullShaderModule;
@@ -109,12 +115,13 @@ namespace C3D
 
         DynamicArray<MeshDraw> m_draws;
 
+        Camera m_camera;
+
         VkQueryPool m_queryPoolTimestamps;
         VkQueryPool m_queryPoolStatistics;
 
         f64 m_frameCpuAvg = 0, m_frameGpuAvg = 0, m_frameCpuBegin = 0;
 
-        u32 m_drawCount              = 0;
         u32 m_meshletVisibilityBytes = 0;
 
         f32 m_sceneRadius  = 300;

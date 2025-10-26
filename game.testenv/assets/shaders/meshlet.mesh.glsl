@@ -9,7 +9,7 @@
 #include "math.h"
 
 #define DEBUG 0
-#define CULL 1
+#define CULL MESH_CULL
 
 layout (constant_id = 1) const bool TASK = false;
 
@@ -118,9 +118,11 @@ void main()
         vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
         vec2 texCoord = vec2(v.u, v.v);
 
-        vec4 clip = globals.projection * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1);
-        gl_MeshVerticesEXT[i].gl_Position = clip;
-        
+        normal = RotateVecByQuat(normal, meshDraw.orientation);
+
+        vec4 clip = globals.projection * (globals.cullData.view * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1));
+
+        gl_MeshVerticesEXT[i].gl_Position = clip;        
         color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
 
     #if CULL
@@ -158,7 +160,7 @@ void main()
         vec2 eb = pb - pa;
         vec2 ec = pc - pa;
 
-        culled = culled || (eb.x * ec.y >= eb.y * ec.x);
+        culled = culled || (eb.x * ec.y <= eb.y * ec.x);
 
         // Small primitive culling
         vec2 bmin = min(pa, min(pb, pc));

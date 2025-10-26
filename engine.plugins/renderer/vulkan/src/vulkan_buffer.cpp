@@ -1,6 +1,7 @@
 
 #include "vulkan_buffer.h"
 
+#include "time/scoped_timer.h"
 #include "vulkan_context.h"
 #include "vulkan_utils.h"
 
@@ -50,6 +51,8 @@ namespace C3D
 
     bool VulkanBuffer::Upload(VkCommandBuffer commandBuffer, VkCommandPool commandPool, void* data, u64 size)
     {
+        ScopedTimer timer(String::FromFormat("Uploading {} MiB to buffer: '{}'", BytesToMebiBytes(size), m_name));
+
         if (m_memoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
         {
             ERROR_LOG("The memory in the '{}' buffer is accessible from the CPU so there is no need to upload. Call CopyInto() instead.");

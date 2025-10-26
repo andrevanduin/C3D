@@ -66,6 +66,8 @@ void main()
     Mesh mesh = meshes[meshIndex];
 
     vec3 center = RotateVecByQuat(mesh.center, draws[di].orientation) * draws[di].scale + draws[di].position;
+    center = (cullData.view * vec4(center, 1)).xyz;
+
     float radius = mesh.radius * draws[di].scale;
 
     bool visible = true;
@@ -101,7 +103,7 @@ void main()
     // When meshlet occlusion culling is enabled, we actually *do* need to append the draw command if vis[]==1 in LATE pass,
     // so that we can correctly render now-visible previously-invisible meshlets. We also pass drawvis[] along to task shader
     // so that it can *reject* clusters that we *did* draw in the first pass.
-    if (visible && (!LATE || (cullData.meshShadingEnabled == 1 && cullData.clusterOcclusionCullingEnabled == 1) || drawVisibility[di] == 0))
+    if (visible && (!LATE || (cullData.clusterOcclusionCullingEnabled == 1 && TASK_CULL == 1) || drawVisibility[di] == 0))
     {
         uint lodIndex = 0;
         

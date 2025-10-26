@@ -88,6 +88,27 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
             ERROR_LOG("Failed to read: '{}' scene.", sceneName);
             return false;
         }
+
+        auto window = C3D::Engine::GetCurrentWindow();
+
+        // Upload our mesh assets to the renderer
+        if (!Renderer.UploadMeshes(window, sceneAsset.meshes))
+        {
+            ERROR_LOG("Failed to upload meshes.");
+            return false;
+        }
+
+        if (!Renderer.UploadDrawCommands(window, sceneAsset.draws))
+        {
+            ERROR_LOG("Failed to generate draw commands.");
+            return false;
+        }
+
+        // Finally set out camera
+        Renderer.SetCamera(sceneAsset.camera);
+
+        // Cleanup our scene asset since we are done with it
+        sceneManager.Cleanup(sceneAsset);
     }
 
     return true;

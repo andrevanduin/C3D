@@ -9,6 +9,7 @@
 namespace C3D
 {
     struct MeshAsset;
+    struct MeshDraw;
 
     class RendererPlugin;
 
@@ -21,7 +22,9 @@ namespace C3D
         bool CreateResources() const;
 
         bool UploadMeshes(const Window& window, const DynamicArray<MeshAsset>& meshes);
+
         bool GenerateDrawCommands(const Window& window) const;
+        bool UploadDrawCommands(const Window& window, const DynamicArray<MeshDraw>& draws) const;
 
         bool Begin(Window& window) const;
         bool End(Window& window) const;
@@ -35,6 +38,8 @@ namespace C3D
 
         void SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth) const;
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) const;
+
+        void SetCamera(const Camera& camera) const;
 
     private:
         u32 GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<Vertex>& vertices);

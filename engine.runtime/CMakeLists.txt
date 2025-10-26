@@ -23,8 +23,7 @@ if (UNIX)
     set(OS_SPECIFIC_LIBS xcb X11-xcb "${X11_LIBRARIES}")
 endif()
 
-target_link_libraries(C3DEngineRuntime PUBLIC C3DEngineCore fmt::fmt spdlog::spdlog glm::glm OpenAL::OpenAL meshoptimizer "${OS_SPECIFIC_LIBS}")
-
+target_link_libraries(C3DEngineRuntime PUBLIC C3DEngineCore fmt::fmt spdlog::spdlog glm::glm meshoptimizer "${OS_SPECIFIC_LIBS}")
 target_include_directories(C3DEngineRuntime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/vendor" "${C3DEngineCore_SOURCE_DIR}/src" "${spdlog_SOURCE_DIR}/include" "${fmt_SOURCE_DIR}/include" "${glm_SOURCE_DIR}")
 
 include_directories(SYSTEM "${CMAKE_CURRENT_SOURCE_DIR}/vendor" "${C3DEngineCore_SOURCE_DIR}/src" "${spdlog_SOURCE_DIR}/include" "${fmt_SOURCE_DIR}/include" "${glm_SOURCE_DIR}")

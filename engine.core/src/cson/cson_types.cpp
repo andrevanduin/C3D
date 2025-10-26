@@ -68,6 +68,17 @@ namespace C3D
         return true;
     }
 
+    bool CSONObject::GetPropertyValueByName(const String& propertyName, i16& value) const
+    {
+        CSONProperty prop;
+        if (!GetPropertyByName(propertyName, prop) || !prop.HoldsInteger())
+        {
+            return false;
+        }
+        value = prop.GetI16();
+        return true;
+    }
+
     bool CSONObject::GetPropertyValueByName(const String& propertyName, i32& value) const
     {
         CSONProperty prop;
@@ -128,6 +139,17 @@ namespace C3D
             return true;
         }
         return false;
+    }
+
+    bool CSONObject::GetPropertyValueByName(const String& propertyName, bool& value) const
+    {
+        CSONProperty prop;
+        if (!GetPropertyByName(propertyName, prop) || !prop.HoldsBool())
+        {
+            return false;
+        }
+        value = prop.GetBool();
+        return true;
     }
 
     bool CSONObject::GetPropertyValueByName(const String& propertyName, String& value) const
@@ -197,15 +219,8 @@ namespace C3D
 
     bool CSONProperty::IsBasicType() const { return value.index() == PropertyTypeBool || value.index() == PropertyTypeF64 || value.index() == PropertyTypeI64; }
 
-    bool CSONProperty::GetBool() const
-    {
-        if (std::holds_alternative<bool>(value))
-        {
-            return std::get<bool>(value);
-        }
-        ERROR_LOG("Property: '{}' does not hold a bool. Returning false.", name);
-        return false;
-    }
+    bool CSONProperty::GetBool() const { return std::get<bool>(value); }
+    bool CSONProperty::HoldsBool() const { return std::holds_alternative<bool>(value); }
 
     u16 CSONProperty::GetU16() const { return static_cast<u16>(std::get<i64>(value)); }
     u32 CSONProperty::GetU32() const { return static_cast<u32>(std::get<i64>(value)); }
@@ -221,6 +236,8 @@ namespace C3D
 
     f64 CSONProperty::GetF64() const { return std::get<f64>(value); }
     bool CSONProperty::HoldsFloat() const { return std::holds_alternative<f64>(value); }
+
+    bool CSONProperty::HoldsNumber() const { return HoldsFloat() || HoldsInteger(); }
 
     const String& CSONProperty::GetString() const { return std::get<String>(value); }
     bool CSONProperty::HoldsString() const { return std::holds_alternative<String>(value); };

@@ -92,12 +92,14 @@ namespace C3D
         bool GetPropertyValueByName(const String& propertyName, u32& value) const;
         bool GetPropertyValueByName(const String& propertyName, u64& value) const;
 
+        bool GetPropertyValueByName(const String& propertyName, i16& value) const;
         bool GetPropertyValueByName(const String& propertyName, i32& value) const;
         bool GetPropertyValueByName(const String& propertyName, i64& value) const;
 
         bool GetPropertyValueByName(const String& propertyName, f32& value) const;
         bool GetPropertyValueByName(const String& propertyName, f64& value) const;
 
+        bool GetPropertyValueByName(const String& propertyName, bool& value) const;
         bool GetPropertyValueByName(const String& propertyName, String& value) const;
         bool GetPropertyValueByName(const String& propertyName, DynamicArray<CSONProperty>& value) const;
         bool GetPropertyValueByName(const String& propertyName, CSONObject& value) const;
@@ -155,7 +157,10 @@ namespace C3D
         u32 GetType() const;
         bool IsBasicType() const;
 
+        /** @brief Gets a bool from the CSONProperty. Will throw if no bool is held by this property. */
         bool GetBool() const;
+        /** @brief Checks if this property is holding bool.  */
+        bool HoldsBool() const;
 
         /** @brief Gets a u16 from the CSONProperty. Will throw if no integer is held by this property. */
         u16 GetU16() const;
@@ -173,11 +178,16 @@ namespace C3D
         /** @brief Checks if this property is holding an integer value.  */
         bool HoldsInteger() const;
 
+        /** @brief Gets a f32 from the CSONProperty. Will throw if no float is held by this property. */
         f32 GetF32() const;
+        /** @brief Gets a f64 from the CSONProperty. Will throw if no float is held by this property. */
         f64 GetF64() const;
 
         /** @brief Checks if this property is holding a floating point value. */
         bool HoldsFloat() const;
+
+        /** @brief Checks if this property is holding a floating point or integer value. */
+        bool HoldsNumber() const;
 
         /** @brief Gets a string from the CSONProperty. Will throw if no string is held by this property. */
         const String& GetString() const;
