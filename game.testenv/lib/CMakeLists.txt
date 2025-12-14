@@ -1,5 +1,5 @@
 
-cmake_minimum_required (VERSION 3.21)
+cmake_minimum_required (VERSION 3.20)
 
 set(CMAKE_CXX_STANDARD 23)
 
@@ -19,7 +19,7 @@ target_link_libraries(TestEnvLib PUBLIC C3DEngineRuntime)
 
 target_include_directories(TestEnvLib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
-add_custom_command(TARGET TestEnvLib COMMAND ${CMAKE_COMMAND} -E copy 
+add_custom_command(TARGET TestEnvLib  COMMAND POST_BUILD ${CMAKE_COMMAND} -E copy 
     "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}TestEnvLib${CMAKE_SHARED_LIBRARY_SUFFIX}" 
     "${CMAKE_BINARY_DIR}/game.testenv/executable"
 )
