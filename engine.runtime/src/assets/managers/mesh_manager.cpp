@@ -3,12 +3,10 @@
 
 #include <meshoptimizer/src/meshoptimizer.h>
 
-#include "exceptions.h"
 #include "math/c3d_math.h"
 #include "platform/file_system.h"
 #include "renderer/vertex.h"
 #include "string/string_utils.h"
-#include "system/system_manager.h"
 
 namespace C3D
 {

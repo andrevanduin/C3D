@@ -8,7 +8,6 @@
 #include "defines.h"
 #include "logger/logger.h"
 #include "math/math_types.h"
-#include "memory/global_memory_system.h"
 
 namespace C3D
 {
@@ -688,7 +687,7 @@ namespace C3D
         {
             DynamicArray<BasicString> elements;
             BasicString current;
-            for (u64 i = 0; i < m_size; i++)
+            for (u64 i = 0; i < m_size; ++i)
             {
                 if (m_data[i] == delimiter)
                 {

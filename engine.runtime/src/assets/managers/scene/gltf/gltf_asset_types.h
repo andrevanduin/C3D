@@ -1,6 +1,5 @@
 
 #pragma once
-#include "assets/types.h"
 #include "containers/dynamic_array.h"
 #include "cson/cson_types.h"
 #include "gltf_extension.h"

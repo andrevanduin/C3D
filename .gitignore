@@ -44,3 +44,4 @@
 build
 *.spv
 .vscode
+.cache

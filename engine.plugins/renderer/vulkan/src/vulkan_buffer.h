@@ -37,6 +37,8 @@ namespace C3D
         VkBuffer GetHandle() const { return m_handle; }
         const VkBuffer* GetHandlePtr() const { return &m_handle; }
 
+        void* GetData() const { return m_data; }
+
         u64 GetSize() const { return m_size; }
 
     private:

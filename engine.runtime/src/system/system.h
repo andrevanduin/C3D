@@ -30,11 +30,11 @@ namespace C3D
     class BaseSystem : public ISystem
     {
     public:
-        virtual bool OnInit()     = 0;
-        virtual void OnShutdown() = 0;
+        virtual bool OnInit()              = 0;
+        virtual void OnShutdown() override = 0;
 
         virtual bool OnUpdate(const FrameData& frameData) override { return true; }
-        virtual bool OnPrepareFrame(FrameData& frameData) { return true; }
+        virtual bool OnPrepareFrame(FrameData& frameData) override { return true; }
     };
 
     class SystemWithConfig : public ISystem

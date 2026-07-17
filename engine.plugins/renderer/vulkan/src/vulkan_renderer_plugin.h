@@ -7,6 +7,7 @@
 #include "vulkan_context.h"
 #include "vulkan_shader.h"
 #include "vulkan_shader_module.h"
+#include "vulkan_texture.h"
 
 namespace C3D
 {
@@ -38,6 +39,7 @@ namespace C3D
         void OnDestroyWindow(Window& window) override;
 
         bool UploadGeometry(const Window& window, const Geometry& geometry) override;
+        bool UploadTexture(const Window& window, const TextureAsset& texture) override;
 
         bool GenerateDrawCommands(const Window& window, const Geometry& geometry) override;
         bool UploadDrawCommands(const Window& window, const Geometry& geometry, const DynamicArray<MeshDraw>& draws) override;
@@ -47,6 +49,9 @@ namespace C3D
         void SetCamera(const Camera& camera) override;
 
         bool SupportsFeature(RendererSupportFlag feature) const override;
+
+        u8* GetStagingBuffer() const override { return static_cast<u8*>(m_context.stagingBuffer.GetData()); }
+        u32 GetStagingBufferSize() const override { return m_context.stagingBuffer.GetSize(); }
 
     private:
         void BeginRendering(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
@@ -114,6 +119,7 @@ namespace C3D
         VkSampler m_depthSampler;
 
         DynamicArray<MeshDraw> m_draws;
+        DynamicArray<VulkanTexture> m_textures;
 
         Camera m_camera;
 

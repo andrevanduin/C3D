@@ -25,5 +25,11 @@ namespace C3D
             data = Memory.New<T>(MemoryType::Scene);
             return *static_cast<T*>(data);
         }
+
+        template <typename T>
+        const T& Get() const
+        {
+            return *static_cast<T*>(data);
+        }
     };
 }  // namespace C3D

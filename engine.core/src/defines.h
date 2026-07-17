@@ -3,7 +3,6 @@
 #include <fmt/format.h>
 
 #include <cstdint>
-#include <thread>
 #include <type_traits>
 
 typedef unsigned char byte;

@@ -3,6 +3,7 @@
 #include <colors.h>
 #include <string/string.h>
 
+#include "assets/types/texture_types.h"
 #include "vulkan_types.h"
 
 #define VK_CHECK(expr) { C3D_ASSERT((expr) == VK_SUCCESS) }
@@ -110,6 +111,9 @@ namespace C3D
          * @return A VkImage if successful; nullptr otherwise
          */
         VkImage CreateImage(VulkanContext* context, const String& name, u32 width, u32 height, VkFormat format, u32 mipLevels, VkImageUsageFlags usage);
+
+        /** @brief Returns the VkFormat based on the provided TextureFormat. */
+        VkFormat ConvertTextureFormatToVkFormat(TextureFormat format);
 
         /**
          * @brief Creates a Vulkan image View.

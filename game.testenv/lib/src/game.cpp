@@ -98,6 +98,12 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
             return false;
         }
 
+        if (!Renderer.UploadTextures(window, sceneAsset.textures))
+        {
+            ERROR_LOG("Failed to upload textures.");
+            return false;
+        }
+
         if (!Renderer.UploadDrawCommands(window, sceneAsset.draws))
         {
             ERROR_LOG("Failed to generate draw commands.");

@@ -13,11 +13,14 @@
 #include <shaderc/shaderc.h>
 #include <system/system_manager.h>
 
+#include "assets/types/texture_types.h"
+#include "defines.h"
 #include "platform/vulkan_platform.h"
 #include "vulkan_allocator.h"
 #include "vulkan_debugger.h"
 #include "vulkan_instance.h"
 #include "vulkan_swapchain.h"
+#include "vulkan_texture.h"
 #include "vulkan_types.h"
 #include "vulkan_utils.h"
 
@@ -83,10 +86,10 @@ namespace C3D
         m_queryPoolStatistics = VkUtils::CreateQueryPool(&m_context, 2, VK_QUERY_TYPE_PIPELINE_STATISTICS);
 
         // Create our buffers
-        if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(64), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(128), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
         {
-            ERROR_LOG("Failed to create vertex buffer.");
+            ERROR_LOG("Failed to create staging buffer.");
             return false;
         }
 
@@ -246,6 +249,8 @@ namespace C3D
         }
 
         INFO_LOG("Destroying Vulkan buffers.");
+
+        m_context.stagingBuffer.Destroy();
         m_vertexBuffer.Destroy();
         m_indexBuffer.Destroy();
         m_meshBuffer.Destroy();
@@ -253,8 +258,6 @@ namespace C3D
         m_drawCommandBuffer.Destroy();
         m_drawCommandCountBuffer.Destroy();
         m_drawVisibilityBuffer.Destroy();
-
-        m_context.stagingBuffer.Destroy();
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
@@ -1378,6 +1381,100 @@ namespace C3D
                 return false;
             }
         }
+
+        return true;
+    }
+
+    bool VulkanRendererPlugin::UploadTexture(const Window& window, const TextureAsset& texture)
+    {
+        VulkanTexture vulkanTexture;
+
+        VulkanTextureCreateInfo createInfo;
+        createInfo.context   = &m_context;
+        createInfo.name      = texture.name;
+        createInfo.width     = texture.width;
+        createInfo.height    = texture.height;
+        createInfo.mipLevels = texture.mipLevelCount;
+        createInfo.format    = VkUtils::ConvertTextureFormatToVkFormat(texture.format);
+        createInfo.usage     = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+        if (!vulkanTexture.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create Vulkan Texture.");
+            return false;
+        }
+
+        auto backend = window.rendererState->backendState;
+
+        auto commandBuffer = backend->GetCommandBuffer();
+        auto commandPool   = backend->GetCommandPool();
+        auto& device       = m_context.device;
+
+        VK_CHECK(vkResetCommandPool(m_context.device.GetLogical(), commandPool, 0));
+
+        VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        beginInfo.flags                    = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+        auto preBarrier = VkUtils::ImageBarrier(vulkanTexture.GetImage(), 0, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                                VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        VkUtils::PipelineBarrier(commandBuffer, 0, 0, nullptr, 1, &preBarrier);
+
+        // Buffer starts at 0
+        u64 bufferOffset = 0;
+        // First mip width and height is the width and height of the full texture
+        u32 mipWidth  = texture.width;
+        u32 mipHeight = texture.height;
+
+        for (u32 i = 0; i < texture.mipLevelCount; ++i)
+        {
+            // Define the region to copy
+            VkBufferImageCopy region               = {};
+            region.bufferOffset                    = bufferOffset;
+            region.bufferRowLength                 = 0;
+            region.bufferImageHeight               = 0;
+            region.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.imageSubresource.mipLevel       = i;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount     = 1;
+            region.imageOffset                     = { 0, 0, 0 };
+            region.imageExtent                     = { mipWidth, mipHeight, 1 };
+
+            vkCmdCopyBufferToImage(commandBuffer, m_context.stagingBuffer.GetHandle(), vulkanTexture.GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                                   &region);
+
+            bufferOffset += ((mipWidth + 3) / 4) * ((mipHeight + 3) / 4) * texture.blockSize;
+
+            mipWidth  = mipWidth > 1 ? mipWidth / 2 : 1;
+            mipHeight = mipHeight > 1 ? mipHeight / 2 : 1;
+        }
+
+        if (bufferOffset != texture.size)
+        {
+            ERROR_LOG("The final bufferOffset does not equal the total texture size!");
+            return false;
+        }
+
+        auto postBarrier =
+            VkUtils::ImageBarrier(vulkanTexture.GetImage(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        VkUtils::PipelineBarrier(commandBuffer, 0, 0, nullptr, 1, &postBarrier);
+
+        VK_CHECK(vkEndCommandBuffer(commandBuffer));
+
+        VkSubmitInfo submitInfo       = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers    = &commandBuffer;
+
+        VK_CHECK(vkQueueSubmit(device.GetDeviceQueue(), 1, &submitInfo, VK_NULL_HANDLE));
+
+        VK_CHECK(device.WaitIdle());
+
+        // Finally add the texture to our array so we can clean it up later
+        m_textures.PushBack(vulkanTexture);
 
         return true;
     }

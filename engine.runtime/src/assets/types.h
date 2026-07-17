@@ -11,7 +11,7 @@ namespace C3D
         None,
         Text,
         Binary,
-        Image,
+        Texture,
         Material,
         Mesh,
         ShaderSource,

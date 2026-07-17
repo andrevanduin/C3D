@@ -1,5 +1,6 @@
 
 #pragma once
+#include "assets/types/texture_types.h"
 #include "defines.h"
 #include "types.h"
 
@@ -84,6 +85,15 @@ namespace C3D
 
         virtual bool UploadGeometry(const Window& window, const Geometry& geometry) = 0;
 
+        /**
+         * @brief Method used to upload a texture asset to the GPU memory.
+         *
+         * @param window
+         * @param texture The path to the texture
+         * @return True if successful; false otherwise
+         */
+        virtual bool UploadTexture(const Window& window, const TextureAsset& asset) = 0;
+
         virtual bool GenerateDrawCommands(const Window& window, const Geometry& geometry)                                    = 0;
         virtual bool UploadDrawCommands(const Window& window, const Geometry& geometry, const DynamicArray<MeshDraw>& draws) = 0;
 
@@ -118,6 +128,20 @@ namespace C3D
          * @return True if supported; false otherwise
          */
         virtual bool SupportsFeature(RendererSupportFlag feature) const = 0;
+
+        /**
+         * @brief Gets a pointer to some memory that represents the render backend's staging buffer.
+         *
+         * @return u8* A pointer to the scratch buffer memory
+         */
+        virtual u8* GetStagingBuffer() const = 0;
+
+        /**
+         * @brief Gets the size of the memory that represents the render backend's staging buffer.
+         *
+         * @return u32 The size of the scratch buffer in bytes
+         */
+        virtual u32 GetStagingBufferSize() const = 0;
 
     protected:
         RendererPluginType m_type;

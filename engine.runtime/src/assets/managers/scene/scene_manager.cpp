@@ -3,8 +3,11 @@
 
 #include <meshoptimizer/src/meshoptimizer.h>
 
+#include "asserts/asserts.h"
 #include "gltf/gltf_asset_types.h"
+#include "gltf/gltf_extension.h"
 #include "gltf/gltf_extensions.h"
+#include "logger/logger.h"
 #include "math/c3d_math.h"
 #include "time/scoped_timer.h"
 
@@ -296,11 +299,13 @@ namespace C3D
 
                 {
                     ScopedTimer timer(String::FromFormat("Remapping vertex and index buffers of: '{}'.", sceneMesh.name));
-                    
-                    DynamicArray<u32> remap(sceneMesh.indices.Size());
-                    u64 uniqueVertices = meshopt_generateVertexRemap(remap.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(), sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex));
 
-                    meshopt_remapVertexBuffer(sceneMesh.vertices.GetData(), sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex), remap.GetData());
+                    DynamicArray<u32> remap(sceneMesh.indices.Size());
+                    u64 uniqueVertices = meshopt_generateVertexRemap(remap.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(),
+                                                                     sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex));
+
+                    meshopt_remapVertexBuffer(sceneMesh.vertices.GetData(), sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex),
+                                              remap.GetData());
                     meshopt_remapIndexBuffer(sceneMesh.indices.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(), remap.GetData());
 
                     INFO_LOG("Went from {} vertices to {} vertices.", sceneMesh.vertices.Size(), uniqueVertices);
@@ -317,6 +322,10 @@ namespace C3D
                     meshopt_optimizeVertexCache(sceneMesh.indices.GetData(), sceneMesh.indices.GetData(), indexCount, vertexCount);
                     meshopt_optimizeVertexFetch(sceneMesh.vertices.GetData(), sceneMesh.indices.GetData(), indexCount, sceneMesh.vertices.GetData(),
                                                 vertexCount, sizeof(Vertex));
+                }
+
+                {
+                    ScopedTimer timer(String::FromFormat("Parsing materials for: '{}'.", sceneMesh.name));
                 }
 
                 scene.meshes.PushBack(sceneMesh);
@@ -367,6 +376,32 @@ namespace C3D
             }
 
             INFO_LOG("Loaded {} meshes and {} draws.", scene.meshes.Size(), scene.draws.Size());
+        }
+
+        {
+            // Parse textures
+            for (const auto& texture : asset.textures)
+            {
+                u32 source = 0;
+
+                if (texture.extensions.Empty())
+                {
+                    // No extensions, parse normally
+                    source = texture.source;
+                }
+                else
+                {
+                    C3D_ASSERT(texture.extensions.Size() == 1);
+
+                    auto& extension = texture.extensions[0];
+                    C3D_ASSERT(extension.type == GLTFExtensionType::TextureDDS);
+
+                    const auto& ddsExtension = extension.Get<GLTFTextureDDSExtension>();
+                    source                   = ddsExtension.source;
+                }
+
+                scene.textures.PushBack(asset.images[source].uri);
+            }
         }
 
         return true;
@@ -1510,7 +1545,7 @@ namespace C3D
 
     bool SceneManager::ParseTextureDDS(const CSONObject& textureDDSObj, GLTFExtension& textureExtension) const
     {
-        auto& ext = textureExtension.Allocate<GLTFTextureDDS>();
+        auto& ext = textureExtension.Allocate<GLTFTextureDDSExtension>();
 
         // Mandatory source
         if (!textureDDSObj.GetPropertyValueByName("source", ext.source))

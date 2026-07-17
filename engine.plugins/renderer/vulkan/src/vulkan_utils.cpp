@@ -3,6 +3,7 @@
 
 #include <logger/logger.h>
 
+#include "assets/types/texture_types.h"
 #include "vulkan_context.h"
 
 namespace C3D
@@ -351,6 +352,37 @@ namespace C3D
         VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_IMAGE, image, name);
 
         return image;
+    }
+
+    VkFormat VkUtils::ConvertTextureFormatToVkFormat(TextureFormat format)
+    {
+        switch (format)
+        {
+            case TextureFormat::BC1_RGBA_UNORM_BLOCK:
+                return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+            case TextureFormat::BC2_UNORM_BLOCK:
+                return VK_FORMAT_BC2_UNORM_BLOCK;
+            case TextureFormat::BC3_UNORM_BLOCK:
+                return VK_FORMAT_BC3_UNORM_BLOCK;
+            case TextureFormat::BC4_UNORM_BLOCK:
+                return VK_FORMAT_BC4_UNORM_BLOCK;
+            case TextureFormat::BC4_SNORM_BLOCK:
+                return VK_FORMAT_BC4_SNORM_BLOCK;
+            case TextureFormat::BC5_UNORM_BLOCK:
+                return VK_FORMAT_BC5_UNORM_BLOCK;
+            case TextureFormat::BC5_SNORM_BLOCK:
+                return VK_FORMAT_BC5_SNORM_BLOCK;
+            case TextureFormat::BC6H_UFLOAT_BLOCK:
+                return VK_FORMAT_BC6H_UFLOAT_BLOCK;
+            case TextureFormat::BC6H_SFLOAT_BLOCK:
+                return VK_FORMAT_BC6H_SFLOAT_BLOCK;
+            case TextureFormat::BC7_UNORM_BLOCK:
+                return VK_FORMAT_BC7_UNORM_BLOCK;
+            case TextureFormat::UNDEFINED:
+            default:
+                ERROR_LOG("Unknown texture format provided!");
+                return VK_FORMAT_UNDEFINED;
+        }
     }
 
     VkImageView VkUtils::CreateImageView(VulkanContext* context, const String& name, VkImage image, VkFormat format, VkImageAspectFlags aspectMask,
