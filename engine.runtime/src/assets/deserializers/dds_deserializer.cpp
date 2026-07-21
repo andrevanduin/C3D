@@ -3,6 +3,7 @@
 
 #include "assets/types/dds_types.h"
 #include "assets/types/texture_types.h"
+#include "defines.h"
 #include "logger/logger.h"
 #include "platform/file.h"
 
@@ -24,7 +25,7 @@ namespace C3D
             return false;
         }
 
-        FileV2 file;
+        File file;
         // Open file for binary reading
         if (!file.Open(path, "rb"))
         {
@@ -57,7 +58,7 @@ namespace C3D
 
         // Read DXT10 header if available
         DDSHeaderDXT10 headerDxt10 = {};
-        if (header.ddspf.dwFourCC == 'DX10')
+        if (header.ddspf.dwFourCC == FourCC("DX10"))
         {
             // We have a DXT10 header
             if (!file.Read(&headerDxt10))
@@ -70,14 +71,14 @@ namespace C3D
         // Verify header size
         if (header.dwSize != sizeof(header))
         {
-            ERROR_LOG("DDS Header size is specified as '{}' but was expecting: '{}'.", header.dwSize, sizeof(header));
+            ERROR_LOG("DDS Header size is specified as {} bytes but it's actually: {} bytes.", header.dwSize, sizeof(header));
             return false;
         }
 
         // Verify pixel format header size
         if (header.ddspf.dwSize != sizeof(header.ddspf))
         {
-            ERROR_LOG("DDS PixelFormat Header size is specified as '{}' but was expecting: '{}'.", header.ddspf.dwSize, sizeof(header.ddspf));
+            ERROR_LOG("DDS PixelFormat Header size is specified as {} bytes but it's actually {} bytes.", header.ddspf.dwSize, sizeof(header.ddspf));
             return false;
         }
 
@@ -89,7 +90,7 @@ namespace C3D
         }
 
         // We only support 2D Textures (for now)
-        if (header.ddspf.dwFourCC == 'DX10' && headerDxt10.resourceDimension != D3D10ResourceDimesion::TEXTURE2D)
+        if (header.ddspf.dwFourCC == FourCC("DX10") && headerDxt10.resourceDimension != D3D10ResourceDimesion::TEXTURE2D)
         {
             ERROR_LOG("Failed to load DDS file. This DDS file stores an unsupported texture type.");
             return false;
@@ -139,19 +140,19 @@ namespace C3D
 
     TextureFormat DDSDeserializer::ConvertFormat(const DDSHeader& header, const DDSHeaderDXT10& headerDxt10) const
     {
-        if (header.ddspf.dwFourCC == 'DXT1')
+        if (header.ddspf.dwFourCC == FourCC("DXT1"))
         {
             return TextureFormat::BC1_RGBA_UNORM_BLOCK;
         }
-        if (header.ddspf.dwFourCC == 'DXT3')
+        if (header.ddspf.dwFourCC == FourCC("DXT3"))
         {
             return TextureFormat::BC2_UNORM_BLOCK;
         }
-        if (header.ddspf.dwFourCC == 'DXT5')
+        if (header.ddspf.dwFourCC == FourCC("DXT5"))
         {
             return TextureFormat::BC3_UNORM_BLOCK;
         }
-        if (header.ddspf.dwFourCC == 'DX10')
+        if (header.ddspf.dwFourCC == FourCC("DX10"))
         {
             // TODO: We shouldn't just ignore the SRGB stuff!!
             switch (headerDxt10.dxgiFormat)

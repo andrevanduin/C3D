@@ -116,10 +116,15 @@ namespace C3D
         VulkanShader m_taskSubmitShader;
         VulkanShader m_clusterSubmitShader;
 
+        VkSampler m_textureSampler;
         VkSampler m_depthSampler;
 
         DynamicArray<MeshDraw> m_draws;
         DynamicArray<VulkanTexture> m_textures;
+
+        VkDescriptorPool m_textureDescriptorPool;
+        VkDescriptorSetLayout m_textureDescriptorSetLayout;
+        VkDescriptorSet m_textureDescriptorSet;
 
         Camera m_camera;
 

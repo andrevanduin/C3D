@@ -77,6 +77,7 @@ namespace C3D
         void DispatchIndirect(VkCommandBuffer commandBuffer, const VulkanBuffer& buffer, VkDeviceSize offset) const;
 
         void PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const;
+        void BindDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint bindpoint, u32 firstSet, u32 count, const VkDescriptorSet* sets) const;
         void PushConstants(VkCommandBuffer commandBuffer, const void* data, u64 size) const;
 
         void Destroy();
@@ -84,13 +85,14 @@ namespace C3D
     private:
         bool Recreate();
 
-        void DestroyInternal(VkDescriptorSetLayout setLayout, VkPipelineLayout pipelineLayout = nullptr, VkPipeline pipeline = nullptr,
-                             VkDescriptorUpdateTemplate updateTemplate = nullptr);
+        void DestroyInternal();
 
         u32 GatherResources(VkDescriptorType (&resourceTypes)[32]);
 
         VkDescriptorSetLayout CreateSetLayout();
-        VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout setLayout);
+        VkDescriptorSetLayout CreateSetArrayLayout();
+
+        VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout setLayout, VkDescriptorSetLayout arrayLayout);
         VkPipeline CreateGraphicsPipeline(VkPipelineLayout layout);
         VkPipeline CreateComputePipeline(VkPipelineLayout layout);
 
@@ -114,8 +116,10 @@ namespace C3D
         RegisteredEventCallback m_watchedFilesCallback;
         /** @brief A handle to the set layout used by this Shader. */
         VkDescriptorSetLayout m_setLayout = nullptr;
+        /** @brief A handle to the array layout used by this Shader (optional). */
+        VkDescriptorSetLayout m_arrayLayout = nullptr;
         /** @brief A handle to the layout used by this Shader. */
-        VkPipelineLayout m_layout = nullptr;
+        VkPipelineLayout m_pipelineLayout = nullptr;
         /** @brief A handle to the pipeline used by this Shader. */
         VkPipeline m_pipeline = nullptr;
         /** @brief A handle to the pipeline cache used by this Shader. */

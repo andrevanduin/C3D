@@ -3,6 +3,7 @@
 
 #include "assets/deserializers/dds_deserializer.h"
 #include "logger/logger.h"
+#include "platform/path.h"
 
 namespace C3D
 {
@@ -10,6 +11,8 @@ namespace C3D
 
     bool TextureManager::Read(const String& path, TextureAsset& asset)
     {
+        asset.name = Path::FileNameFromPath(path);
+
         if (path.EndsWith(".dds"))
         {
             // Parse a DDS file

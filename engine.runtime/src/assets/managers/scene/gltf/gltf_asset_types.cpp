@@ -1,7 +1,9 @@
 
 #include "gltf_asset_types.h"
 
-#include "platform/file_system.h"
+#include "asserts/asserts.h"
+#include "logger/logger.h"
+#include "platform/file.h"
 #include "time/scoped_timer.h"
 
 namespace C3D
@@ -14,30 +16,25 @@ namespace C3D
 
         const String fullPath = String::FromFormat("{}/{}", basePath, uri);
 
-        FILE* file = fopen(fullPath.Data(), "rb");
-        if (!file)
+        File file;
+        if (!file.Open(fullPath, "rb"))
         {
             ERROR_LOG("Failed to open: '{}'.", fullPath);
             return false;
         }
 
+        // Get the size of the file in bytes
+        u32 fileSize = file.Size();
+
         // Allocate enough bytes to store the buffer data
-        data = Memory.Allocate<u8>(MemoryType::Scene, byteLength);
+        data = Memory.Allocate<u8>(MemoryType::Scene, fileSize);
 
         // Read the data from the file
-        u64 bytesRead = fread(data, sizeof(u8), byteLength, file);
-
-        // Ensure we read enough data
-        if (bytesRead != byteLength)
+        if (!file.Read(data, fileSize))
         {
-            ERROR_LOG("Failed to read: '{}'. Expected: {} bytes but got: {} bytes.", fullPath, byteLength, bytesRead);
-            fclose(file);
-            Memory.Free(data);
+            ERROR_LOG("Failed to read file: '{}'.", fullPath);
             return false;
         }
-
-        // Finally close our file
-        fclose(file);
 
         return true;
     }
@@ -170,7 +167,7 @@ namespace C3D
                 data = *reinterpret_cast<const u32*>(source);
                 break;
             default:
-                C3D_FAIL("Invalid sourceStride: {}.", sourceStride);
+                C3D_FAIL("Invalid sourceStride");
         }
         return data;
     }

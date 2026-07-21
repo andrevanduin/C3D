@@ -147,3 +147,8 @@ C3D_INLINE Range GetAlignedRange(const u64 offset, const u64 size, const u64 gra
 {
     return { GetAligned(offset, granularity), GetAligned(size, granularity) };
 }
+
+C3D_INLINE constexpr u32 FourCC(const char (&str)[5])
+{
+    return (unsigned(str[0]) << 0) | (unsigned(str[1]) << 8) | (unsigned(str[2]) << 16) | (unsigned(str[3]) << 24);
+}

@@ -12,6 +12,7 @@
 #include <random/random.h>
 #include <shaderc/shaderc.h>
 #include <system/system_manager.h>
+#include <time/scoped_timer.h>
 
 #include "assets/types/texture_types.h"
 #include "defines.h"
@@ -70,7 +71,9 @@ namespace C3D
             return false;
         }
 
-        volkLoadDevice(m_context.device.GetLogical());
+        auto device = m_context.device.GetLogical();
+
+        volkLoadDevice(device);
 
         // Initialize shaderc
         m_context.shaderCompiler = shaderc_compiler_initialize();
@@ -175,6 +178,58 @@ namespace C3D
             }
         }
 
+        // Descriptors
+        const u32 descriptorCount           = 65536;
+        VkDescriptorPoolSize poolSize       = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, descriptorCount };
+        VkDescriptorPoolCreateInfo poolInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+        poolInfo.maxSets                    = descriptorCount;
+        poolInfo.poolSizeCount              = 1;
+        poolInfo.pPoolSizes                 = &poolSize;
+
+        auto result = vkCreateDescriptorPool(device, &poolInfo, m_context.allocator, &m_textureDescriptorPool);
+        if (!VkUtils::IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create descriptor pool with error: '{}'.", VkUtils::ResultString(result));
+            return false;
+        }
+
+        VkDescriptorSetLayoutBinding setBinding = {};
+        setBinding.binding                      = 0;
+        setBinding.descriptorType               = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        setBinding.descriptorCount              = descriptorCount;
+        setBinding.stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
+        setBinding.pImmutableSamplers           = nullptr;
+
+        VkDescriptorBindingFlags bindingFlags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+
+        VkDescriptorSetLayoutBindingFlagsCreateInfo setBindingFlags = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
+        setBindingFlags.bindingCount                                = 1;
+        setBindingFlags.pBindingFlags                               = &bindingFlags;
+
+        VkDescriptorSetLayoutCreateInfo setCreateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+        setCreateInfo.pNext                           = &setBindingFlags;
+        setCreateInfo.bindingCount                    = 1;
+        setCreateInfo.pBindings                       = &setBinding;
+
+        result = vkCreateDescriptorSetLayout(device, &setCreateInfo, m_context.allocator, &m_textureDescriptorSetLayout);
+        if (!VkUtils::IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create descriptor set layout with error: '{}'.", VkUtils::ResultString(result));
+            return false;
+        }
+
+        VkDescriptorSetAllocateInfo setAllocateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+        setAllocateInfo.descriptorPool              = m_textureDescriptorPool;
+        setAllocateInfo.descriptorSetCount          = 1;
+        setAllocateInfo.pSetLayouts                 = &m_textureDescriptorSetLayout;
+
+        result = vkAllocateDescriptorSets(device, &setAllocateInfo, &m_textureDescriptorSet);
+        if (!VkUtils::IsSuccess(result))
+        {
+            ERROR_LOG("Failed to allocate descriptor sets with error: '{}'.", VkUtils::ResultString(result));
+            return false;
+        }
+
         Event.Register(EventCodeDebug0, [this](const u16 code, void* sender, const EventContext& context) {
             switch (context.data.u32[0])
             {
@@ -237,6 +292,8 @@ namespace C3D
     {
         INFO_LOG("Shutting down.");
 
+        auto device = m_context.device.GetLogical();
+
         Event.UnregisterAll(EventCodeDebug0);
         Event.UnregisterAll(EventCodeDebug1);
 
@@ -246,6 +303,23 @@ namespace C3D
         {
             shaderc_compiler_release(m_context.shaderCompiler);
             m_context.shaderCompiler = nullptr;
+        }
+
+        INFO_LOG("Destroying Vulkan Textures.");
+        for (auto& texture : m_textures)
+        {
+            texture.Destroy();
+        }
+        m_textures.Destroy();
+
+        INFO_LOG("Destroying Texture descriptor pool and layout");
+        if (m_textureDescriptorSetLayout)
+        {
+            vkDestroyDescriptorSetLayout(device, m_textureDescriptorSetLayout, m_context.allocator);
+        }
+        if (m_textureDescriptorPool)
+        {
+            vkDestroyDescriptorPool(device, m_textureDescriptorPool, m_context.allocator);
         }
 
         INFO_LOG("Destroying Vulkan buffers.");
@@ -304,11 +378,12 @@ namespace C3D
         }
 
         INFO_LOG("Destroying Vulkan Samplers.");
-        vkDestroySampler(m_context.device.GetLogical(), m_depthSampler, m_context.allocator);
+        vkDestroySampler(device, m_depthSampler, m_context.allocator);
+        vkDestroySampler(device, m_textureSampler, m_context.allocator);
 
         INFO_LOG("Destroying Query pools");
-        vkDestroyQueryPool(m_context.device.GetLogical(), m_queryPoolTimestamps, m_context.allocator);
-        vkDestroyQueryPool(m_context.device.GetLogical(), m_queryPoolStatistics, m_context.allocator);
+        vkDestroyQueryPool(device, m_queryPoolTimestamps, m_context.allocator);
+        vkDestroyQueryPool(device, m_queryPoolStatistics, m_context.allocator);
 
         m_context.device.Destroy();
 
@@ -541,6 +616,14 @@ namespace C3D
             return false;
         }
 
+        // Create our texture sampler
+        m_textureSampler = VkUtils::CreateSampler(&m_context, "TEXTURE_SAMPLER", VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE);
+        if (!m_textureSampler)
+        {
+            ERROR_LOG("Failed to create texture sampler.");
+            return false;
+        }
+
         return true;
     }
 
@@ -721,6 +804,7 @@ namespace C3D
 
             DescriptorInfo descriptors[] = { m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_clusterIndexBuffer };
             m_clusterMeshletShader.PushDescriptorSet(commandBuffer, descriptors);
+            m_clusterMeshletShader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
             m_clusterMeshletShader.PushConstants(commandBuffer, &globals, sizeof(globals));
 
             vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_clusterCountBuffer.GetHandle(), 4, 1, 0);
@@ -735,6 +819,7 @@ namespace C3D
                 m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_meshletVisibilityBuffer, pyramidDesc,
             };
             shader.PushDescriptorSet(commandBuffer, descriptors);
+            shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
             shader.PushConstants(commandBuffer, &globals, sizeof(globals));
 
             vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_drawCommandCountBuffer.GetHandle(), 4, 1, 0);
@@ -749,6 +834,7 @@ namespace C3D
                 m_vertexBuffer,
             };
             m_meshShader.PushDescriptorSet(commandBuffer, descriptors);
+            m_meshShader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
 
             vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
 
@@ -1408,9 +1494,11 @@ namespace C3D
 
         auto commandBuffer = backend->GetCommandBuffer();
         auto commandPool   = backend->GetCommandPool();
-        auto& device       = m_context.device;
 
-        VK_CHECK(vkResetCommandPool(m_context.device.GetLogical(), commandPool, 0));
+        auto& device       = m_context.device;
+        auto logicalDevice = device.GetLogical();
+
+        VK_CHECK(vkResetCommandPool(logicalDevice, commandPool, 0));
 
         VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         beginInfo.flags                    = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1472,6 +1560,21 @@ namespace C3D
         VK_CHECK(vkQueueSubmit(device.GetDeviceQueue(), 1, &submitInfo, VK_NULL_HANDLE));
 
         VK_CHECK(device.WaitIdle());
+
+        VkDescriptorImageInfo imageInfo = {};
+        imageInfo.sampler               = m_textureSampler;
+        imageInfo.imageView             = vulkanTexture.GetView();
+        imageInfo.imageLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet write = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+        write.dstSet               = m_textureDescriptorSet;
+        write.dstBinding           = 0;
+        write.dstArrayElement      = m_textures.Size();
+        write.descriptorCount      = 1;
+        write.descriptorType       = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.pImageInfo           = &imageInfo;
+
+        vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, nullptr);
 
         // Finally add the texture to our array so we can clean it up later
         m_textures.PushBack(vulkanTexture);

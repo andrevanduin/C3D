@@ -1,22 +1,26 @@
 
 #pragma once
+#include <cstdio>
+
 #include "defines.h"
+#include "logger/logger.h"
 #include "string/string.h"
+
 
 namespace C3D
 {
-    class C3D_API FileV2
+    class C3D_API File
     {
     public:
-        FileV2() = default;
+        File() = default;
 
-        FileV2(const FileV2&) = delete;
-        FileV2(FileV2&&)      = delete;
+        File(const File&) = delete;
+        File(File&&)      = delete;
 
-        FileV2& operator=(const FileV2&) = delete;
-        FileV2& operator=(FileV2&&)      = delete;
+        File& operator=(const File&) = delete;
+        File& operator=(File&&)      = delete;
 
-        ~FileV2();
+        ~File();
 
         /**
          * @brief Opens a file with the provided path and mode.
@@ -28,7 +32,14 @@ namespace C3D
         /**
          * @brief Returns true if the file was read until it's end
          */
-        bool IsReadUntilEnd();
+        bool IsReadUntilEnd() const;
+
+        /**
+         * @brief Gets the size of the file in bytes. Useful if you want to allocate enough space to read the entire file in one go.
+         *
+         * @return u32 The size of the file in bytes
+         */
+        u32 Size() const;
 
         /**
          * @brief Read data from a file that has been opened.
@@ -45,6 +56,25 @@ namespace C3D
             }
             return true;
         }
+
+        template <typename T>
+        bool Write(T* pData, u32 count = 1)
+        {
+            if (fwrite(pData, sizeof(T), count, m_pFile) != count)
+            {
+                ERROR_LOG("Failed to write data to file: '{}'.", m_path);
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * @brief Reads the entire contents of the file into the provided string.
+         *
+         * @param output A reference to the output string (will be resized to fit the content)
+         * @return True if succesful; false otherwise
+         */
+        bool ReadEntireFileIntoString(String& output) const;
 
     private:
         FILE* m_pFile = nullptr;

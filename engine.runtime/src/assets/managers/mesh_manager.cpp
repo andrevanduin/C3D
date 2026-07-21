@@ -4,9 +4,10 @@
 #include <meshoptimizer/src/meshoptimizer.h>
 
 #include "math/c3d_math.h"
-#include "platform/file_system.h"
+#include "platform/path.h"
 #include "renderer/vertex.h"
 #include "string/string_utils.h"
+#include "time/scoped_timer.h"
 
 namespace C3D
 {
@@ -23,7 +24,7 @@ namespace C3D
         String fullPath = String::FromFormat("{}/{}/{}.{}", m_assetPath, m_subFolder, name, "obj");
 
         // Check if the requested file exists with the current extension
-        if (!File::Exists(fullPath))
+        if (!Path::Exists(fullPath))
         {
             ERROR_LOG("Unable to find a mesh file called: '{}'.", name);
             return false;

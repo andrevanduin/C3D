@@ -6,6 +6,7 @@
 #include <platform/platform.h>
 #include <system/system_manager.h>
 
+#include "logger/logger.h"
 #include "vulkan_context.h"
 #include "vulkan_shader_module.h"
 #include "vulkan_utils.h"
@@ -102,12 +103,18 @@ namespace C3D
     void VulkanShader::PushDescriptorSet(VkCommandBuffer commandBuffer, DescriptorInfo* descriptors) const
     {
         // TODO: In vulkan < 1.4 this will cause us problems
-        vkCmdPushDescriptorSetWithTemplate(commandBuffer, m_updateTemplate, m_layout, 0, descriptors);
+        vkCmdPushDescriptorSetWithTemplate(commandBuffer, m_updateTemplate, m_pipelineLayout, 0, descriptors);
+    }
+
+    void VulkanShader::BindDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint bindpoint, u32 firstSet, u32 count,
+                                         const VkDescriptorSet* sets) const
+    {
+        vkCmdBindDescriptorSets(commandBuffer, bindpoint, m_pipelineLayout, firstSet, count, sets, 0, nullptr);
     }
 
     void VulkanShader::PushConstants(VkCommandBuffer commandBuffer, const void* data, u64 size) const
     {
-        vkCmdPushConstants(commandBuffer, m_layout, m_pushConstantStages, 0, size, data);
+        vkCmdPushConstants(commandBuffer, m_pipelineLayout, m_pushConstantStages, 0, size, data);
     }
 
     void VulkanShader::Destroy()
@@ -118,7 +125,7 @@ namespace C3D
 
             Event.Unregister(m_watchedFilesCallback);
 
-            DestroyInternal(m_setLayout, m_layout, m_pipeline, m_updateTemplate);
+            DestroyInternal();
 
             m_shaderModules.Destroy();
 
@@ -153,11 +160,14 @@ namespace C3D
             return false;
         }
 
-        auto pipelineLayout = CreatePipelineLayout(setLayout);
+        // NOTE: Array layout is optional so no need to check if it was fully created here
+        auto arrayLayout = CreateSetArrayLayout();
+
+        auto pipelineLayout = CreatePipelineLayout(setLayout, arrayLayout);
         if (!pipelineLayout)
         {
             ERROR_LOG("Failed to create PipelineLayout.");
-            DestroyInternal(setLayout);
+            DestroyInternal();
             return false;
         }
 
@@ -178,7 +188,7 @@ namespace C3D
         if (!pipeline)
         {
             ERROR_LOG("Failed to create {} Pipeline.", m_bindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS ? "Graphics" : "Compute");
-            DestroyInternal(setLayout, pipelineLayout);
+            DestroyInternal();
             return false;
         }
 
@@ -186,43 +196,46 @@ namespace C3D
         if (!updateTemplate)
         {
             ERROR_LOG("Failed to create Descriptor Update Template.");
-            DestroyInternal(setLayout, pipelineLayout, pipeline);
+            DestroyInternal();
             return false;
         }
 
-        // We created everything successfully so now we can switch out everything
-        // First we destroy our current (if they exist)
-        DestroyInternal(m_setLayout, m_layout, m_pipeline, m_updateTemplate);
+        // We created everything successfully so now we can switch out everything but we must first destroy our currents (if they exist)
+        DestroyInternal();
 
         // Then we assign our new pointers
         m_setLayout      = setLayout;
-        m_layout         = pipelineLayout;
+        m_arrayLayout    = arrayLayout;
+        m_pipelineLayout = pipelineLayout;
         m_pipeline       = pipeline;
         m_updateTemplate = updateTemplate;
 
         return true;
     }
 
-    void VulkanShader::DestroyInternal(VkDescriptorSetLayout setLayout, VkPipelineLayout pipelineLayout, VkPipeline pipeline,
-                                       VkDescriptorUpdateTemplate updateTemplate)
+    void VulkanShader::DestroyInternal()
     {
         auto device = m_context->device.GetLogical();
 
-        if (updateTemplate)
+        if (m_updateTemplate)
         {
-            vkDestroyDescriptorUpdateTemplate(device, updateTemplate, m_context->allocator);
+            vkDestroyDescriptorUpdateTemplate(device, m_updateTemplate, m_context->allocator);
         }
-        if (setLayout)
+        if (m_setLayout)
         {
-            vkDestroyDescriptorSetLayout(device, setLayout, m_context->allocator);
+            vkDestroyDescriptorSetLayout(device, m_setLayout, m_context->allocator);
         }
-        if (pipelineLayout)
+        if (m_arrayLayout)
         {
-            vkDestroyPipelineLayout(device, pipelineLayout, m_context->allocator);
+            vkDestroyDescriptorSetLayout(device, m_arrayLayout, m_context->allocator);
         }
-        if (pipeline)
+        if (m_pipelineLayout)
         {
-            vkDestroyPipeline(device, pipeline, m_context->allocator);
+            vkDestroyPipelineLayout(device, m_pipelineLayout, m_context->allocator);
+        }
+        if (m_pipeline)
+        {
+            vkDestroyPipeline(device, m_pipeline, m_context->allocator);
         }
     }
 
@@ -305,11 +318,57 @@ namespace C3D
         return setLayout;
     }
 
-    VkPipelineLayout VulkanShader::CreatePipelineLayout(VkDescriptorSetLayout setLayout)
+    VkDescriptorSetLayout VulkanShader::CreateSetArrayLayout()
     {
+        VkDescriptorSetLayoutBinding binding = {};
+
+        binding.binding         = 0;
+        binding.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        binding.descriptorCount = 65536;
+        binding.stageFlags      = 0;
+
+        for (auto shader : m_shaderModules)
+        {
+            if (shader->UsesDescriptorArray())
+            {
+                binding.stageFlags |= shader->GetShaderStage();
+            }
+        }
+
+        if (binding.stageFlags == 0) return nullptr;
+
+        // TODO: what the heck is up with VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+        VkDescriptorBindingFlags bindingFlags                       = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+        VkDescriptorSetLayoutBindingFlagsCreateInfo setBindingFlags = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
+        setBindingFlags.bindingCount                                = 1;
+        setBindingFlags.pBindingFlags                               = &bindingFlags;
+
+        VkDescriptorSetLayoutCreateInfo setCreateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+        setCreateInfo.pNext                           = &setBindingFlags;
+        setCreateInfo.bindingCount                    = 1;
+        setCreateInfo.pBindings                       = &binding;
+
+        VkDescriptorSetLayout setLayout;
+
+        auto result = vkCreateDescriptorSetLayout(m_context->device.GetLogical(), &setCreateInfo, m_context->allocator, &setLayout);
+        if (!VkUtils::IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create DescriptorSetLayout with error: '{}'.", VkUtils::ResultString(result));
+            return nullptr;
+        }
+
+        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, setLayout, String::FromFormat("DESCRIPTOR_SET_ARRAY_LAYOUT_{}", m_name));
+
+        return setLayout;
+    }
+
+    VkPipelineLayout VulkanShader::CreatePipelineLayout(VkDescriptorSetLayout setLayout, VkDescriptorSetLayout arrayLayout)
+    {
+        VkDescriptorSetLayout layouts[2] = { setLayout, arrayLayout };
+
         VkPipelineLayoutCreateInfo createInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-        createInfo.setLayoutCount             = 1;
-        createInfo.pSetLayouts                = &setLayout;
+        createInfo.setLayoutCount             = arrayLayout ? 2 : 1;
+        createInfo.pSetLayouts                = layouts;
 
         VkPushConstantRange pushConstantRange = {};
 

@@ -9,6 +9,7 @@
 #include "gltf/gltf_extensions.h"
 #include "logger/logger.h"
 #include "math/c3d_math.h"
+#include "platform/path.h"
 #include "time/scoped_timer.h"
 
 #define PARSE_ARRAY_OF_OBJECTS_PROP(name, parseFunc, asset)           \
@@ -126,7 +127,7 @@ namespace C3D
         String fullPath = String::FromFormat("{}/{}.{}", rootPath, name, "gltf");
 
         // Check if the requested file exists with the current extension
-        if (!File::Exists(fullPath))
+        if (!Path::Exists(fullPath))
         {
             ERROR_LOG("Unable to find a scene file called: '{}'.", name);
             return false;
@@ -400,7 +401,7 @@ namespace C3D
                     source                   = ddsExtension.source;
                 }
 
-                scene.textures.PushBack(asset.images[source].uri);
+                scene.textures.PushBack(String::FromFormat("{}/{}/{}/{}", m_assetPath, m_subFolder, scene.name, asset.images[source].uri));
             }
         }
 

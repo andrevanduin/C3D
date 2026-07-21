@@ -74,6 +74,15 @@ namespace C3D
         device12Features.samplerFilterMinmax               = VK_TRUE;
         device12Features.scalarBlockLayout                 = VK_TRUE;
 
+        // Bindless features
+        device12Features.descriptorIndexing                           = VK_TRUE;
+        device12Features.shaderSampledImageArrayNonUniformIndexing    = VK_TRUE;
+        device12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+        device12Features.descriptorBindingUpdateUnusedWhilePending    = VK_TRUE;
+        device12Features.descriptorBindingPartiallyBound              = VK_TRUE;
+        device12Features.descriptorBindingVariableDescriptorCount     = VK_TRUE;
+        device12Features.runtimeDescriptorArray                       = VK_TRUE;
+
         device11Features.pNext = &device12Features;
 
         // Enable Vulkan 1.3 features
