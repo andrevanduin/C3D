@@ -146,7 +146,8 @@ namespace C3D
          * @param reductionMode The reduction mode used by the sampler
          * @return A VkSampler if successful; nullptr otherwise
          */
-        VkSampler CreateSampler(VulkanContext* context, const String& name, VkSamplerReductionMode reductionMode);
+        VkSampler CreateSampler(VulkanContext* context, const String& name, VkSamplerMipmapMode mipmapMode, VkSamplerAddressMode addressMode,
+                                VkSamplerReductionMode reductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE);
 
         /**
          * @brief Create a Vulkan Semaphore.

@@ -226,7 +226,7 @@ namespace C3D
         const auto& bufferView = bufferViews[accessor->bufferView];
         // Get the associated buffer
         auto& buffer = buffers[bufferView.buffer];
-        // Copy the data over with simply memcpy
+        // Copy the data over with a simple memcpy
         std::memcpy(destination, buffer.GetData(bufferView.byteOffset), bufferView.byteLength);
         return true;
     }

@@ -60,7 +60,10 @@ layout (binding = 5) readonly buffer ClusterIndices
 // Only usable with task shader (TASK=true)
 taskPayloadSharedEXT MeshTaskPayload payload;
 
-layout (location = 0) out vec4 color[];
+layout(location = 0) out flat uint outDrawId[];
+layout(location = 1) out vec2 outUv[];
+layout(location = 2) out vec3 outNormal[];
+layout(location = 3) out vec4 outTangent[];
 
 #if DEBUG
 uint pcg_hash(uint a)
@@ -116,14 +119,19 @@ void main()
 
         vec3 position = vec3(v.x, v.y, v.z);
         vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
-        vec2 texCoord = vec2(v.u, v.v);
+        vec4 tangent = vec4(v.tx, v.ty, v.tz, v.tw) / 127.0 - 1.0;
+        vec2 texCoord = vec2(v.tu, v.tv);
 
         normal = RotateVecByQuat(normal, meshDraw.orientation);
+        tangent.xyz = RotateVecByQuat(tangent.xyz, meshDraw.orientation);
 
         vec4 clip = globals.projection * (globals.cullData.view * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1));
 
         gl_MeshVerticesEXT[i].gl_Position = clip;        
-        color[i] = vec4(normal * 0.5 + vec3(0.5), 1.0);
+        outDrawId[i] = command.drawId;
+        outUv[i] = texCoord;
+        outNormal[i] = normal;
+        outTangent[i] = tangent;
 
     #if CULL
         vertexClip[i] = vec3((clip.xy / clip.w * 0.5 + vec2(0.5)) * screen, clip.w);

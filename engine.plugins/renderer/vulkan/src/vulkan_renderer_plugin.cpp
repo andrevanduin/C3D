@@ -609,7 +609,8 @@ namespace C3D
         }
 
         // Create our depth sampler
-        m_depthSampler = VkUtils::CreateSampler(&m_context, "DEPTH_SAMPLER", VK_SAMPLER_REDUCTION_MODE_MIN);
+        m_depthSampler = VkUtils::CreateSampler(&m_context, "DEPTH_SAMPLER", VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                                                VK_SAMPLER_REDUCTION_MODE_MIN);
         if (!m_depthSampler)
         {
             ERROR_LOG("Failed to create depth sampler.");
@@ -617,7 +618,7 @@ namespace C3D
         }
 
         // Create our texture sampler
-        m_textureSampler = VkUtils::CreateSampler(&m_context, "TEXTURE_SAMPLER", VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE);
+        m_textureSampler = VkUtils::CreateSampler(&m_context, "TEXTURE_SAMPLER", VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
         if (!m_textureSampler)
         {
             ERROR_LOG("Failed to create texture sampler.");
@@ -1569,10 +1570,11 @@ namespace C3D
         VkWriteDescriptorSet write = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
         write.dstSet               = m_textureDescriptorSet;
         write.dstBinding           = 0;
-        write.dstArrayElement      = m_textures.Size();
-        write.descriptorCount      = 1;
-        write.descriptorType       = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write.pImageInfo           = &imageInfo;
+        // Ensure we start indexing at 1 since 0 will be our "missing" texture
+        write.dstArrayElement = m_textures.Size() + 1;
+        write.descriptorCount = 1;
+        write.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.pImageInfo      = &imageInfo;
 
         vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, nullptr);
 

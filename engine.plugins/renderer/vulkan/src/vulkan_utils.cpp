@@ -424,19 +424,20 @@ namespace C3D
         return result;
     }
 
-    VkSampler VkUtils::CreateSampler(VulkanContext* context, const String& name, VkSamplerReductionMode reductionMode)
+    VkSampler VkUtils::CreateSampler(VulkanContext* context, const String& name, VkSamplerMipmapMode mipmapMode, VkSamplerAddressMode addressMode,
+                                     VkSamplerReductionMode reductionMode)
     {
         // TODO: Make more configurable in the future
         VkSamplerCreateInfo createInfo = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
-        createInfo.minLod       = 0;
-        createInfo.maxLod       = 16.f;
         createInfo.magFilter    = VK_FILTER_LINEAR;
         createInfo.minFilter    = VK_FILTER_LINEAR;
-        createInfo.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        createInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        createInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        createInfo.mipmapMode   = mipmapMode;
+        createInfo.addressModeU = addressMode;
+        createInfo.addressModeV = addressMode;
+        createInfo.addressModeW = addressMode;
+        createInfo.minLod       = 0;
+        createInfo.maxLod       = 16.f;
 
         VkSamplerReductionModeCreateInfo createInfoReduction = { VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO };
 
