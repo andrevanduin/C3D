@@ -3,7 +3,9 @@
 
 #include <meshoptimizer/src/meshoptimizer.h>
 
+#include "assets/managers/texture_manager.h"
 #include "cson/cson_types.h"
+#include "logger/logger.h"
 #include "math/c3d_math.h"
 #include "mesh.h"
 #include "renderer_plugin.h"
@@ -199,6 +201,33 @@ namespace C3D
         INFO_LOG("Meshlet generation took: {:2.f}ms", meshletGenerationClock.GetTotalElapsedMs());
 
         return m_backendPlugin->UploadGeometry(window, m_geometry);
+    }
+
+    bool RenderSystem::UploadTextures(const Window& window, const DynamicArray<String>& texturePaths)
+    {
+        TextureManager textureManager;
+        TextureAsset texture;
+
+        // Use the staging buffer directly to write the texture data to temporarily before uploading to GPU memory
+        texture.buffer     = m_backendPlugin->GetStagingBuffer();
+        texture.bufferSize = m_backendPlugin->GetStagingBufferSize();
+
+        for (const auto& texturePath : texturePaths)
+        {
+            if (!textureManager.Read(texturePath, texture))
+            {
+                ERROR_LOG("Failed to parse texture: '{}'.", texturePath);
+                return false;
+            }
+
+            if (!m_backendPlugin->UploadTexture(window, texture))
+            {
+                ERROR_LOG("Failed to upload texture: '{}'.", texturePath);
+                return false;
+            }
+        }
+
+        return true;
     }
 
     bool RenderSystem::GenerateDrawCommands(const Window& window) const { return m_backendPlugin->GenerateDrawCommands(window, m_geometry); }

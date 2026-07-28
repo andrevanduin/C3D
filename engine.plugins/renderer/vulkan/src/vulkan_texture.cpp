@@ -29,7 +29,7 @@ namespace C3D
         m_aspectMask = FormatToAspectMask(createInfo.format);
         m_mipLevels  = createInfo.mipLevels;
 
-        INFO_LOG("Creating: '{}'", m_name);
+        INFO_LOG("Creating: '{}'.", m_name);
 
         if (!m_context)
         {
@@ -58,8 +58,6 @@ namespace C3D
 
     bool VulkanTexture::CreateInternal(u32 width, u32 height)
     {
-        INFO_LOG("Creating: '{}'.", m_name);
-
         // After creation we start the image as VK_IMAGE_LAYOUT_UNDEFINED
         m_currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         // Keep track of the width and height of the image

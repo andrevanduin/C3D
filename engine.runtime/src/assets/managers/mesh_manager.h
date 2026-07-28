@@ -1,13 +1,7 @@
 
 #pragma once
 #include "asset_manager.h"
-#include "containers/dynamic_array.h"
-#include "platform/file_system.h"
 #include "renderer/mesh.h"
-#include "renderer/vertex.h"
-#include "system/system_manager.h"
-#include "time/clock.h"
-#include "time/scoped_timer.h"
 
 namespace C3D
 {

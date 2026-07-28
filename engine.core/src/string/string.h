@@ -8,7 +8,6 @@
 #include "defines.h"
 #include "logger/logger.h"
 #include "math/math_types.h"
-#include "memory/global_memory_system.h"
 
 namespace C3D
 {
@@ -469,14 +468,14 @@ namespace C3D
          * This method allocates enough space for capacity and sets the internal size to capacity - 1
          * It also makes sure that the final character is a null-terminator
          *
-         * @param capacity The capacity required for the content (including null-terminator)
+         * @param size The size required for the content
          */
-        void PrepareForReadFromFile(u64 capacity)
+        void PrepareForReadFromFile(u64 size)
         {
-            // Reserve enough space for the incoming text
-            Reserve(capacity);
+            // Reserve enough space for the incoming text + a null-terminator
+            Reserve(size + 1);
             // Set the size so we can properly read in the content from a file
-            m_size = capacity - 1;
+            m_size = size;
             // Ensure our string is still null-terminated
             m_data[m_size] = '\0';
         }
@@ -688,7 +687,7 @@ namespace C3D
         {
             DynamicArray<BasicString> elements;
             BasicString current;
-            for (u64 i = 0; i < m_size; i++)
+            for (u64 i = 0; i < m_size; ++i)
             {
                 if (m_data[i] == delimiter)
                 {

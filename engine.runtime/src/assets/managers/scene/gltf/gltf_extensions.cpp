@@ -1,6 +1,8 @@
 
 #include "gltf_extensions.h"
 
+#include "gltf_extension.h"
+
 namespace C3D
 {
     void CleanupGLTFExtension(GLTFExtension& extension)
@@ -15,6 +17,8 @@ namespace C3D
                     ext.lights.Destroy();
                     break;
                 }
+                default:
+                    break;
             }
 
             Memory.Delete(extension.data);

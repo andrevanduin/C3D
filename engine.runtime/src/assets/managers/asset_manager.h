@@ -1,8 +1,6 @@
 
 #pragma once
 #include "assets/types.h"
-#include "logger/logger.h"
-#include "platform/file_system.h"
 #include "string/string.h"
 
 namespace C3D
@@ -21,7 +19,5 @@ namespace C3D
         String m_assetPath;
         /** @brief The subfolder where this asset type is stored (starting from the base asset folder) */
         const char* m_subFolder = nullptr;
-        /** @brief File object used to access the file on disk. */
-        File m_file;
     };
 }  // namespace C3D

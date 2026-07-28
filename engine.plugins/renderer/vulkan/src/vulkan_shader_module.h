@@ -32,6 +32,7 @@ namespace C3D
         const VkDescriptorType* GetResourceTypes() const { return m_resourceTypes; }
 
         bool UsesPushConstants() const { return m_usePushConstants; }
+        bool UsesDescriptorArray() const { return m_useDescriptorArray; }
 
         u32 GetLocalSizeX() const { return m_localSizeX; }
         u32 GetLocalSizeY() const { return m_localSizeY; }
@@ -56,8 +57,10 @@ namespace C3D
         /** @brief A collection of all the types of descriptors in the module. */
         VkDescriptorType m_resourceTypes[32];
         u32 m_resourceMask = 0;
-        /** @brief A boolean indicating if this shader will use push constants. */
+        /** @brief A boolean indicating if this shader uses push constants. */
         bool m_usePushConstants = false;
+        /** @brief A boolean indicating if this shader uses descriptor array. */
+        bool m_useDescriptorArray = false;
         /** @brief The shader's local size. */
         u32 m_localSizeX = 0, m_localSizeY = 0, m_localSizeZ = 0;
         /** @brief A handle to the underlying Vulkan Shader Module. */

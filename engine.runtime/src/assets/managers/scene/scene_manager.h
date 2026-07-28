@@ -16,6 +16,7 @@ namespace C3D
 
         DynamicArray<MeshAsset> meshes;
         DynamicArray<MeshDraw> draws;
+        DynamicArray<String> textures;
     };
 
     class C3D_API SceneManager final : public IAssetManager

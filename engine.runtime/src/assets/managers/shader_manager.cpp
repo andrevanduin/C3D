@@ -2,9 +2,9 @@
 #include "shader_manager.h"
 
 #include "logger/logger.h"
-#include "platform/file_system.h"
+#include "platform/file.h"
+#include "platform/path.h"
 #include "string/string_utils.h"
-#include "system/system_manager.h"
 #include "time/scoped_timer.h"
 
 namespace C3D
@@ -31,7 +31,7 @@ namespace C3D
         for (auto extension : EXTENSIONS)
         {
             fullPath = String::FromFormat("{}/{}/{}.{}", m_assetPath, m_subFolder, name, extension);
-            if (File::Exists(fullPath))
+            if (Path::Exists(fullPath))
             {
                 correctExtension = extension;
                 break;
@@ -78,7 +78,7 @@ namespace C3D
     bool ShaderManager::LoadShaderSource(const String& name, const String& path, ShaderAsset& asset)
     {
         File file;
-        if (!file.Open(path, FileModeRead | FileModeBinary))
+        if (!file.Open(path, "rb"))
         {
             ERROR_LOG("Found file: '{}' but was unable to open it for reading.", path);
             return false;
@@ -86,28 +86,18 @@ namespace C3D
 
         asset.path = path;
 
-        u64 fileSize = 0;
-        if (!file.Size(&fileSize))
-        {
-            ERROR_LOG("Unable to get size of file: '{}'.", path);
-            file.Close();
-            return false;
-        }
-
-        asset.source = Memory.Allocate<char>(MemoryType::Array, fileSize);
+        asset.size   = file.Size();
+        asset.source = Memory.Allocate<char>(MemoryType::Array, asset.size);
         asset.name   = name;
 
-        if (!file.ReadAll(asset.source, &asset.size))
+        if (!file.Read(asset.source, asset.size))
         {
             ERROR_LOG("Unable to read data from file: '{}'.", path);
-            file.Close();
             return false;
         }
 
         // Find and resolve all #include statements
         FindAndResolveIncludes(asset);
-
-        file.Close();
 
         return true;
     }

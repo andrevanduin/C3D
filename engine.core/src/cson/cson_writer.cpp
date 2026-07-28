@@ -1,7 +1,7 @@
 
 #include "cson_writer.h"
 
-#include "platform/file_system.h"
+#include "platform/file.h"
 
 namespace C3D
 {
@@ -159,7 +159,7 @@ namespace C3D
     bool CSONWriter::WriteToFile(const CSONObject& object, const String& path)
     {
         File file;
-        if (!file.Open(path, FileModeWrite))
+        if (!file.Open(path, "w"))
         {
             ERROR_LOG("Failed to open CSON file: '{}'.", path);
             return false;

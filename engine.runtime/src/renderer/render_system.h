@@ -22,6 +22,7 @@ namespace C3D
         bool CreateResources() const;
 
         bool UploadMeshes(const Window& window, const DynamicArray<MeshAsset>& meshes);
+        bool UploadTextures(const Window& window, const DynamicArray<String>& texturePaths);
 
         bool GenerateDrawCommands(const Window& window) const;
         bool UploadDrawCommands(const Window& window, const DynamicArray<MeshDraw>& draws) const;

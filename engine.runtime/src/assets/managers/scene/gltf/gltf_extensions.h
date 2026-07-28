@@ -55,7 +55,7 @@ namespace C3D
     };
 
     constexpr auto MSFT_TEXTURE_DDS = "MSFT_texture_dds";
-    struct GLTFTextureDDS
+    struct GLTFTextureDDSExtension
     {
         u32 source;
     };

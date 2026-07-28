@@ -51,6 +51,7 @@ namespace C3D
         VkPhysicalDeviceFeatures2 deviceFeatures2        = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
         deviceFeatures2.features.multiDrawIndirect       = VK_TRUE;
         deviceFeatures2.features.pipelineStatisticsQuery = VK_TRUE;
+        deviceFeatures2.features.samplerAnisotropy       = VK_TRUE;
 
         createInfo.pNext = &deviceFeatures2;
 
@@ -73,6 +74,15 @@ namespace C3D
         device12Features.shaderInt8                        = VK_TRUE;
         device12Features.samplerFilterMinmax               = VK_TRUE;
         device12Features.scalarBlockLayout                 = VK_TRUE;
+
+        // Bindless features
+        device12Features.descriptorIndexing                           = VK_TRUE;
+        device12Features.shaderSampledImageArrayNonUniformIndexing    = VK_TRUE;
+        device12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+        device12Features.descriptorBindingUpdateUnusedWhilePending    = VK_TRUE;
+        device12Features.descriptorBindingPartiallyBound              = VK_TRUE;
+        device12Features.descriptorBindingVariableDescriptorCount     = VK_TRUE;
+        device12Features.runtimeDescriptorArray                       = VK_TRUE;
 
         device11Features.pNext = &device12Features;
 
@@ -386,6 +396,7 @@ namespace C3D
             INFO_LOG("Limits:");
             INFO_LOG("Max PushConstants size: {} Bytes", props.limits.maxPushConstantsSize);
             INFO_LOG("Max DrawIndirect count: {}", props.limits.maxDrawIndirectCount);
+            INFO_LOG("Max DescriptorSampledImages: {}", props.limits.maxDescriptorSetSampledImages);
 
             // We have found our perfect GPU let's save off it's handle and break
             m_physical.handle = current;

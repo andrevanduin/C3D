@@ -1,8 +1,7 @@
 
 #include "cson_reader.h"
 
-#include "asserts/asserts.h"
-#include "platform/file_system.h"
+#include "platform/file.h"
 #include "string/string_utils.h"
 
 namespace C3D
@@ -32,18 +31,19 @@ namespace C3D
     bool CSONReader::ReadFromFile(const String& path, CSONObject& output)
     {
         File file;
-        if (!file.Open(path, FileModeRead))
+        if (!file.Open(path, "rb"))
         {
             ERROR_LOG("Failed to open CSON file: '{}'.", path);
             return false;
         }
 
         String input;
-        if (!file.ReadAll(input))
+        if (!file.ReadEntireFileIntoString(input))
         {
             ERROR_LOG("Failed to read CSON file: '{}'.", path);
             return false;
         }
+
         return Read(input, output);
     }
 
@@ -53,6 +53,7 @@ namespace C3D
         {
             case ' ':
             case '\t':
+            case '\r':
                 // Switch to parsing whitespace
                 m_tokenizeMode = CSONTokenizeMode::Whitespace;
                 outToken       = CSONToken(CSONTokenType::Whitespace, index, line);

@@ -43,4 +43,5 @@
 # User added items
 build
 *.spv
-.vscode
+.vscode/
+.cache

@@ -3,9 +3,14 @@
 
 #include <meshoptimizer/src/meshoptimizer.h>
 
+#include "asserts/asserts.h"
+#include "defines.h"
 #include "gltf/gltf_asset_types.h"
+#include "gltf/gltf_extension.h"
 #include "gltf/gltf_extensions.h"
+#include "logger/logger.h"
 #include "math/c3d_math.h"
+#include "platform/path.h"
 #include "time/scoped_timer.h"
 
 #define PARSE_ARRAY_OF_OBJECTS_PROP(name, parseFunc, asset)           \
@@ -123,7 +128,7 @@ namespace C3D
         String fullPath = String::FromFormat("{}/{}.{}", rootPath, name, "gltf");
 
         // Check if the requested file exists with the current extension
-        if (!File::Exists(fullPath))
+        if (!Path::Exists(fullPath))
         {
             ERROR_LOG("Unable to find a scene file called: '{}'.", name);
             return false;
@@ -240,23 +245,23 @@ namespace C3D
 
             {
                 // Get the positions
-                auto posAccesor = asset.FindAccessor(primitive, "POSITION");
-                C3D_ASSERT(posAccesor);
-                C3D_ASSERT(posAccesor->type == GLTFAccessorType::Vec3);
-                C3D_ASSERT(posAccesor->componentType == GLTF_FLOAT);
+                auto posAccessor = asset.FindAccessor(primitive, "POSITION");
+                C3D_ASSERT(posAccessor);
+                C3D_ASSERT(posAccessor->type == GLTFAccessorType::Vec3);
+                C3D_ASSERT(posAccessor->componentType == GLTF_FLOAT);
 
-                // Ensure our scratch buffer to have enough space
-                if (scratchBuffer.Size() < posAccesor->count * 4)
+                // Ensure our scratch buffer has enough space
+                if (scratchBuffer.Size() < posAccessor->count * 4)
                 {
-                    scratchBuffer.Resize(posAccesor->count * 4);
+                    scratchBuffer.Resize(posAccessor->count * 4);
                 }
 
                 // Resize our vertices array to have enough space
-                sceneMesh.vertices.Resize(posAccesor->count);
+                sceneMesh.vertices.Resize(posAccessor->count);
                 // Unpack positions into our scratchBuffer
-                asset.UnpackFloats(scratchBuffer.GetData(), posAccesor);
+                asset.UnpackFloats(scratchBuffer.GetData(), posAccessor);
                 // Store the positions into our vertices
-                for (u32 i = 0; i < posAccesor->count; ++i)
+                for (u32 i = 0; i < posAccessor->count; ++i)
                 {
                     sceneMesh.vertices[i].pos.x = scratchBuffer[i * 3 + 0];
                     sceneMesh.vertices[i].pos.y = scratchBuffer[i * 3 + 1];
@@ -264,19 +269,36 @@ namespace C3D
                 }
 
                 // Get the normals
-                auto normalAccesor = asset.FindAccessor(primitive, "NORMAL");
-                C3D_ASSERT(normalAccesor);
-                C3D_ASSERT(normalAccesor->type == GLTFAccessorType::Vec3);
-                C3D_ASSERT(normalAccesor->componentType == GLTF_FLOAT);
+                auto normalAccessor = asset.FindAccessor(primitive, "NORMAL");
+                C3D_ASSERT(normalAccessor);
+                C3D_ASSERT(normalAccessor->type == GLTFAccessorType::Vec3);
+                C3D_ASSERT(normalAccessor->componentType == GLTF_FLOAT);
 
                 // Unpack normals into our scratchBuffer
-                asset.UnpackFloats(scratchBuffer.GetData(), normalAccesor);
+                asset.UnpackFloats(scratchBuffer.GetData(), normalAccessor);
                 // Store the normals into our vertices
-                for (u32 i = 0; i < posAccesor->count; ++i)
+                for (u32 i = 0; i < normalAccessor->count; ++i)
                 {
                     sceneMesh.vertices[i].nx = static_cast<u8>(scratchBuffer[i * 3 + 0] * 127.f + 127.5f);
                     sceneMesh.vertices[i].ny = static_cast<u8>(scratchBuffer[i * 3 + 1] * 127.f + 127.5f);
                     sceneMesh.vertices[i].nz = static_cast<u8>(scratchBuffer[i * 3 + 2] * 127.f + 127.5f);
+                }
+
+                // Get the tangents
+                auto tangentAccessor = asset.FindAccessor(primitive, "TANGENT");
+                C3D_ASSERT(tangentAccessor);
+                C3D_ASSERT(tangentAccessor->type == GLTFAccessorType::Vec4);
+                C3D_ASSERT(tangentAccessor->componentType == GLTF_FLOAT);
+
+                // Unpack tangents into our scratchBuffer
+                asset.UnpackFloats(scratchBuffer.GetData(), tangentAccessor);
+                // Store the tangents into our vertices
+                for (u32 i = 0; i < tangentAccessor->count; ++i)
+                {
+                    sceneMesh.vertices[i].tx = static_cast<u8>(scratchBuffer[i * 3 + 0] * 127.f + 127.5f);
+                    sceneMesh.vertices[i].ty = static_cast<u8>(scratchBuffer[i * 3 + 1] * 127.f + 127.5f);
+                    sceneMesh.vertices[i].tz = static_cast<u8>(scratchBuffer[i * 3 + 2] * 127.f + 127.5f);
+                    sceneMesh.vertices[i].tw = static_cast<u8>(scratchBuffer[i * 3 + 3] * 127.f + 127.5f);
                 }
 
                 // Get the texture coordinates
@@ -288,19 +310,21 @@ namespace C3D
                 // Unpack texCoords into our scratchBuffer
                 asset.UnpackFloats(scratchBuffer.GetData(), texAccessor);
                 // Store the texCoords into our vertices
-                for (u32 i = 0; i < posAccesor->count; ++i)
+                for (u32 i = 0; i < texAccessor->count; ++i)
                 {
-                    sceneMesh.vertices[i].tx = QuantizeHalf(scratchBuffer[i * 3 + 0]);
-                    sceneMesh.vertices[i].ty = QuantizeHalf(scratchBuffer[i * 3 + 1]);
+                    sceneMesh.vertices[i].tu = QuantizeHalf(scratchBuffer[i * 2 + 0]);
+                    sceneMesh.vertices[i].tv = QuantizeHalf(scratchBuffer[i * 2 + 1]);
                 }
 
                 {
                     ScopedTimer timer(String::FromFormat("Remapping vertex and index buffers of: '{}'.", sceneMesh.name));
-                    
-                    DynamicArray<u32> remap(sceneMesh.indices.Size());
-                    u64 uniqueVertices = meshopt_generateVertexRemap(remap.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(), sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex));
 
-                    meshopt_remapVertexBuffer(sceneMesh.vertices.GetData(), sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex), remap.GetData());
+                    DynamicArray<u32> remap(sceneMesh.indices.Size());
+                    u64 uniqueVertices = meshopt_generateVertexRemap(remap.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(),
+                                                                     sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex));
+
+                    meshopt_remapVertexBuffer(sceneMesh.vertices.GetData(), sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex),
+                                              remap.GetData());
                     meshopt_remapIndexBuffer(sceneMesh.indices.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(), remap.GetData());
 
                     INFO_LOG("Went from {} vertices to {} vertices.", sceneMesh.vertices.Size(), uniqueVertices);
@@ -317,6 +341,10 @@ namespace C3D
                     meshopt_optimizeVertexCache(sceneMesh.indices.GetData(), sceneMesh.indices.GetData(), indexCount, vertexCount);
                     meshopt_optimizeVertexFetch(sceneMesh.vertices.GetData(), sceneMesh.indices.GetData(), indexCount, sceneMesh.vertices.GetData(),
                                                 vertexCount, sizeof(Vertex));
+                }
+
+                {
+                    ScopedTimer timer(String::FromFormat("Parsing materials for: '{}'.", sceneMesh.name));
                 }
 
                 scene.meshes.PushBack(sceneMesh);
@@ -344,6 +372,51 @@ namespace C3D
                     draw.orientation = quat(rotation[3], rotation[0], rotation[1], rotation[2]);
                     draw.meshIndex   = node.mesh;
 
+                    // Get the material for this node
+                    auto materialIndex = asset.meshes[node.mesh].primitives[0].material;
+                    if (materialIndex != INVALID_ID)
+                    {
+                        // Get the material by the material index
+                        auto material = asset.materials[materialIndex];
+
+                        // Get the diffuse texture from the pbr material extension if it exists
+                        if (!material.extensions.Empty())
+                        {
+                            auto extension = asset.materials[materialIndex].extensions[0];
+                            if (extension.type == GLTFExtensionType::PBRSpecularGlossiness)
+                            {
+                                auto pbrExtension = extension.Get<GLTFPBRSpecularGlossinessExtension>();
+                                if (pbrExtension.diffuseTexture.index != INVALID_ID)
+                                {
+                                    draw.albedoTexture = pbrExtension.diffuseTexture.index + 1;
+                                }
+                                if (pbrExtension.specularGlossinessTexture.index != INVALID_ID)
+                                {
+                                    draw.specularTexture = pbrExtension.specularGlossinessTexture.index + 1;
+                                }
+                            }
+                        }
+
+                        // Get the normal from the material  (if provided)
+                        if (material.normalTexture.info.index != INVALID_ID)
+                        {
+                            draw.normalTexture = material.normalTexture.info.index + 1;
+                        }
+
+                        // Get the emissive texture from the material (if provided)
+                        if (material.emissiveTexture.index != INVALID_ID)
+                        {
+                            draw.emissiveTexture = material.emissiveTexture.index + 1;
+                        }
+
+                        // Determine if our object is fully opaque
+                        if (material.alphaMode != GLTFMaterialAlphaMode::Opaque)
+                        {
+                            // If not then we mark this to be rendered in the post pass
+                            draw.postPass = 1;
+                        }
+                    }
+
                     scene.draws.PushBack(draw);
                 }
 
@@ -367,6 +440,32 @@ namespace C3D
             }
 
             INFO_LOG("Loaded {} meshes and {} draws.", scene.meshes.Size(), scene.draws.Size());
+        }
+
+        {
+            // Parse textures
+            for (const auto& texture : asset.textures)
+            {
+                u32 source = 0;
+
+                if (texture.extensions.Empty())
+                {
+                    // No extensions, parse normally
+                    source = texture.source;
+                }
+                else
+                {
+                    C3D_ASSERT(texture.extensions.Size() == 1);
+
+                    auto& extension = texture.extensions[0];
+                    C3D_ASSERT(extension.type == GLTFExtensionType::TextureDDS);
+
+                    const auto& ddsExtension = extension.Get<GLTFTextureDDSExtension>();
+                    source                   = ddsExtension.source;
+                }
+
+                scene.textures.PushBack(String::FromFormat("{}/{}/{}/{}", m_assetPath, m_subFolder, scene.name, asset.images[source].uri));
+            }
         }
 
         return true;
@@ -1013,7 +1112,7 @@ namespace C3D
 
         // Optional material extensions
         CSONObject extensionsObj;
-        if (!materialObj.GetPropertyValueByName("extensions", extensionsObj))
+        if (materialObj.GetPropertyValueByName("extensions", extensionsObj))
         {
             if (!ParseMaterialExtensions(extensionsObj, material.extensions))
             {
@@ -1510,7 +1609,7 @@ namespace C3D
 
     bool SceneManager::ParseTextureDDS(const CSONObject& textureDDSObj, GLTFExtension& textureExtension) const
     {
-        auto& ext = textureExtension.Allocate<GLTFTextureDDS>();
+        auto& ext = textureExtension.Allocate<GLTFTextureDDSExtension>();
 
         // Mandatory source
         if (!textureDDSObj.GetPropertyValueByName("source", ext.source))

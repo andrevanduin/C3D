@@ -7,6 +7,7 @@
 #include "vulkan_context.h"
 #include "vulkan_shader.h"
 #include "vulkan_shader_module.h"
+#include "vulkan_texture.h"
 
 namespace C3D
 {
@@ -38,6 +39,7 @@ namespace C3D
         void OnDestroyWindow(Window& window) override;
 
         bool UploadGeometry(const Window& window, const Geometry& geometry) override;
+        bool UploadTexture(const Window& window, const TextureAsset& texture) override;
 
         bool GenerateDrawCommands(const Window& window, const Geometry& geometry) override;
         bool UploadDrawCommands(const Window& window, const Geometry& geometry, const DynamicArray<MeshDraw>& draws) override;
@@ -48,14 +50,18 @@ namespace C3D
 
         bool SupportsFeature(RendererSupportFlag feature) const override;
 
+        u8* GetStagingBuffer() const override { return static_cast<u8*>(m_context.stagingBuffer.GetData()); }
+        u32 GetStagingBufferSize() const override { return m_context.stagingBuffer.GetSize(); }
+
     private:
         void BeginRendering(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
                             const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height, bool late) const;
 
         void CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const CullData& cullData, u32 timestamp,
-                      bool taskSubmit, bool late) const;
+                      bool taskSubmit, bool late, u32 postPass = 0) const;
         void RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget, const VulkanTexture& depthPyramid,
-                        const Globals& globals, const Window& window, u32 query, u32 timeStamp, bool taskSubmit, bool clusterSubmit, bool late) const;
+                        const Globals& globals, const Window& window, u32 query, u32 timeStamp, bool taskSubmit, bool clusterSubmit, bool late,
+                        u32 postPass = 0) const;
         void DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const;
 
         /** @brief A boolean indicating if we are using mesh shading. */
@@ -95,9 +101,12 @@ namespace C3D
         VulkanShader m_depthReduceShader;
 
         VulkanShader m_meshShader;
+        VulkanShader m_meshPostShader;
         VulkanShader m_meshletShader;
         VulkanShader m_meshletLateShader;
+        VulkanShader m_meshletPostShader;
         VulkanShader m_clusterMeshletShader;
+        VulkanShader m_clusterPostMeshletShader;
 
         VulkanShader m_drawCullShader;
         VulkanShader m_drawCullLateShader;
@@ -111,9 +120,15 @@ namespace C3D
         VulkanShader m_taskSubmitShader;
         VulkanShader m_clusterSubmitShader;
 
+        VkSampler m_textureSampler;
         VkSampler m_depthSampler;
 
         DynamicArray<MeshDraw> m_draws;
+        DynamicArray<VulkanTexture> m_textures;
+
+        VkDescriptorPool m_textureDescriptorPool;
+        VkDescriptorSetLayout m_textureDescriptorSetLayout;
+        VkDescriptorSet m_textureDescriptorSet;
 
         Camera m_camera;
 

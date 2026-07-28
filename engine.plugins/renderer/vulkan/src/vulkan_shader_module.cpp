@@ -466,11 +466,12 @@ namespace C3D
 
         for (auto& id : ids)
         {
-            if (id.opCode == SpvOpVariable && (id.storageClass == SpvStorageClassUniform || id.storageClass == SpvStorageClassUniformConstant ||
-                                               id.storageClass == SpvStorageClassStorageBuffer))
+            // Set 0 is reserved for push descriptors
+            if (id.opCode == SpvOpVariable &&
+                (id.storageClass == SpvStorageClassUniform || id.storageClass == SpvStorageClassUniformConstant ||
+                 id.storageClass == SpvStorageClassStorageBuffer) &&
+                id.set == 0)
             {
-                // Assume that id.type refers to a pointer to a storage buffer
-                C3D_ASSERT(id.set == 0);
                 C3D_ASSERT(id.binding < 32);
                 C3D_ASSERT(ids[id.typeId].opCode == SpvOpTypePointer);
 
@@ -481,6 +482,11 @@ namespace C3D
 
                 m_resourceTypes[id.binding] = resourceType;
                 m_resourceMask |= 1 << id.binding;
+            }
+
+            if (id.opCode == SpvOpVariable && id.storageClass == SpvStorageClassUniformConstant && id.set == 1)
+            {
+                m_useDescriptorArray = true;
             }
 
             if (id.opCode == SpvOpVariable && id.storageClass == SpvStorageClassPushConstant)

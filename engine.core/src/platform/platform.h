@@ -1,6 +1,5 @@
 
 #pragma once
-#include "containers/dynamic_array.h"
 #include "input/buttons.h"
 #include "input/input_state.h"
 #include "input/keys.h"

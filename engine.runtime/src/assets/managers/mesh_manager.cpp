@@ -3,12 +3,11 @@
 
 #include <meshoptimizer/src/meshoptimizer.h>
 
-#include "exceptions.h"
 #include "math/c3d_math.h"
-#include "platform/file_system.h"
+#include "platform/path.h"
 #include "renderer/vertex.h"
 #include "string/string_utils.h"
-#include "system/system_manager.h"
+#include "time/scoped_timer.h"
 
 namespace C3D
 {
@@ -25,7 +24,7 @@ namespace C3D
         String fullPath = String::FromFormat("{}/{}/{}.{}", m_assetPath, m_subFolder, name, "obj");
 
         // Check if the requested file exists with the current extension
-        if (!File::Exists(fullPath))
+        if (!Path::Exists(fullPath))
         {
             ERROR_LOG("Unable to find a mesh file called: '{}'.", name);
             return false;
@@ -148,8 +147,11 @@ namespace C3D
                 vertex.ny = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 1] * 127.f + 127.5f);
                 vertex.nz = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 2] * 127.f + 127.5f);
 
-                vertex.tx = (vti == FACE_INDEX_NOT_POPULATED) ? 0 : QuantizeHalf(m_vts.data[vti * 3 + 0]);
-                vertex.ty = (vti == FACE_INDEX_NOT_POPULATED) ? 0 : QuantizeHalf(m_vts.data[vti * 3 + 1]);
+                vertex.tx = vertex.ty = vertex.tz = 127;
+                vertex.tw                         = 254;
+
+                vertex.tu = (vti == FACE_INDEX_NOT_POPULATED) ? 0 : QuantizeHalf(m_vts.data[vti * 2 + 0]);
+                vertex.tv = (vti == FACE_INDEX_NOT_POPULATED) ? 0 : QuantizeHalf(m_vts.data[vti * 2 + 1]);
 
                 vertices.EmplaceBack(vertex);
             }

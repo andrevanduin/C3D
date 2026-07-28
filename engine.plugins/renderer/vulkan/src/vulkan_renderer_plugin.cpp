@@ -12,12 +12,17 @@
 #include <random/random.h>
 #include <shaderc/shaderc.h>
 #include <system/system_manager.h>
+#include <time/scoped_timer.h>
 
+#include "assets/types/texture_types.h"
+#include "defines.h"
 #include "platform/vulkan_platform.h"
 #include "vulkan_allocator.h"
 #include "vulkan_debugger.h"
 #include "vulkan_instance.h"
+#include "vulkan_shader.h"
 #include "vulkan_swapchain.h"
+#include "vulkan_texture.h"
 #include "vulkan_types.h"
 #include "vulkan_utils.h"
 
@@ -67,7 +72,9 @@ namespace C3D
             return false;
         }
 
-        volkLoadDevice(m_context.device.GetLogical());
+        auto device = m_context.device.GetLogical();
+
+        volkLoadDevice(device);
 
         // Initialize shaderc
         m_context.shaderCompiler = shaderc_compiler_initialize();
@@ -80,13 +87,13 @@ namespace C3D
         // Create our query pool for timestamps
         m_queryPoolTimestamps = VkUtils::CreateQueryPool(&m_context, 128, VK_QUERY_TYPE_TIMESTAMP);
         // And for pipeline statistics
-        m_queryPoolStatistics = VkUtils::CreateQueryPool(&m_context, 2, VK_QUERY_TYPE_PIPELINE_STATISTICS);
+        m_queryPoolStatistics = VkUtils::CreateQueryPool(&m_context, 3, VK_QUERY_TYPE_PIPELINE_STATISTICS);
 
         // Create our buffers
-        if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(64), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(128), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
         {
-            ERROR_LOG("Failed to create vertex buffer.");
+            ERROR_LOG("Failed to create staging buffer.");
             return false;
         }
 
@@ -234,6 +241,8 @@ namespace C3D
     {
         INFO_LOG("Shutting down.");
 
+        auto device = m_context.device.GetLogical();
+
         Event.UnregisterAll(EventCodeDebug0);
         Event.UnregisterAll(EventCodeDebug1);
 
@@ -245,7 +254,26 @@ namespace C3D
             m_context.shaderCompiler = nullptr;
         }
 
+        INFO_LOG("Destroying Vulkan Textures.");
+        for (auto& texture : m_textures)
+        {
+            texture.Destroy();
+        }
+        m_textures.Destroy();
+
+        INFO_LOG("Destroying Texture descriptor pool and layout");
+        if (m_textureDescriptorSetLayout)
+        {
+            vkDestroyDescriptorSetLayout(device, m_textureDescriptorSetLayout, m_context.allocator);
+        }
+        if (m_textureDescriptorPool)
+        {
+            vkDestroyDescriptorPool(device, m_textureDescriptorPool, m_context.allocator);
+        }
+
         INFO_LOG("Destroying Vulkan buffers.");
+
+        m_context.stagingBuffer.Destroy();
         m_vertexBuffer.Destroy();
         m_indexBuffer.Destroy();
         m_meshBuffer.Destroy();
@@ -253,8 +281,6 @@ namespace C3D
         m_drawCommandBuffer.Destroy();
         m_drawCommandCountBuffer.Destroy();
         m_drawVisibilityBuffer.Destroy();
-
-        m_context.stagingBuffer.Destroy();
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
@@ -267,6 +293,7 @@ namespace C3D
 
         INFO_LOG("Destroying Vulkan Shaders.");
         m_meshShader.Destroy();
+        m_meshPostShader.Destroy();
         m_meshShaderModule.Destroy();
         m_fragmentShaderModule.Destroy();
 
@@ -294,18 +321,21 @@ namespace C3D
         {
             m_meshletShader.Destroy();
             m_meshletLateShader.Destroy();
+            m_meshletPostShader.Destroy();
             m_clusterMeshletShader.Destroy();
+            m_clusterPostMeshletShader.Destroy();
 
             m_meshletShaderModule.Destroy();
             m_meshletTaskShaderModule.Destroy();
         }
 
         INFO_LOG("Destroying Vulkan Samplers.");
-        vkDestroySampler(m_context.device.GetLogical(), m_depthSampler, m_context.allocator);
+        vkDestroySampler(device, m_depthSampler, m_context.allocator);
+        vkDestroySampler(device, m_textureSampler, m_context.allocator);
 
         INFO_LOG("Destroying Query pools");
-        vkDestroyQueryPool(m_context.device.GetLogical(), m_queryPoolTimestamps, m_context.allocator);
-        vkDestroyQueryPool(m_context.device.GetLogical(), m_queryPoolStatistics, m_context.allocator);
+        vkDestroyQueryPool(device, m_queryPoolTimestamps, m_context.allocator);
+        vkDestroyQueryPool(device, m_queryPoolStatistics, m_context.allocator);
 
         m_context.device.Destroy();
 
@@ -367,6 +397,31 @@ namespace C3D
         if (!m_clusterSubmitShaderModule.Create(&m_context, "cluster_submit.comp"))
         {
             ERROR_LOG("Failed to create cluster_submit.comp ShaderModule.");
+            return false;
+        }
+
+        m_textureDescriptorSetLayout = VkUtils::CreateDescriptorSetLayout(
+            &m_context, "TEXTURE_DESCRIPTOR_SET_LAYOUT", 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_DESCRIPTROS, VK_SHADER_STAGE_FRAGMENT_BIT,
+            VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT);
+
+        if (!m_textureDescriptorSetLayout)
+        {
+            ERROR_LOG("Failed to create Texture Descriptor Set Layout.");
+            return false;
+        }
+
+        m_textureDescriptorPool = VkUtils::CreateDescriptorPool(&m_context, "TEXTURE_DESCRIPTOR_POOL", MAX_ACTIVE_DESCRIPTORS);
+        if (!m_textureDescriptorPool)
+        {
+            ERROR_LOG("Failed to create Texture Descriptor Pool.");
+            return false;
+        }
+
+        m_textureDescriptorSet =
+            VkUtils::CreateDescriptorSet(&m_context, "TEXTURE_DESCRIPTOR_SET", MAX_ACTIVE_DESCRIPTORS, m_textureDescriptorPool, m_textureDescriptorSetLayout);
+        if (!m_textureDescriptorSet)
+        {
+            ERROR_LOG("Failed to create Texture Descriptor Set.");
             return false;
         }
 
@@ -474,10 +529,20 @@ namespace C3D
         createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_GRAPHICS;
         createInfo.pushConstantsSize = sizeof(Globals);
         createInfo.modules           = { &m_meshShaderModule, &m_fragmentShaderModule };
+        createInfo.setArrayLayout    = m_textureDescriptorSetLayout;
 
         if (!m_meshShader.Create(createInfo))
         {
-            ERROR_LOG("Failed to create Mesh shader.");
+            ERROR_LOG("Failed to create Mesh Shader.");
+            return false;
+        }
+
+        createInfo.name      = "MESH_POST_SHADER";
+        createInfo.constants = { /* LATE= */ false, /* TASK= */ false, /* POST= */ 1 };
+
+        if (!m_meshPostShader.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create Mesh Post Shader.");
             return false;
         }
 
@@ -514,7 +579,17 @@ namespace C3D
 
             if (!m_meshletLateShader.Create(createInfo))
             {
-                ERROR_LOG("Failed to create MeshletLate shader.");
+                ERROR_LOG("Failed to create Meshlet Late shader.");
+                return false;
+            }
+
+            createInfo.name              = "MESHLET_POST_SHADER";
+            createInfo.pushConstantsSize = sizeof(Globals);
+            createInfo.constants         = { /* late = */ true, /* task = */ true, /* post = */ 1 };
+
+            if (!m_meshletPostShader.Create(createInfo))
+            {
+                ERROR_LOG("Failed to create Meshlet Post shader.");
                 return false;
             }
 
@@ -525,16 +600,34 @@ namespace C3D
 
             if (!m_clusterMeshletShader.Create(createInfo))
             {
-                ERROR_LOG("Failed to create ClusterMeshlet shader.");
+                ERROR_LOG("Failed to create Cluster Meshlet shader.");
+                return false;
+            }
+
+            createInfo.name      = "CLUSTER_POST_MESHLET_SHADER";
+            createInfo.constants = { /* late = */ false, /* task = */ false, /* post = */ 1 };
+
+            if (!m_clusterPostMeshletShader.Create(createInfo))
+            {
+                ERROR_LOG("Failed to create Cluster Post Meshlet shader.");
                 return false;
             }
         }
 
         // Create our depth sampler
-        m_depthSampler = VkUtils::CreateSampler(&m_context, "DEPTH_SAMPLER", VK_SAMPLER_REDUCTION_MODE_MIN);
+        m_depthSampler = VkUtils::CreateSampler(&m_context, "DEPTH_SAMPLER", VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                                                VK_SAMPLER_REDUCTION_MODE_MIN);
         if (!m_depthSampler)
         {
             ERROR_LOG("Failed to create depth sampler.");
+            return false;
+        }
+
+        // Create our texture sampler
+        m_textureSampler = VkUtils::CreateSampler(&m_context, "TEXTURE_SAMPLER", VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+        if (!m_textureSampler)
+        {
+            ERROR_LOG("Failed to create texture sampler.");
             return false;
         }
 
@@ -576,7 +669,7 @@ namespace C3D
     }
 
     void VulkanRendererPlugin::CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const CullData& cullData,
-                                        u32 timestamp, bool taskSubmit, bool late) const
+                                        u32 timestamp, bool taskSubmit, bool late, u32 postPass) const
     {
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, timestamp + 0);
 
@@ -605,6 +698,9 @@ namespace C3D
         VkUtils::PipelineBarrier(commandBuffer, 0, ARRAY_SIZE(fillBarriers), fillBarriers, 1, &pyramidBarrier);
 
         {
+            CullData passData = cullData;
+            passData.postPass = postPass;
+
             shader.Bind(commandBuffer);
             DescriptorInfo descriptors[] = {
                 m_drawBuffer,           m_meshBuffer,
@@ -613,7 +709,7 @@ namespace C3D
             };
             shader.PushDescriptorSet(commandBuffer, descriptors);
 
-            shader.PushConstants(commandBuffer, &cullData, sizeof(CullData));
+            shader.PushConstants(commandBuffer, &passData, sizeof(CullData));
             shader.Dispatch(commandBuffer, static_cast<u32>(m_draws.Size()), 1, 1);
         }
 
@@ -646,7 +742,7 @@ namespace C3D
 
     void VulkanRendererPlugin::RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget,
                                           const VulkanTexture& depthPyramid, const Globals& globals, const Window& window, u32 query, u32 timeStamp,
-                                          bool taskSubmit, bool clusterSubmit, bool late) const
+                                          bool taskSubmit, bool clusterSubmit, bool late, u32 postPass) const
     {
         constexpr VkClearColorValue clearColor               = { 30.f / 255.f, 54.f / 255.f, 42.f / 255.f, 1 };
         constexpr VkClearDepthStencilValue clearDepthStencil = { 0.f, 0 };
@@ -682,7 +778,11 @@ namespace C3D
             };
 
             shader.PushDescriptorSet(commandBuffer, descriptors);
-            shader.PushConstants(commandBuffer, &globals.cullData, sizeof(globals.cullData));
+
+            CullData passData = globals.cullData;
+            passData.postPass = postPass;
+
+            shader.PushConstants(commandBuffer, &passData, sizeof(globals.cullData));
             shader.DispatchIndirect(commandBuffer, m_drawCommandCountBuffer, 4);
 
             auto syncBarrier = m_clusterCountBuffer.Barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
@@ -712,19 +812,25 @@ namespace C3D
         vkCmdSetViewport(commandBuffer, 0, 1, &m_viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &m_scissor);
 
+        Globals passGlobals           = globals;
+        passGlobals.cullData.postPass = postPass;
+
         if (clusterSubmit)
         {
-            m_clusterMeshletShader.Bind(commandBuffer);
+            auto& shader = postPass == 1 ? m_clusterPostMeshletShader : m_clusterMeshletShader;
+
+            shader.Bind(commandBuffer);
 
             DescriptorInfo descriptors[] = { m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_clusterIndexBuffer };
-            m_clusterMeshletShader.PushDescriptorSet(commandBuffer, descriptors);
-            m_clusterMeshletShader.PushConstants(commandBuffer, &globals, sizeof(globals));
+            shader.PushDescriptorSet(commandBuffer, descriptors);
+            shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
+            shader.PushConstants(commandBuffer, &passGlobals, sizeof(globals));
 
             vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_clusterCountBuffer.GetHandle(), 4, 1, 0);
         }
         else if (taskSubmit)
         {
-            auto& shader = late ? m_meshletLateShader : m_meshletShader;
+            auto& shader = postPass == 1 ? m_meshletPostShader : late ? m_meshletLateShader : m_meshletShader;
             shader.Bind(commandBuffer);
 
             DescriptorInfo pyramidDesc(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL);
@@ -732,24 +838,28 @@ namespace C3D
                 m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_meshletVisibilityBuffer, pyramidDesc,
             };
             shader.PushDescriptorSet(commandBuffer, descriptors);
-            shader.PushConstants(commandBuffer, &globals, sizeof(globals));
+            shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
+            shader.PushConstants(commandBuffer, &passGlobals, sizeof(globals));
 
             vkCmdDrawMeshTasksIndirectEXT(commandBuffer, m_drawCommandCountBuffer.GetHandle(), 4, 1, 0);
         }
         else
         {
-            m_meshShader.Bind(commandBuffer);
+            auto& shader = postPass == 1 ? m_meshPostShader : m_meshShader;
+
+            shader.Bind(commandBuffer);
 
             DescriptorInfo descriptors[] = {
                 m_drawCommandBuffer,
                 m_drawBuffer,
                 m_vertexBuffer,
             };
-            m_meshShader.PushDescriptorSet(commandBuffer, descriptors);
+            shader.PushDescriptorSet(commandBuffer, descriptors);
+            shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
 
             vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer.GetHandle(), 0, VK_INDEX_TYPE_UINT32);
 
-            m_meshShader.PushConstants(commandBuffer, &globals, sizeof(globals));
+            shader.PushConstants(commandBuffer, &passGlobals, sizeof(globals));
             vkCmdDrawIndexedIndirectCount(commandBuffer, m_drawCommandBuffer.GetHandle(), offsetof(MeshDrawCommand, indirect),
                                           m_drawCommandCountBuffer.GetHandle(), 0, static_cast<u32>(m_draws.Size()), sizeof(MeshDrawCommand));
         }
@@ -845,7 +955,7 @@ namespace C3D
 
         // Reset our pools
         vkCmdResetQueryPool(commandBuffer, m_queryPoolTimestamps, 0, 128);
-        vkCmdResetQueryPool(commandBuffer, m_queryPoolStatistics, 0, 2);
+        vkCmdResetQueryPool(commandBuffer, m_queryPoolStatistics, 0, 3);
 
         // Write the start (top of pipeline) timestamp
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_queryPoolTimestamps, 0);
@@ -905,7 +1015,7 @@ namespace C3D
         cullData.cullingEnabled                 = m_cullingEnabled;
         cullData.occlusionCullingEnabled        = m_occlusionCullingEnabled;
         cullData.meshShadingEnabled             = m_meshShadingEnabled;
-        cullData.clusterOcclusionCullingEnabled = m_occlusionCullingEnabled && m_clusterOcclusionCullingEnabled;
+        cullData.clusterOcclusionCullingEnabled = m_occlusionCullingEnabled && m_clusterOcclusionCullingEnabled && m_meshShadingEnabled;
         cullData.lodEnabled                     = m_lodEnabled;
         cullData.lodTarget                      = (2 / cullData.p11) * (1.f / static_cast<f32>(window.height)) * (1 << m_debugLodStep);  // 1px
 
@@ -949,8 +1059,16 @@ namespace C3D
         // Late cull: frustum + occlusion cull & fill object that were *not* visible last frame
         CullStep(commandBuffer, taskSubmit ? m_taskCullLateShader : m_drawCullLateShader, depthPyramid, cullData, 6, taskSubmit, /* late = */ true);
 
-        // Late render: render objects that are visible this frame but weren't drawn in the early pass
+        // Late render: Render opaque objects that are visible this frame but weren't drawn in the early pass
         RenderStep(commandBuffer, colorTarget, depthTarget, depthPyramid, globals, window, 1, 10, taskSubmit, clusterSubmit, /* late = */ true);
+
+        // Post cull: frustum + occlusion & fill extra objects
+        CullStep(commandBuffer, taskSubmit ? m_taskCullLateShader : m_drawCullLateShader, depthPyramid, cullData, 12, taskSubmit, /* late = */ true,
+                 /* postPass = */ 1);
+
+        // Post render: Render transparent objects that are visible this frame but weren't draw in the early pass
+        RenderStep(commandBuffer, colorTarget, depthTarget, depthPyramid, globals, window, 2, 14, taskSubmit, clusterSubmit, /* late = */ true,
+                   /* postPass = */ 1);
 
         return true;
     }  // namespace C3D
@@ -1096,7 +1214,7 @@ namespace C3D
         m_frameCpuAvg = m_frameCpuAvg * 0.95 + (frameCpuEnd - m_frameCpuBegin) * 0.05;
         m_frameGpuAvg = m_frameGpuAvg * 0.95 + (frameGpuEnd - frameGpuBegin) * 0.05;
 
-        f64 triangleCount = static_cast<f64>(statResults[0] + statResults[1]);
+        f64 triangleCount = static_cast<f64>(statResults[0] + statResults[1] + statResults[2]);
 
         f64 trianglesPerSecond = triangleCount / (m_frameGpuAvg * 1e-3);
         f64 drawsPerSecond     = static_cast<f64>(m_draws.Size()) / (m_frameGpuAvg * 1e-3);
@@ -1378,6 +1496,118 @@ namespace C3D
                 return false;
             }
         }
+
+        return true;
+    }
+
+    bool VulkanRendererPlugin::UploadTexture(const Window& window, const TextureAsset& texture)
+    {
+        VulkanTexture vulkanTexture;
+
+        VulkanTextureCreateInfo createInfo;
+        createInfo.context   = &m_context;
+        createInfo.name      = texture.name;
+        createInfo.width     = texture.width;
+        createInfo.height    = texture.height;
+        createInfo.mipLevels = texture.mipLevelCount;
+        createInfo.format    = VkUtils::ConvertTextureFormatToVkFormat(texture.format);
+        createInfo.usage     = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+        if (!vulkanTexture.Create(createInfo))
+        {
+            ERROR_LOG("Failed to create Vulkan Texture.");
+            return false;
+        }
+
+        auto backend = window.rendererState->backendState;
+
+        auto commandBuffer = backend->GetCommandBuffer();
+        auto commandPool   = backend->GetCommandPool();
+
+        auto& device       = m_context.device;
+        auto logicalDevice = device.GetLogical();
+
+        VK_CHECK(vkResetCommandPool(logicalDevice, commandPool, 0));
+
+        VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        beginInfo.flags                    = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+        auto preBarrier = VkUtils::ImageBarrier(vulkanTexture.GetImage(), 0, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                                VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        VkUtils::PipelineBarrier(commandBuffer, 0, 0, nullptr, 1, &preBarrier);
+
+        // Buffer starts at 0
+        u64 bufferOffset = 0;
+        // First mip width and height is the width and height of the full texture
+        u32 mipWidth  = texture.width;
+        u32 mipHeight = texture.height;
+
+        for (u32 i = 0; i < texture.mipLevelCount; ++i)
+        {
+            // Define the region to copy
+            VkBufferImageCopy region               = {};
+            region.bufferOffset                    = bufferOffset;
+            region.bufferRowLength                 = 0;
+            region.bufferImageHeight               = 0;
+            region.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.imageSubresource.mipLevel       = i;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount     = 1;
+            region.imageOffset                     = { 0, 0, 0 };
+            region.imageExtent                     = { mipWidth, mipHeight, 1 };
+
+            vkCmdCopyBufferToImage(commandBuffer, m_context.stagingBuffer.GetHandle(), vulkanTexture.GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                                   &region);
+
+            bufferOffset += ((mipWidth + 3) / 4) * ((mipHeight + 3) / 4) * texture.blockSize;
+
+            mipWidth  = mipWidth > 1 ? mipWidth / 2 : 1;
+            mipHeight = mipHeight > 1 ? mipHeight / 2 : 1;
+        }
+
+        if (bufferOffset != texture.size)
+        {
+            ERROR_LOG("The final bufferOffset does not equal the total texture size!");
+            return false;
+        }
+
+        auto postBarrier =
+            VkUtils::ImageBarrier(vulkanTexture.GetImage(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        VkUtils::PipelineBarrier(commandBuffer, 0, 0, nullptr, 1, &postBarrier);
+
+        VK_CHECK(vkEndCommandBuffer(commandBuffer));
+
+        VkSubmitInfo submitInfo       = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers    = &commandBuffer;
+
+        VK_CHECK(vkQueueSubmit(device.GetDeviceQueue(), 1, &submitInfo, VK_NULL_HANDLE));
+
+        VK_CHECK(device.WaitIdle());
+
+        VkDescriptorImageInfo imageInfo = {};
+        imageInfo.sampler               = m_textureSampler;
+        imageInfo.imageView             = vulkanTexture.GetView();
+        imageInfo.imageLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet write = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+        write.dstSet               = m_textureDescriptorSet;
+        write.dstBinding           = 0;
+        // Ensure we start indexing at 1 since 0 will be our "missing" texture
+        write.dstArrayElement = m_textures.Size() + 1;
+        write.descriptorCount = 1;
+        write.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.pImageInfo      = &imageInfo;
+
+        vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, nullptr);
+
+        // Finally add the texture to our array so we can clean it up later
+        m_textures.PushBack(vulkanTexture);
 
         return true;
     }
