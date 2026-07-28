@@ -98,6 +98,8 @@ namespace C3D
         i32 clusterOcclusionCullingEnabled = 0;
         i32 meshShadingEnabled             = 0;
         i32 lodEnabled                     = 0;
+
+        u32 postPass = 0;
     };
 
     /** @brief The Globals structure that is uploaded to the GPU once per frame.  */

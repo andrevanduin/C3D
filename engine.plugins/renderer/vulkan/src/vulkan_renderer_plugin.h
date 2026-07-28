@@ -58,9 +58,10 @@ namespace C3D
                             const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height, bool late) const;
 
         void CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const CullData& cullData, u32 timestamp,
-                      bool taskSubmit, bool late) const;
+                      bool taskSubmit, bool late, u32 postPass = 0) const;
         void RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget, const VulkanTexture& depthPyramid,
-                        const Globals& globals, const Window& window, u32 query, u32 timeStamp, bool taskSubmit, bool clusterSubmit, bool late) const;
+                        const Globals& globals, const Window& window, u32 query, u32 timeStamp, bool taskSubmit, bool clusterSubmit, bool late,
+                        u32 postPass = 0) const;
         void DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const;
 
         /** @brief A boolean indicating if we are using mesh shading. */
@@ -100,9 +101,12 @@ namespace C3D
         VulkanShader m_depthReduceShader;
 
         VulkanShader m_meshShader;
+        VulkanShader m_meshPostShader;
         VulkanShader m_meshletShader;
         VulkanShader m_meshletLateShader;
+        VulkanShader m_meshletPostShader;
         VulkanShader m_clusterMeshletShader;
+        VulkanShader m_clusterPostMeshletShader;
 
         VulkanShader m_drawCullShader;
         VulkanShader m_drawCullLateShader;

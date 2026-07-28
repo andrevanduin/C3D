@@ -9,6 +9,9 @@
 
 namespace C3D
 {
+    const u32 MAX_DESCRIPTROS        = 65536;
+    const u32 MAX_ACTIVE_DESCRIPTORS = 1024;
+
     struct VulkanContext;
     struct VulkanShaderModule;
 
@@ -63,6 +66,8 @@ namespace C3D
         VkPipelineCache cache = VK_NULL_HANDLE;
         /** @brief The size of the push constants block that will be used by this Shader. */
         u64 pushConstantsSize = 0;
+        /** @brief The layout of the (variable size) array Descriptor Set. (optional) */
+        VkDescriptorSetLayout setArrayLayout = nullptr;
         /** @brief A pointer to the Vulkan context. */
         VulkanContext* context = nullptr;
     };
@@ -90,9 +95,8 @@ namespace C3D
         u32 GatherResources(VkDescriptorType (&resourceTypes)[32]);
 
         VkDescriptorSetLayout CreateSetLayout();
-        VkDescriptorSetLayout CreateSetArrayLayout();
 
-        VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout setLayout, VkDescriptorSetLayout arrayLayout);
+        VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout setLayout);
         VkPipeline CreateGraphicsPipeline(VkPipelineLayout layout);
         VkPipeline CreateComputePipeline(VkPipelineLayout layout);
 
@@ -117,7 +121,7 @@ namespace C3D
         /** @brief A handle to the set layout used by this Shader. */
         VkDescriptorSetLayout m_setLayout = nullptr;
         /** @brief A handle to the array layout used by this Shader (optional). */
-        VkDescriptorSetLayout m_arrayLayout = nullptr;
+        VkDescriptorSetLayout m_setArrayLayout = nullptr;
         /** @brief A handle to the layout used by this Shader. */
         VkPipelineLayout m_pipelineLayout = nullptr;
         /** @brief A handle to the pipeline used by this Shader. */

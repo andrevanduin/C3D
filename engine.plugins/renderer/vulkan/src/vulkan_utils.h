@@ -167,6 +167,43 @@ namespace C3D
          */
         VkFence CreateFence(VulkanContext* context, const String& name);
 
+        /**
+         * @brief Create a Descriptor Set Layout.
+         *
+         * @param context A pointer to the Vulkan context
+         * @param name The name of the semaphore (used for debugging purposes)
+         * @param binding The descriptor binding
+         * @param type The type of descriptor
+         * @param count The number of descriptors
+         * @param stageFlags The shader stages in which the descriptor is used
+         * @param bindingFlags The flags used by the binding
+         * @return A VkDescriptorSetLayout if successful; nullptr otherwise
+         */
+        VkDescriptorSetLayout CreateDescriptorSetLayout(VulkanContext* context, const String& name, u32 binding, VkDescriptorType type, u32 count,
+                                                        VkShaderStageFlags stageFlags, VkDescriptorBindingFlags bindingFlags);
+
+        /**
+         * @brief Create a Descriptor Pool.
+         *
+         * @param context A pointer to the Vulkan context
+         * @param name The name of the Descriptor Pool (used for debugging purposes)
+         * @param descriptorCount The number of descriptors the pool should be able to allocate
+         * @return A VkDescriptorPool if successful; nullptr otherwise
+         */
+        VkDescriptorPool CreateDescriptorPool(VulkanContext* context, const String& name, u32 descriptorCount);
+
+        /**
+         * @brief Create a Descriptor Set.
+         *
+         * @param context A pointer to the Vulkan context
+         * @param name The name of the Descriptor Set (used for debugging purposes)
+         * @param count The number of Descriptors to allocate
+         * @param pool The Vulkan Descriptor Pool that will be used to allocate the Descriptor Set
+         * @param layout The layout of the Descriptor Set
+         * @return A VkDescriptorSet if successful; nullptr otherwise
+         */
+        VkDescriptorSet CreateDescriptorSet(VulkanContext* context, const String& name, u32 count, VkDescriptorPool pool, VkDescriptorSetLayout layout);
+
         /** @brief Helper method to enable easier loading of vulkan extension functions. */
         template <typename T>
         T LoadExtensionFunction(VkInstance instance, const char* name)

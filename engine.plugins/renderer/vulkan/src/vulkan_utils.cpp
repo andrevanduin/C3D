@@ -430,14 +430,16 @@ namespace C3D
         // TODO: Make more configurable in the future
         VkSamplerCreateInfo createInfo = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
-        createInfo.magFilter    = VK_FILTER_LINEAR;
-        createInfo.minFilter    = VK_FILTER_LINEAR;
-        createInfo.mipmapMode   = mipmapMode;
-        createInfo.addressModeU = addressMode;
-        createInfo.addressModeV = addressMode;
-        createInfo.addressModeW = addressMode;
-        createInfo.minLod       = 0;
-        createInfo.maxLod       = 16.f;
+        createInfo.magFilter        = VK_FILTER_LINEAR;
+        createInfo.minFilter        = VK_FILTER_LINEAR;
+        createInfo.mipmapMode       = mipmapMode;
+        createInfo.addressModeU     = addressMode;
+        createInfo.addressModeV     = addressMode;
+        createInfo.addressModeW     = addressMode;
+        createInfo.minLod           = 0;
+        createInfo.maxLod           = 16.f;
+        createInfo.anisotropyEnable = (mipmapMode == VK_SAMPLER_MIPMAP_MODE_LINEAR);
+        createInfo.maxAnisotropy    = (mipmapMode == VK_SAMPLER_MIPMAP_MODE_LINEAR ? 4.f : 1.f);
 
         VkSamplerReductionModeCreateInfo createInfoReduction = { VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO };
 
@@ -495,6 +497,82 @@ namespace C3D
         VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_FENCE, fence, name);
 
         return fence;
+    }
+
+    VkDescriptorSetLayout VkUtils::CreateDescriptorSetLayout(VulkanContext* context, const String& name, u32 binding, VkDescriptorType type, u32 count,
+                                                             VkShaderStageFlags stageFlags, VkDescriptorBindingFlags bindingFlags)
+    {
+        VkDescriptorSetLayoutBinding setBinding = { binding, type, count, stageFlags, nullptr };
+
+        VkDescriptorSetLayoutBindingFlagsCreateInfo setBindingFlags = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
+        setBindingFlags.bindingCount                                = 1;
+        setBindingFlags.pBindingFlags                               = &bindingFlags;
+
+        VkDescriptorSetLayoutCreateInfo setCreateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+        setCreateInfo.pNext                           = &setBindingFlags;
+        setCreateInfo.bindingCount                    = 1;
+        setCreateInfo.pBindings                       = &setBinding;
+
+        VkDescriptorSetLayout setLayout = 0;
+
+        auto result = vkCreateDescriptorSetLayout(context->device.GetLogical(), &setCreateInfo, context->allocator, &setLayout);
+        if (!IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create Descriptor Set Layout with error: '{}'.", ResultString(result));
+            return nullptr;
+        }
+
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, setLayout, name);
+
+        return setLayout;
+    }
+
+    VkDescriptorPool VkUtils::CreateDescriptorPool(VulkanContext* context, const String& name, u32 descriptorCount)
+    {
+        VkDescriptorPoolSize poolSize       = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, descriptorCount };
+        VkDescriptorPoolCreateInfo poolInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+        poolInfo.maxSets                    = 1;
+        poolInfo.poolSizeCount              = 1;
+        poolInfo.pPoolSizes                 = &poolSize;
+
+        VkDescriptorPool pool = nullptr;
+
+        auto result = vkCreateDescriptorPool(context->device.GetLogical(), &poolInfo, context->allocator, &pool);
+        if (!IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create Descriptor Pool with error: '{}'.", ResultString(result));
+            return nullptr;
+        }
+
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_DESCRIPTOR_POOL, pool, name);
+
+        return pool;
+    }
+
+    VkDescriptorSet VkUtils::CreateDescriptorSet(VulkanContext* context, const String& name, u32 count, VkDescriptorPool pool, VkDescriptorSetLayout layout)
+    {
+        VkDescriptorSetVariableDescriptorCountAllocateInfo setAllocateCountInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO };
+        setAllocateCountInfo.descriptorSetCount                                 = 1;
+        setAllocateCountInfo.pDescriptorCounts                                  = &count;
+
+        VkDescriptorSetAllocateInfo setAllocateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+        setAllocateInfo.pNext                       = &setAllocateCountInfo;
+        setAllocateInfo.descriptorPool              = pool;
+        setAllocateInfo.descriptorSetCount          = 1;
+        setAllocateInfo.pSetLayouts                 = &layout;
+
+        VkDescriptorSet set = 0;
+
+        auto result = vkAllocateDescriptorSets(context->device.GetLogical(), &setAllocateInfo, &set);
+        if (!IsSuccess(result))
+        {
+            ERROR_LOG("Failed to allocate Descriptor Set with error: '{}'.", ResultString(result));
+            return nullptr;
+        }
+
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_DESCRIPTOR_SET, set, name);
+
+        return set;
     }
 
 #if defined(_DEBUG)

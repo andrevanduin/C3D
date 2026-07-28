@@ -50,7 +50,10 @@ struct CullData
     int cullingEnabled;
     int occlusionCullingEnabled;
     int clusterOcclusionCullingEnabled;
+    int meshShadingEnabled;
     int lodEnabled;
+
+    uint postPass;
 };
 
 struct Globals
@@ -91,9 +94,12 @@ struct MeshDraw
     uint meshIndex;
     uint vertexOffset;  // == meshes[meshIndex].vertexOffset, improves data locality in the mesh shader
     uint meshletVisibilityOffset;
+    uint postPass;
 
     uint albedoTexture;
     uint normalTexture;
+    uint specularTexture;
+    uint emissiveTexture;
 };
 
 struct MeshDrawCommand

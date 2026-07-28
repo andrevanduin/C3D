@@ -6,6 +6,8 @@
 
 #include "definitions.h"
 
+layout (constant_id = 2) const int POST = 0;
+
 layout (binding = 1) readonly buffer Draws
 {
     MeshDraw draws[];
@@ -30,17 +32,28 @@ void main()
         albedo = texture(textures[nonuniformEXT(meshDraw.albedoTexture)], uv);
     }
 
-    vec4 normalMap = vec4(0, 0, 1, 0);
+    vec3 normalMap = vec3(0, 0, 1);
     if (meshDraw.normalTexture > 0)
     {
-        normalMap = texture(textures[nonuniformEXT(meshDraw.normalTexture)], uv) * 2 - 1;
+        normalMap = texture(textures[nonuniformEXT(meshDraw.normalTexture)], uv).rgb * 2 - 1;
+    }
+
+    vec3 emissive = vec3(0.0f);
+    if (meshDraw.emissiveTexture > 0)
+    {
+        emissive = texture(textures[nonuniformEXT(meshDraw.emissiveTexture)], uv).rgb;
     }
 
     vec3 biTangent = cross(normal, tangent.xyz) * tangent.w;
     
-    vec3 nrm = normalize(normalMap.x * tangent.xyz + normalMap.y * biTangent + normalMap.z * normal);
+    vec3 nrm = normalize(normalMap.r * tangent.xyz + normalMap.g * biTangent + normalMap.b * normal);
 
     float ndot1 = max(dot(nrm, normalize(vec3(-1, 1, -1))), 0.0);
 
-    outputColor = albedo * sqrt(ndot1 + 0.05);
+    outputColor = vec4(albedo.rgb * sqrt(ndot1 + 0.05) + emissive, albedo.a);
+
+    if (POST > 0 && albedo.a < 0.5)
+    {
+        discard;
+    }
 }

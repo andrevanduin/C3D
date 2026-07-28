@@ -250,7 +250,7 @@ namespace C3D
                 C3D_ASSERT(posAccessor->type == GLTFAccessorType::Vec3);
                 C3D_ASSERT(posAccessor->componentType == GLTF_FLOAT);
 
-                // Ensure our scratch buffer to have enough space
+                // Ensure our scratch buffer has enough space
                 if (scratchBuffer.Size() < posAccessor->count * 4)
                 {
                     scratchBuffer.Resize(posAccessor->count * 4);
@@ -376,8 +376,11 @@ namespace C3D
                     auto materialIndex = asset.meshes[node.mesh].primitives[0].material;
                     if (materialIndex != INVALID_ID)
                     {
+                        // Get the material by the material index
+                        auto material = asset.materials[materialIndex];
+
                         // Get the diffuse texture from the pbr material extension if it exists
-                        if (!asset.materials[materialIndex].extensions.Empty())
+                        if (!material.extensions.Empty())
                         {
                             auto extension = asset.materials[materialIndex].extensions[0];
                             if (extension.type == GLTFExtensionType::PBRSpecularGlossiness)
@@ -387,14 +390,30 @@ namespace C3D
                                 {
                                     draw.albedoTexture = pbrExtension.diffuseTexture.index + 1;
                                 }
+                                if (pbrExtension.specularGlossinessTexture.index != INVALID_ID)
+                                {
+                                    draw.specularTexture = pbrExtension.specularGlossinessTexture.index + 1;
+                                }
                             }
                         }
 
-                        // Get the normal from the material
-                        auto material = asset.materials[materialIndex];
+                        // Get the normal from the material  (if provided)
                         if (material.normalTexture.info.index != INVALID_ID)
                         {
                             draw.normalTexture = material.normalTexture.info.index + 1;
+                        }
+
+                        // Get the emissive texture from the material (if provided)
+                        if (material.emissiveTexture.index != INVALID_ID)
+                        {
+                            draw.emissiveTexture = material.emissiveTexture.index + 1;
+                        }
+
+                        // Determine if our object is fully opaque
+                        if (material.alphaMode != GLTFMaterialAlphaMode::Opaque)
+                        {
+                            // If not then we mark this to be rendered in the post pass
+                            draw.postPass = 1;
                         }
                     }
 
