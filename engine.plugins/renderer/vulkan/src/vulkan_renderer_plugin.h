@@ -66,6 +66,8 @@ namespace C3D
 
         /** @brief A boolean indicating if we are using mesh shading. */
         bool m_meshShadingEnabled = true;
+        /** @brief A boolean indicating if we are using ray tracing. */
+        bool m_rayTracingEnabled = true;
         /** @brief A boolean indicating if we are using task shaders during mesh shading.
          * This works well on Nvidia but gives bad performance on AMD */
         bool m_taskShadingEnabled = false;

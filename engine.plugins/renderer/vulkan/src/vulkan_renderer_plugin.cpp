@@ -16,9 +16,11 @@
 
 #include "assets/types/texture_types.h"
 #include "defines.h"
+#include "input/keys.h"
 #include "platform/vulkan_platform.h"
 #include "vulkan_allocator.h"
 #include "vulkan_debugger.h"
+#include "vulkan_device.h"
 #include "vulkan_instance.h"
 #include "vulkan_shader.h"
 #include "vulkan_swapchain.h"
@@ -83,6 +85,10 @@ namespace C3D
             ERROR_LOG("Failed to initialize shaderc compiler.");
             return false;
         }
+
+        // Enable mesh shading and ray tracing if supported
+        m_meshShadingEnabled = m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING);
+        m_rayTracingEnabled  = m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING);
 
         // Create our query pool for timestamps
         m_queryPoolTimestamps = VkUtils::CreateQueryPool(&m_context, 128, VK_QUERY_TYPE_TIMESTAMP);
@@ -189,7 +195,17 @@ namespace C3D
                     }
                     else
                     {
-                        WARN_LOG("Mesh shading is not support by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
+                        WARN_LOG("Mesh shading is not supported by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
+                    }
+                    break;
+                case C3D::KeyR:
+                    if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
+                    {
+                        m_rayTracingEnabled ^= true;
+                    }
+                    else
+                    {
+                        WARN_LOG("Ray tracing is not supported by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
                     }
                     break;
                 case C3D::KeyC:
@@ -1191,11 +1207,11 @@ namespace C3D
 
         auto device = m_context.device.GetLogical();
 
-        u64 timestampResults[12] = {};
+        u64 timestampResults[16] = {};
         VK_CHECK(vkGetQueryPoolResults(device, m_queryPoolTimestamps, 0, ARRAY_SIZE(timestampResults), sizeof(timestampResults), timestampResults,
                                        sizeof(timestampResults[0]), VK_QUERY_RESULT_64_BIT));
 
-        u32 statResults[2] = {};
+        u32 statResults[3] = {};
         VK_CHECK(vkGetQueryPoolResults(device, m_queryPoolStatistics, 0, ARRAY_SIZE(statResults), sizeof(statResults), statResults, sizeof(statResults[0]), 0));
 
         auto props = m_context.device.GetProperties();
@@ -1208,6 +1224,9 @@ namespace C3D
 
         f64 renderGpuTime     = static_cast<f64>(timestampResults[9] - timestampResults[8]) * props.limits.timestampPeriod * 1e-6;
         f64 renderLateGpuTime = static_cast<f64>(timestampResults[11] - timestampResults[10]) * props.limits.timestampPeriod * 1e-6;
+
+        f64 cullPostGpuTime   = static_cast<f64>(timestampResults[13] - timestampResults[12]) * props.limits.timestampPeriod * 1e-6;
+        f64 renderPostGpuTime = static_cast<f64>(timestampResults[15] - timestampResults[14]) * props.limits.timestampPeriod * 1e-6;
 
         f64 frameCpuEnd = Platform::GetAbsoluteTime() * 1000;
 
