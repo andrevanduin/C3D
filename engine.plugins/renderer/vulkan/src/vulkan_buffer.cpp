@@ -1,6 +1,8 @@
 
 #include "vulkan_buffer.h"
 
+#include "asserts/asserts.h"
+#include "metrics/metrics.h"
 #include "time/scoped_timer.h"
 #include "vulkan_context.h"
 #include "vulkan_utils.h"
@@ -34,7 +36,8 @@ namespace C3D
 
         VK_CHECK(vkAllocateMemory(device, &allocateInfo, m_context->allocator, &m_memory));
 
-        MetricsAllocate(Memory.GetId(), MemoryType::Vulkan, size, memoryRequirements.size, m_memory);
+        // The memory is device local (meaning on the GPU)
+        MetricsAllocate(m_memoryFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT ? GPU_ALLOCATOR_ID : Memory.GetId(), MemoryType::Buffer, size, memoryRequirements.size, m_memory);
 
         VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_BUFFER, m_handle, String::FromFormat("VULKAN_BUFFER_MEMORY_{}", name));
 
@@ -118,10 +121,7 @@ namespace C3D
         return false;
     }
 
-    void VulkanBuffer::Fill(VkCommandBuffer commandBuffer, u64 offset, u64 size, u32 data) const
-    {
-        vkCmdFillBuffer(commandBuffer, m_handle, offset, size, data);
-    }
+    void VulkanBuffer::Fill(VkCommandBuffer commandBuffer, u64 offset, u64 size, u32 data) const { vkCmdFillBuffer(commandBuffer, m_handle, offset, size, data); }
 
     VkBufferMemoryBarrier2 VulkanBuffer::Barrier(VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask, VkPipelineStageFlags2 dstStageMask,
                                                  VkAccessFlags dstAccessMask) const
@@ -135,13 +135,24 @@ namespace C3D
         {
             auto device = m_context->device.GetLogical();
 
-            MetricsFree(Memory.GetId(), MemoryType::Vulkan, m_size, m_requiredSize, m_memory);
+            MetricsFree(m_memoryFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT ? GPU_ALLOCATOR_ID : Memory.GetId(), MemoryType::Buffer, m_size, m_requiredSize, m_memory);
 
             vkDestroyBuffer(device, m_handle, m_context->allocator);
             vkFreeMemory(device, m_memory, m_context->allocator);
         }
 
         m_name.Destroy();
+    }
+
+    VkDeviceAddress VulkanBuffer::GetDeviceAddress() const
+    {
+        VkBufferDeviceAddressInfo info = { VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO };
+        info.buffer                    = m_handle;
+
+        VkDeviceAddress address = vkGetBufferDeviceAddress(m_context->device.GetLogical(), &info);
+        C3D_ASSERT_MSG(address != 0, "Device address should not be a nullptr!");
+
+        return address;
     }
 
 }  // namespace C3D

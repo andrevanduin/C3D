@@ -83,6 +83,11 @@ namespace C3D
         device12Features.samplerFilterMinmax               = VK_TRUE;
         device12Features.scalarBlockLayout                 = VK_TRUE;
 
+        if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
+        {
+            device12Features.bufferDeviceAddress = VK_TRUE;
+        }
+
         // Bindless features
         device12Features.descriptorIndexing                           = VK_TRUE;
         device12Features.shaderSampledImageArrayNonUniformIndexing    = VK_TRUE;

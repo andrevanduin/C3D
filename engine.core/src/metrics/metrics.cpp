@@ -34,6 +34,7 @@ namespace C3D
                                                                                      "RenderSystem",
                                                                                      "RenderData",
                                                                                      "RenderView",
+                                                                                     "Buffer",
                                                                                      "Game",
                                                                                      "Transform",
                                                                                      "Entity",
@@ -245,17 +246,11 @@ namespace C3D
         }
     }
 
-    void MetricSystem::SetAllocatorAvailableSpace(const u8 allocatorId, const u64 availableSpace)
-    {
-        m_memoryStats[allocatorId].totalAvailableSpace = availableSpace;
-    }
+    void MetricSystem::SetAllocatorAvailableSpace(const u8 allocatorId, const u64 availableSpace) { m_memoryStats[allocatorId].totalAvailableSpace = availableSpace; }
 
     u64 MetricSystem::GetAllocCount(const u8 allocatorId) const { return m_memoryStats[allocatorId].allocCount; }
 
-    u64 MetricSystem::GetAllocCount(MemoryType memoryType, u8 allocatorId) const
-    {
-        return m_memoryStats[allocatorId].taggedAllocations[ToUnderlying(memoryType)].count;
-    }
+    u64 MetricSystem::GetAllocCount(MemoryType memoryType, u8 allocatorId) const { return m_memoryStats[allocatorId].taggedAllocations[ToUnderlying(memoryType)].count; }
 
     u64 MetricSystem::GetMemoryUsage(const MemoryType memoryType, const u8 allocatorId) const
     {
@@ -295,9 +290,8 @@ namespace C3D
         const auto& memStats = m_memoryStats[allocatorId];
         if (memStats.type != AllocatorType::None && memStats.allocCount > 0)
         {
-            auto offset = 0;
-            i32 bytesWritten =
-                snprintf(buffer + offset, 8192, "%s with id: '%d' and type: '%d'\n", memStats.name.Data(), allocatorId, ToUnderlying(memStats.type));
+            auto offset      = 0;
+            i32 bytesWritten = snprintf(buffer + offset, 8192, "%s with id: '%d' and type: '%d'\n", memStats.name.Data(), allocatorId, ToUnderlying(memStats.type));
             if (bytesWritten == -1)
             {
                 FATAL_LOG("Sprintf_s() failed with an error.");
@@ -320,8 +314,8 @@ namespace C3D
             const char* requiredUnit = SizeToText(required, &requiredAmount);
             const char* totalUnit    = SizeToText(total, &totalAmount);
 
-            bytesWritten = snprintf(buffer + offset, 8192, "  %d total allocations using: %.2f %-3s of total: %.2f %-3s (%.2f%%)\n",
-                                    static_cast<int>(memStats.allocCount), requiredAmount, requiredUnit, totalAmount, totalUnit, percentage);
+            bytesWritten = snprintf(buffer + offset, 8192, "  %d total allocations using: %.2f %-3s of total: %.2f %-3s (%.2f%%)\n", static_cast<int>(memStats.allocCount),
+                                    requiredAmount, requiredUnit, totalAmount, totalUnit, percentage);
 
             Logger::Info(buffer);
         }
@@ -371,8 +365,7 @@ namespace C3D
         return "B";
     }
 
-    void MetricSystem::SprintfAllocation(const MemoryAllocations& allocation, const int index, char* buffer, int& bytesWritten, const int offset,
-                                         const bool debugLines)
+    void MetricSystem::SprintfAllocation(const MemoryAllocations& allocation, const int index, char* buffer, int& bytesWritten, const int offset, const bool debugLines)
     {
         f64 requestedAmount, requiredAmount;
         const char* requestedUnit;
@@ -413,13 +406,12 @@ namespace C3D
 
         if (!EpsilonEqual(requestedAmount, requiredAmount))
         {
-            bytesWritten = snprintf(buffer + offset, 8192, "  %-20s: %4d using %6.2f %-3s | (%6.2f %-3s)\n", MEMORY_TYPE_STRINGS[index], count, requestedAmount,
-                                    requestedUnit, requiredAmount, requiredUnit);
+            bytesWritten = snprintf(buffer + offset, 8192, "  %-20s: %4d using %6.2f %-3s | (%6.2f %-3s)\n", MEMORY_TYPE_STRINGS[index], count, requestedAmount, requestedUnit,
+                                    requiredAmount, requiredUnit);
         }
         else
         {
-            bytesWritten =
-                snprintf(buffer + offset, 8192, "  %-20s: %4d using %6.2f %-3s\n", MEMORY_TYPE_STRINGS[index], count, requestedAmount, requestedUnit);
+            bytesWritten = snprintf(buffer + offset, 8192, "  %-20s: %4d using %6.2f %-3s\n", MEMORY_TYPE_STRINGS[index], count, requestedAmount, requestedUnit);
         }
 
         if (bytesWritten == -1)

@@ -50,16 +50,14 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
             }
         }
 
-        auto window = C3D::Engine::GetCurrentWindow();
-
         // Upload our mesh assets to the renderer
-        if (!Renderer.UploadMeshes(window, meshes))
+        if (!Renderer.UploadMeshes(meshes))
         {
             ERROR_LOG("Failed to upload meshes.");
             return false;
         }
 
-        if (!Renderer.GenerateDrawCommands(window))
+        if (!Renderer.GenerateDrawCommands())
         {
             ERROR_LOG("Failed to generate draw commands.");
             return false;
@@ -89,22 +87,20 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
             return false;
         }
 
-        auto window = C3D::Engine::GetCurrentWindow();
-
         // Upload our mesh assets to the renderer
-        if (!Renderer.UploadMeshes(window, sceneAsset.meshes))
+        if (!Renderer.UploadMeshes(sceneAsset.meshes))
         {
             ERROR_LOG("Failed to upload meshes.");
             return false;
         }
 
-        if (!Renderer.UploadTextures(window, sceneAsset.textures))
+        if (!Renderer.UploadTextures(sceneAsset.textures))
         {
             ERROR_LOG("Failed to upload textures.");
             return false;
         }
 
-        if (!Renderer.UploadDrawCommands(window, sceneAsset.draws))
+        if (!Renderer.UploadDrawCommands(sceneAsset.draws))
         {
             ERROR_LOG("Failed to generate draw commands.");
             return false;
