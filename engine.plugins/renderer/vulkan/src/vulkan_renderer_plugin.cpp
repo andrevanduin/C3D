@@ -20,6 +20,7 @@
 #include "input/keys.h"
 #include "platform/vulkan_platform.h"
 #include "vulkan_allocator.h"
+#include "vulkan_context.h"
 #include "vulkan_debugger.h"
 #include "vulkan_device.h"
 #include "vulkan_instance.h"
@@ -29,6 +30,13 @@
 #include "vulkan_texture.h"
 #include "vulkan_types.h"
 #include "vulkan_utils.h"
+
+#define CREATE_RESOURCE(method, fail_msg)             \
+    if (!method)                                      \
+    {                                                 \
+        ERROR_LOG("Failed to create: {}.", fail_msg); \
+        return false;                                 \
+    }
 
 namespace C3D
 {
@@ -206,6 +214,46 @@ namespace C3D
             }
         }
 
+        m_textureDescriptorSetLayout =
+            VkUtils::CreateDescriptorSetLayout(&m_context, "TEXTURE_DESCRIPTOR_SET_LAYOUT", 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_DESCRIPTROS,
+                                               VK_SHADER_STAGE_FRAGMENT_BIT, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT);
+
+        if (!m_textureDescriptorSetLayout)
+        {
+            ERROR_LOG("Failed to create Texture Descriptor Set Layout.");
+            return false;
+        }
+
+        m_textureDescriptorPool = VkUtils::CreateDescriptorPool(&m_context, "TEXTURE_DESCRIPTOR_POOL", MAX_ACTIVE_DESCRIPTORS);
+        if (!m_textureDescriptorPool)
+        {
+            ERROR_LOG("Failed to create Texture Descriptor Pool.");
+            return false;
+        }
+
+        m_textureDescriptorSet = VkUtils::CreateDescriptorSet(&m_context, "TEXTURE_DESCRIPTOR_SET", MAX_ACTIVE_DESCRIPTORS, m_textureDescriptorPool, m_textureDescriptorSetLayout);
+        if (!m_textureDescriptorSet)
+        {
+            ERROR_LOG("Failed to create Texture Descriptor Set.");
+            return false;
+        }
+
+        // Create our depth sampler
+        m_depthSampler = VkUtils::CreateSampler(&m_context, "DEPTH_SAMPLER", VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_REDUCTION_MODE_MIN);
+        if (!m_depthSampler)
+        {
+            ERROR_LOG("Failed to create depth sampler.");
+            return false;
+        }
+
+        // Create our texture sampler
+        m_textureSampler = VkUtils::CreateSampler(&m_context, "TEXTURE_SAMPLER", VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+        if (!m_textureSampler)
+        {
+            ERROR_LOG("Failed to create texture sampler.");
+            return false;
+        }
+
         Event.Register(EventCodeDebug0, [this](const u16 code, void* sender, const EventContext& context) {
             switch (context.data.u32[0])
             {
@@ -330,19 +378,31 @@ namespace C3D
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
         {
+            INFO_LOG("Destroying Ray Tracing buffers and structures.");
+
             for (auto b : m_blas)
             {
                 vkDestroyAccelerationStructureKHR(device, b, m_context.allocator);
             }
             m_blas.Destroy();
+
+            vkDestroyAccelerationStructureKHR(device, m_tlas, m_context.allocator);
+
+            m_tlasBuffer.Destroy();
             m_blasBuffer.Destroy();
         }
 
         INFO_LOG("Destroying Vulkan Shaders.");
+
+        INFO_LOG("Destroying Vulkan Shader Modules.");
+        for (auto& m : m_shaderModules)
+        {
+            m.Destroy();
+        }
+        m_shaderModules.Destroy();
+
         m_meshShader.Destroy();
         m_meshPostShader.Destroy();
-        m_meshShaderModule.Destroy();
-        m_fragmentShaderModule.Destroy();
 
         m_drawCullShader.Destroy();
         m_taskCullShader.Destroy();
@@ -352,17 +412,10 @@ namespace C3D
         m_taskCullLateShader.Destroy();
         m_clusterCullLateShader.Destroy();
 
-        m_cullShaderModule.Destroy();
-        m_clusterCullShaderModule.Destroy();
-
         m_depthReduceShader.Destroy();
-        m_depthReduceShaderModule.Destroy();
-
         m_taskSubmitShader.Destroy();
-        m_taskSubmitShaderModule.Destroy();
 
         m_clusterSubmitShader.Destroy();
-        m_clusterSubmitShaderModule.Destroy();
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
@@ -371,9 +424,6 @@ namespace C3D
             m_meshletPostShader.Destroy();
             m_clusterMeshletShader.Destroy();
             m_clusterPostMeshletShader.Destroy();
-
-            m_meshletShaderModule.Destroy();
-            m_meshletTaskShaderModule.Destroy();
         }
 
         INFO_LOG("Destroying Vulkan Samplers.");
@@ -405,72 +455,27 @@ namespace C3D
         INFO_LOG("Shutdown successful.");
     }
 
-    bool VulkanRendererPlugin::CreateResources()
+    bool VulkanRendererPlugin::OnRun(const Geometry& geometry)
     {
-        if (!m_cullShaderModule.Create(&m_context, "draw_cull.comp"))
+        // Create all required ShaderModules
+        DynamicArray<const char*> shader_module_names = { "draw_cull.comp", "cluster_cull.comp", "depth_reduce.comp",  "mesh.vert",
+                                                          "mesh.frag",      "task_submit.comp",  "cluster_submit.comp" };
+
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
-            ERROR_LOG("Failed to create draw_cull.comp ShaderModule");
-            return false;
+            shader_module_names.PushBack("meshlet.mesh");
+            shader_module_names.PushBack("meshlet.task");
         }
 
-        if (!m_clusterCullShaderModule.Create(&m_context, "cluster_cull.comp"))
+        m_shaderModules.Create();
+        for (auto name : shader_module_names)
         {
-            ERROR_LOG("Failed to create cluster_cull.comp ShaderModule");
-            return false;
-        }
-
-        if (!m_depthReduceShaderModule.Create(&m_context, "depth_reduce.comp"))
-        {
-            ERROR_LOG("Failed to create depth_reduce.comp ShaderModule");
-            return false;
-        }
-
-        if (!m_meshShaderModule.Create(&m_context, "mesh.vert"))
-        {
-            ERROR_LOG("Failed to create mesh.vert ShaderModule.");
-            return false;
-        }
-
-        if (!m_fragmentShaderModule.Create(&m_context, "mesh.frag"))
-        {
-            ERROR_LOG("Failed to create mesh.frag ShaderModule.");
-            return false;
-        }
-
-        if (!m_taskSubmitShaderModule.Create(&m_context, "task_submit.comp"))
-        {
-            ERROR_LOG("Failed to create task_submit.comp ShaderModule.");
-            return false;
-        }
-
-        if (!m_clusterSubmitShaderModule.Create(&m_context, "cluster_submit.comp"))
-        {
-            ERROR_LOG("Failed to create cluster_submit.comp ShaderModule.");
-            return false;
-        }
-
-        m_textureDescriptorSetLayout =
-            VkUtils::CreateDescriptorSetLayout(&m_context, "TEXTURE_DESCRIPTOR_SET_LAYOUT", 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_DESCRIPTROS,
-                                               VK_SHADER_STAGE_FRAGMENT_BIT, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT);
-
-        if (!m_textureDescriptorSetLayout)
-        {
-            ERROR_LOG("Failed to create Texture Descriptor Set Layout.");
-            return false;
-        }
-
-        m_textureDescriptorPool = VkUtils::CreateDescriptorPool(&m_context, "TEXTURE_DESCRIPTOR_POOL", MAX_ACTIVE_DESCRIPTORS);
-        if (!m_textureDescriptorPool)
-        {
-            ERROR_LOG("Failed to create Texture Descriptor Pool.");
-            return false;
-        }
-
-        m_textureDescriptorSet = VkUtils::CreateDescriptorSet(&m_context, "TEXTURE_DESCRIPTOR_SET", MAX_ACTIVE_DESCRIPTORS, m_textureDescriptorPool, m_textureDescriptorSetLayout);
-        if (!m_textureDescriptorSet)
-        {
-            ERROR_LOG("Failed to create Texture Descriptor Set.");
-            return false;
+            m_shaderModules.Set(name, {});
+            if (!m_shaderModules[name].Create(&m_context, name))
+            {
+                ERROR_LOG("Failed to create: '{}' ShaderModule.", name);
+                return false;
+            }
         }
 
         VulkanShaderCreateInfo createInfo;
@@ -479,203 +484,126 @@ namespace C3D
         createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_COMPUTE;
         createInfo.pushConstantsSize = sizeof(CullData);
         createInfo.cache             = VK_NULL_HANDLE;
-        createInfo.modules           = { &m_cullShaderModule };
+        createInfo.modules           = { &m_shaderModules["draw_cull.comp"] };
         createInfo.constants         = { /* late = */ false, /* task = */ false };
 
-        if (!m_drawCullShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create DrawCull shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_drawCullShader.Create(createInfo), "DrawCull Shader");
 
         createInfo.name              = "TASK_CULL_SHADER";
         createInfo.pushConstantsSize = sizeof(CullData);
-        createInfo.modules           = { &m_cullShaderModule };
+        createInfo.modules           = { &m_shaderModules["draw_cull.comp"] };
         createInfo.constants         = { /* late = */ false, /* task = */ true };
 
-        if (!m_taskCullShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create TaskCull shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_taskCullShader.Create(createInfo), "TaskCull Shader");
 
         createInfo.name              = "CLUSTER_CULL_SHADER";
         createInfo.pushConstantsSize = sizeof(CullData);
-        createInfo.modules           = { &m_clusterCullShaderModule };
+        createInfo.modules           = { &m_shaderModules["cluster_cull.comp"] };
         createInfo.constants         = { /* late = */ false };
 
-        if (!m_clusterCullShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create ClusterCull shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_clusterCullShader.Create(createInfo), "ClusterCull Shader");
 
         createInfo.name              = "DRAW_CULL_LATE_SHADER";
         createInfo.pushConstantsSize = sizeof(CullData);
-        createInfo.modules           = { &m_cullShaderModule };
+        createInfo.modules           = { &m_shaderModules["draw_cull.comp"] };
         createInfo.constants         = { /* late = */ true, /* task = */ false };
 
-        if (!m_drawCullLateShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create DrawCullLate shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_drawCullLateShader.Create(createInfo), "DrawCullLate Shader");
 
         createInfo.name              = "TASK_CULL_LATE_SHADER";
         createInfo.pushConstantsSize = sizeof(CullData);
-        createInfo.modules           = { &m_cullShaderModule };
+        createInfo.modules           = { &m_shaderModules["draw_cull.comp"] };
         createInfo.constants         = { /* late = */ true, /* task = */ true };
 
-        if (!m_taskCullLateShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create TaskCullLate shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_taskCullLateShader.Create(createInfo), "TaskCullLate Shader");
 
         createInfo.name              = "CLUSTER_CULL_LATE_SHADER";
         createInfo.pushConstantsSize = sizeof(CullData);
-        createInfo.modules           = { &m_clusterCullShaderModule };
+        createInfo.modules           = { &m_shaderModules["cluster_cull.comp"] };
         createInfo.constants         = { /* late = */ true };
 
-        if (!m_clusterCullLateShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create ClusterCullLate shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_clusterCullLateShader.Create(createInfo), "ClusterCullLate Shader");
 
         createInfo.name              = "DEPTH_REDUCE_SHADER";
         createInfo.pushConstantsSize = sizeof(DepthReduceData);
-        createInfo.modules           = { &m_depthReduceShaderModule };
+        createInfo.modules           = { &m_shaderModules["depth_reduce.comp"] };
         createInfo.constants         = {};
 
-        if (!m_depthReduceShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create DepthReduce shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_depthReduceShader.Create(createInfo), "DepthReduce Shader");
 
         createInfo.name              = "TASK_SUBMIT_SHADER";
         createInfo.pushConstantsSize = 0;
-        createInfo.modules           = { &m_taskSubmitShaderModule };
+        createInfo.modules           = { &m_shaderModules["task_submit.comp"] };
 
-        if (!m_taskSubmitShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create Task Submit shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_taskSubmitShader.Create(createInfo), "TaskSubmit Shader");
 
         createInfo.name    = "CLUSTER_SUBMIT_SHADER";
-        createInfo.modules = { &m_clusterSubmitShaderModule };
+        createInfo.modules = { &m_shaderModules["cluster_submit.comp"] };
 
-        if (!m_clusterSubmitShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create Cluster Submit shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_clusterSubmitShader.Create(createInfo), "ClusterSubmit Shader");
 
         createInfo.name              = "MESH_SHADER";
         createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_GRAPHICS;
         createInfo.pushConstantsSize = sizeof(Globals);
-        createInfo.modules           = { &m_meshShaderModule, &m_fragmentShaderModule };
+        createInfo.modules           = { &m_shaderModules["mesh.vert"], &m_shaderModules["mesh.frag"] };
         createInfo.setArrayLayout    = m_textureDescriptorSetLayout;
 
-        if (!m_meshShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create Mesh Shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_meshShader.Create(createInfo), "Mesh Shader");
 
         createInfo.name      = "MESH_POST_SHADER";
         createInfo.constants = { /* LATE= */ false, /* TASK= */ false, /* POST= */ 1 };
 
-        if (!m_meshPostShader.Create(createInfo))
-        {
-            ERROR_LOG("Failed to create Mesh Post Shader.");
-            return false;
-        }
+        CREATE_RESOURCE(m_meshPostShader.Create(createInfo), "MeshPost Shader");
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
-            if (!m_meshletShaderModule.Create(&m_context, "meshlet.mesh"))
-            {
-                ERROR_LOG("Failed to create meshlet.mesh ShaderModule.");
-                return false;
-            }
-
-            if (!m_meshletTaskShaderModule.Create(&m_context, "meshlet.task"))
-            {
-                ERROR_LOG("Failed to create meshlet.task ShaderModule.");
-                return false;
-            }
-
             // For the meshlet shader only the name and and modules change
             createInfo.name              = "MESHLET_SHADER";
             createInfo.pushConstantsSize = sizeof(Globals);
             createInfo.constants         = { /* late = */ false, /* task = */ true };
-            createInfo.modules           = { &m_meshletTaskShaderModule, &m_meshletShaderModule, &m_fragmentShaderModule };
+            createInfo.modules           = { &m_shaderModules["meshlet.task"], &m_shaderModules["meshlet.mesh"], &m_shaderModules["mesh.frag"] };
 
-            if (!m_meshletShader.Create(createInfo))
-            {
-                ERROR_LOG("Failed to create Meshlet shader.");
-                return false;
-            }
+            CREATE_RESOURCE(m_meshletShader.Create(createInfo), "Meshlet Shader");
 
             createInfo.name              = "MESHLET_LATE_SHADER";
             createInfo.pushConstantsSize = sizeof(Globals);
             createInfo.constants         = { /* late = */ true, /* task = */ true };
-            createInfo.modules           = { &m_meshletTaskShaderModule, &m_meshletShaderModule, &m_fragmentShaderModule };
+            createInfo.modules           = { &m_shaderModules["meshlet.task"], &m_shaderModules["meshlet.mesh"], &m_shaderModules["mesh.frag"] };
 
-            if (!m_meshletLateShader.Create(createInfo))
-            {
-                ERROR_LOG("Failed to create Meshlet Late shader.");
-                return false;
-            }
+            CREATE_RESOURCE(m_meshletLateShader.Create(createInfo), "MeshletLate Shader");
 
             createInfo.name              = "MESHLET_POST_SHADER";
             createInfo.pushConstantsSize = sizeof(Globals);
             createInfo.constants         = { /* late = */ true, /* task = */ true, /* post = */ 1 };
 
-            if (!m_meshletPostShader.Create(createInfo))
-            {
-                ERROR_LOG("Failed to create Meshlet Post shader.");
-                return false;
-            }
+            CREATE_RESOURCE(m_meshletPostShader.Create(createInfo), "MeshletPost Shader");
 
             createInfo.name              = "CLUSTER_MESHLET_SHADER";
             createInfo.pushConstantsSize = sizeof(Globals);
             createInfo.constants         = { /* late = */ false, /* task = */ false };
-            createInfo.modules           = { &m_meshletShaderModule, &m_fragmentShaderModule };
+            createInfo.modules           = { &m_shaderModules["meshlet.mesh"], &m_shaderModules["mesh.frag"] };
 
-            if (!m_clusterMeshletShader.Create(createInfo))
-            {
-                ERROR_LOG("Failed to create Cluster Meshlet shader.");
-                return false;
-            }
+            CREATE_RESOURCE(m_clusterMeshletShader.Create(createInfo), "MeshletCluster Shader");
 
             createInfo.name      = "CLUSTER_POST_MESHLET_SHADER";
             createInfo.constants = { /* late = */ false, /* task = */ false, /* post = */ 1 };
 
-            if (!m_clusterPostMeshletShader.Create(createInfo))
+            CREATE_RESOURCE(m_clusterPostMeshletShader.Create(createInfo), "MeshletClusterPost Shader");
+        }
+
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
+        {
+            if (!VulkanRayTracing::BuildBLAS(&m_context, geometry, m_vertexBuffer, m_indexBuffer, m_blas, m_blasBuffer))
             {
-                ERROR_LOG("Failed to create Cluster Post Meshlet shader.");
+                ERROR_LOG("Failed to create BLAS.");
                 return false;
             }
-        }
 
-        // Create our depth sampler
-        m_depthSampler = VkUtils::CreateSampler(&m_context, "DEPTH_SAMPLER", VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_REDUCTION_MODE_MIN);
-        if (!m_depthSampler)
-        {
-            ERROR_LOG("Failed to create depth sampler.");
-            return false;
-        }
-
-        // Create our texture sampler
-        m_textureSampler = VkUtils::CreateSampler(&m_context, "TEXTURE_SAMPLER", VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
-        if (!m_textureSampler)
-        {
-            ERROR_LOG("Failed to create texture sampler.");
-            return false;
+            if (!VulkanRayTracing::BuildTLAS(&m_context, m_draws, m_blas, m_tlas, m_tlasBuffer))
+            {
+                ERROR_LOG("Failed to create TLAS");
+                return false;
+            }
         }
 
         return true;
@@ -863,7 +791,9 @@ namespace C3D
 
             shader.Bind(commandBuffer);
 
-            DescriptorInfo descriptors[] = { m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_clusterIndexBuffer };
+            DescriptorInfo descriptors[] = {
+                m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_clusterIndexBuffer, DescriptorInfo(), m_tlas
+            };
             shader.PushDescriptorSet(commandBuffer, descriptors);
             shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
             shader.PushConstants(commandBuffer, &passGlobals, sizeof(globals));
@@ -877,7 +807,7 @@ namespace C3D
 
             DescriptorInfo pyramidDesc(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL);
             DescriptorInfo descriptors[] = {
-                m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_meshletVisibilityBuffer, pyramidDesc,
+                m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_meshletVisibilityBuffer, pyramidDesc, m_tlas
             };
             shader.PushDescriptorSet(commandBuffer, descriptors);
             shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
@@ -891,11 +821,7 @@ namespace C3D
 
             shader.Bind(commandBuffer);
 
-            DescriptorInfo descriptors[] = {
-                m_drawCommandBuffer,
-                m_drawBuffer,
-                m_vertexBuffer,
-            };
+            DescriptorInfo descriptors[] = { m_drawCommandBuffer, m_drawBuffer, m_vertexBuffer, DescriptorInfo(), DescriptorInfo(), DescriptorInfo(), DescriptorInfo(), m_tlas };
             shader.PushDescriptorSet(commandBuffer, descriptors);
             shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
 
@@ -1533,11 +1459,6 @@ namespace C3D
                 ERROR_LOG("Failed to upload meshlet data.");
                 return false;
             }
-        }
-
-        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
-        {
-            VulkanRayTracing::BuildBLAS(&m_context, geometry, m_vertexBuffer, m_indexBuffer, m_blas, m_blasBuffer);
         }
 
         return true;

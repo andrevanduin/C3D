@@ -126,13 +126,6 @@ namespace C3D
             index++;
         }
 
-        // Create our render's resources (we need atleast one window before we can do this)
-        if (!Renderer.CreateResources())
-        {
-            ERROR_LOG("Failed to create Renderer resources.");
-            return false;
-        }
-
         // Try to boot the application
         if (!state.app->OnBoot())
         {
@@ -157,6 +150,12 @@ namespace C3D
         if (!state.app->OnRun(state.frameData))
         {
             ERROR_LOG("Failed to execute application OnRun() method.");
+            state.running = false;
+        }
+
+        if (!Renderer.OnRun())
+        {
+            ERROR_LOG("Failed to execute renderer OnRun() method.");
             state.running = false;
         }
 

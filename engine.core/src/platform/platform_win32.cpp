@@ -415,8 +415,8 @@ namespace C3D
         windowHeight += borderRect.bottom - borderRect.top;
 
         auto fullName = "C3DEngine - " + config.name;
-        HWND handle   = CreateWindowEx(windowExStyle, "C3D_ENGINE_WINDOW_CLASS", fullName.Data(), windowStyle, windowX, windowY, windowWidth, windowHeight,
-                                       nullptr, nullptr, state.handle.hInstance, nullptr);
+        HWND handle   = CreateWindowEx(windowExStyle, "C3D_ENGINE_WINDOW_CLASS", fullName.Data(), windowStyle, windowX, windowY, windowWidth, windowHeight, nullptr, nullptr,
+                                       state.handle.hInstance, nullptr);
 
         if (!handle)
         {
@@ -557,7 +557,7 @@ namespace C3D
                 watch.filePath      = filePath;
                 watch.lastWriteTime = data.ftLastWriteTime;
 
-                INFO_LOG("Registered watch for: '{}'.", filePath);
+                TRACE("Registered watch for: '{}'.", filePath);
                 return i;
             }
         }
@@ -568,7 +568,7 @@ namespace C3D
         const Win32FileWatch watch = { nextIndex, filePath, data.ftLastWriteTime };
         state.fileWatches.PushBack(watch);
 
-        INFO_LOG("Registered watch for: '{}'.", filePath);
+        TRACE("Registered watch for: '{}'.", filePath);
         return nextIndex;
     }
 

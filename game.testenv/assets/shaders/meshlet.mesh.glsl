@@ -64,6 +64,7 @@ layout(location = 0) out flat uint outDrawId[];
 layout(location = 1) out vec2 outUv[];
 layout(location = 2) out vec3 outNormal[];
 layout(location = 3) out vec4 outTangent[];
+layout(location = 4) out vec3 outWpos[];
 
 #if DEBUG
 uint pcg_hash(uint a)
@@ -125,13 +126,15 @@ void main()
         normal = RotateVecByQuat(normal, meshDraw.orientation);
         tangent.xyz = RotateVecByQuat(tangent.xyz, meshDraw.orientation);
 
-        vec4 clip = globals.projection * (globals.cullData.view * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1));
+        vec3 wpos = RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position;
+        vec4 clip = globals.projection * (globals.cullData.view * vec4(wpos, 1));
 
         gl_MeshVerticesEXT[i].gl_Position = clip;        
         outDrawId[i] = command.drawId;
         outUv[i] = texCoord;
         outNormal[i] = normal;
         outTangent[i] = tangent;
+        outWpos[i] = wpos;
 
     #if CULL
         vertexClip[i] = vec3((clip.xy / clip.w * 0.5 + vec2(0.5)) * screen, clip.w);

@@ -29,7 +29,7 @@ namespace C3D
         m_aspectMask = FormatToAspectMask(createInfo.format);
         m_mipLevels  = createInfo.mipLevels;
 
-        INFO_LOG("Creating: '{}'.", m_name);
+        TRACE("Creating: '{}'.", m_name);
 
         if (!m_context)
         {
@@ -141,7 +141,7 @@ namespace C3D
 
     void VulkanTexture::Destroy()
     {
-        INFO_LOG("Destroying: '{}'.", m_name);
+        TRACE("Destroying: '{}'.", m_name);
 
         auto device = m_context->device.GetLogical();
 

@@ -102,9 +102,10 @@ namespace C3D
         // Enable Vulkan 1.3 features
         VkPhysicalDeviceVulkan13Features device13Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
 
-        device13Features.dynamicRendering = VK_TRUE;
-        device13Features.synchronization2 = VK_TRUE;
-        device13Features.maintenance4     = VK_TRUE;
+        device13Features.dynamicRendering               = VK_TRUE;
+        device13Features.synchronization2               = VK_TRUE;
+        device13Features.maintenance4                   = VK_TRUE;
+        device13Features.shaderDemoteToHelperInvocation = VK_TRUE;
 
         device12Features.pNext = &device13Features;
 

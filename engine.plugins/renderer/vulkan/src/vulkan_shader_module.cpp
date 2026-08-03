@@ -304,8 +304,10 @@ namespace C3D
                 return VK_DESCRIPTOR_TYPE_SAMPLER;
             case SpvOpTypeSampledImage:
                 return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            case SpvOpTypeAccelerationStructureKHR:
+                return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
             default:
-                C3D_FAIL("Unknown resource type");
+                C3D_FAIL(String::FromFormat("Unknown resource type: {}.", static_cast<u32>(op)).Data());
                 return VkDescriptorType(0);
         }
     }
@@ -411,6 +413,7 @@ namespace C3D
                 case SpvOpTypeImage:
                 case SpvOpTypeSampler:
                 case SpvOpTypeSampledImage:
+                case SpvOpTypeAccelerationStructureKHR:
                 {
                     C3D_ASSERT(wordCount >= 2);
 
@@ -468,9 +471,7 @@ namespace C3D
         {
             // Set 0 is reserved for push descriptors
             if (id.opCode == SpvOpVariable &&
-                (id.storageClass == SpvStorageClassUniform || id.storageClass == SpvStorageClassUniformConstant ||
-                 id.storageClass == SpvStorageClassStorageBuffer) &&
-                id.set == 0)
+                (id.storageClass == SpvStorageClassUniform || id.storageClass == SpvStorageClassUniformConstant || id.storageClass == SpvStorageClassStorageBuffer) && id.set == 0)
             {
                 C3D_ASSERT(id.binding < 32);
                 C3D_ASSERT(ids[id.typeId].opCode == SpvOpTypePointer);

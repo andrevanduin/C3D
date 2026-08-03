@@ -19,7 +19,7 @@ namespace C3D
         bool OnInit(const CSONObject& config) override;
         void OnShutdown() override;
 
-        bool CreateResources() const;
+        bool OnRun() const;
 
         bool UploadMeshes(const DynamicArray<MeshAsset>& meshes);
         bool UploadTextures(const DynamicArray<String>& texturePaths);
@@ -49,10 +49,8 @@ namespace C3D
         RendererPlugin* m_backendPlugin = nullptr;
         /** @brief A dynamic library object to load the rendering plugin. */
         DynamicLibrary m_backendDynamicLibrary;
-
         /** @brief The configuration for our render system. */
         RenderSystemConfig m_config;
-
         /** @brief A structure holding all the geometry ready for rendering. */
         Geometry m_geometry;
     };

@@ -30,6 +30,7 @@ layout (location = 0) out flat uint outDrawId;
 layout (location = 1) out vec2 outUv;
 layout (location = 2) out vec3 outNormal;
 layout (location = 3) out vec4 outTangent;
+layout (location = 4) out vec3 outWpos;
 
 void main()
 {
@@ -45,10 +46,13 @@ void main()
     normal = RotateVecByQuat(normal, meshDraw.orientation);
     tangent.xyz = RotateVecByQuat(tangent.xyz, meshDraw.orientation);
     
-    gl_Position = globals.projection * (globals.cullData.view * vec4(RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position, 1));
+    vec3 wpos = RotateVecByQuat(position, meshDraw.orientation) * meshDraw.scale + meshDraw.position;
+
+    gl_Position = globals.projection * (globals.cullData.view * vec4(wpos, 1));
     
     outDrawId = drawId;
     outUv = texCoord;
     outNormal = normal;
     outTangent = tangent;
+    outWpos = wpos;
 }

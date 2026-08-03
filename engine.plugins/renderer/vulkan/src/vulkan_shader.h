@@ -17,6 +17,8 @@ namespace C3D
 
     struct DescriptorInfo
     {
+        DescriptorInfo() = default;
+
         DescriptorInfo(VkImageView imageView, VkImageLayout imageLayout)
         {
             image.sampler     = VK_NULL_HANDLE;
@@ -38,16 +40,19 @@ namespace C3D
             buffer.range  = range;
         }
 
-        DescriptorInfo(VulkanBuffer buffer_)
+        DescriptorInfo(const VulkanBuffer& buffer_)
         {
             buffer.buffer = buffer_.GetHandle();
             buffer.offset = 0;
             buffer.range  = VK_WHOLE_SIZE;
         }
 
+        DescriptorInfo(const VkAccelerationStructureKHR& structure) { accelerationStructure = structure; }
+
         union {
             VkDescriptorImageInfo image;
             VkDescriptorBufferInfo buffer;
+            VkAccelerationStructureKHR accelerationStructure;
         };
     };
 

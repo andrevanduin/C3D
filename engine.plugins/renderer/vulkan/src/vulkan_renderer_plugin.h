@@ -3,6 +3,9 @@
 #include <renderer/mesh.h>
 #include <renderer/renderer_plugin.h>
 
+#include "containers/dynamic_array.h"
+#include "containers/hash_map.h"
+#include "string/string.h"
 #include "vulkan_buffer.h"
 #include "vulkan_context.h"
 #include "vulkan_shader.h"
@@ -26,7 +29,7 @@ namespace C3D
         bool OnInit(const RendererPluginConfig& config) override;
         void OnShutdown() override;
 
-        bool CreateResources() override;
+        bool OnRun(const Geometry& geometry) override;
 
         bool Begin(Window& window) override;
         bool End(Window& window) override;
@@ -87,17 +90,7 @@ namespace C3D
         /** @brief The lod level we are displaying as part of our lod debugging. */
         u32 m_debugLodStep = 0;
 
-        VulkanShaderModule m_cullShaderModule;
-        VulkanShaderModule m_clusterCullShaderModule;
-
-        VulkanShaderModule m_taskSubmitShaderModule;
-        VulkanShaderModule m_clusterSubmitShaderModule;
-
-        VulkanShaderModule m_depthReduceShaderModule;
-        VulkanShaderModule m_meshShaderModule;
-        VulkanShaderModule m_fragmentShaderModule;
-        VulkanShaderModule m_meshletShaderModule;
-        VulkanShaderModule m_meshletTaskShaderModule;
+        HashMap<String, VulkanShaderModule> m_shaderModules;
 
         VulkanShader m_depthReduceShader;
 
@@ -126,7 +119,9 @@ namespace C3D
 
         DynamicArray<MeshDraw> m_draws;
         DynamicArray<VulkanTexture> m_textures;
+
         DynamicArray<VkAccelerationStructureKHR> m_blas;
+        VkAccelerationStructureKHR m_tlas;
 
         VkDescriptorPool m_textureDescriptorPool;
         VkDescriptorSetLayout m_textureDescriptorSetLayout;
@@ -156,7 +151,9 @@ namespace C3D
         VulkanBuffer m_meshletVisibilityBuffer;
         VulkanBuffer m_clusterIndexBuffer;
         VulkanBuffer m_clusterCountBuffer;
+
         VulkanBuffer m_blasBuffer;
+        VulkanBuffer m_tlasBuffer;
 
         VkViewport m_viewport;
         VkRect2D m_scissor;

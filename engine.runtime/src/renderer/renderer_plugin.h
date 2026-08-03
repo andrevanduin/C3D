@@ -17,12 +17,13 @@ namespace C3D
         virtual void OnShutdown()                               = 0;
 
         /**
-         * @brief Creates renderer-specfic resources.
-         * Useful for when there are resources that need to be created that can't yet be created during OnInit()
+         * @brief Gets called after the OnRun() method for the main application has ran.
+         * Useful since the user might create some resources during OnRun() which we need to do something with in the Renderer after.
          *
+         * @param geometry The geometry that should be rendered (which is managed by the RenderSystem)
          * @return True if successful; false otherwise
          */
-        virtual bool CreateResources() = 0;
+        virtual bool OnRun(const Geometry& geometry) = 0;
 
         /**
          * @brief Begins rendering the frame.

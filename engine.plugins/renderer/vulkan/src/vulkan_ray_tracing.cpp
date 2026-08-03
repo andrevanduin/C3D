@@ -1,12 +1,13 @@
 
 #include "vulkan_ray_tracing.h"
 
-#include <cstddef>
-
 #include "asserts/asserts.h"
 #include "containers/dynamic_array.h"
+#include "defines.h"
 #include "logger/logger.h"
+#include "math/math_types.h"
 #include "renderer/vertex.h"
+#include "time/scoped_timer.h"
 #include "vulkan_buffer.h"
 #include "vulkan_utils.h"
 
@@ -18,6 +19,8 @@ namespace C3D
     bool VulkanRayTracing::BuildBLAS(VulkanContext* context, const Geometry& geometry, const VulkanBuffer& vb, const VulkanBuffer& ib,
                                      DynamicArray<VkAccelerationStructureKHR>& blas, VulkanBuffer& blasBuffer)
     {
+        ScopedTimer timer("Building BLAS");
+
         u32 numberOfMeshes = geometry.meshes.Size();
 
         DynamicArray<u32> primitiveCounts(numberOfMeshes);
@@ -76,7 +79,7 @@ namespace C3D
             totalScratchSize      = (totalScratchSize + sizeInfo.buildScratchSize + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
         }
 
-        INFO_LOG("RT AccelerationStructureSize: {} RT BuildScratchSize: {}", totalAccelerationSize, totalScratchSize);
+        INFO_LOG("BLAS AccelerationStructureSize: {} MB BLAS BuildScratchSize: {} MB.", BytesToMebiBytes(totalAccelerationSize), BytesToMebiBytes(totalScratchSize));
 
         // Create our buffer to hold the BLAS
         if (!blasBuffer.Create(context, "BLAS_BUFFER", totalAccelerationSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -113,7 +116,7 @@ namespace C3D
             accelerationInfo.size   = accelerationSizes[i];
             accelerationInfo.type   = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 
-            auto result = vkCreateAccelerationStructureKHR(device, &accelerationInfo, nullptr, &blas[i]);
+            auto result = vkCreateAccelerationStructureKHR(device, &accelerationInfo, context->allocator, &blas[i]);
             if (!VkUtils::IsSuccess(result))
             {
                 ERROR_LOG("Failed to create vk Acceleration Structure with error: '{}'.", VkUtils::ResultString(result));
@@ -127,30 +130,170 @@ namespace C3D
             buildRangePtrs[i]             = &buildRanges[i];
         }
 
+        auto commandPool   = context->commandPool;
+        auto commandBuffer = context->commandBuffer;
+
         // Reset command pool
-        VK_CHECK(vkResetCommandPool(device, context->commandPool, 0));
+        VK_CHECK(vkResetCommandPool(device, commandPool, 0));
 
         // Begin the command buffer
         VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         beginInfo.flags                    = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-        VK_CHECK(vkBeginCommandBuffer(context->commandBuffer, &beginInfo));
+        VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
-        vkCmdBuildAccelerationStructuresKHR(context->commandBuffer, numberOfMeshes, buildInfos.GetData(), buildRangePtrs.GetData());
+        vkCmdBuildAccelerationStructuresKHR(commandBuffer, numberOfMeshes, buildInfos.GetData(), buildRangePtrs.GetData());
 
-        VK_CHECK(vkEndCommandBuffer(context->commandBuffer));
+        VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
         VkSubmitInfo submitInfo       = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
         submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers    = &context->commandBuffer;
+        submitInfo.pCommandBuffers    = &commandBuffer;
 
         VK_CHECK(vkQueueSubmit(context->device.GetDeviceQueue(), 1, &submitInfo, VK_NULL_HANDLE));
 
-        VK_CHECK(vkDeviceWaitIdle(device));
+        context->device.WaitIdle();
 
         // Finally destroy our scratch buffer since we are done with it
         scratch.Destroy();
 
         return true;
     }
+
+    bool VulkanRayTracing::BuildTLAS(VulkanContext* context, const DynamicArray<MeshDraw>& draws, const DynamicArray<VkAccelerationStructureKHR>& blas,
+                                     VkAccelerationStructureKHR& tlas, VulkanBuffer& tlasBuffer)
+    {
+        ScopedTimer timer("Building TLAS");
+
+        auto device = context->device.GetLogical();
+
+        VulkanBuffer instances;
+        if (!instances.Create(context, "TLAS_INSTANCES", sizeof(VkAccelerationStructureInstanceKHR) * draws.Size(),
+                              VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+        {
+            ERROR_LOG("Failed to create instance buffer.");
+            return false;
+        }
+
+        u32 numberOfBlas  = blas.Size();
+        u32 numberOfDraws = draws.Size();
+
+        DynamicArray<VkDeviceAddress> blasAddresses(numberOfBlas);
+
+        for (u32 i = 0; i < numberOfBlas; ++i)
+        {
+            VkAccelerationStructureDeviceAddressInfoKHR info = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR };
+            info.accelerationStructure                       = blas[i];
+
+            blasAddresses[i] = vkGetAccelerationStructureDeviceAddressKHR(device, &info);
+        }
+
+        for (size_t i = 0; i < numberOfDraws; ++i)
+        {
+            const MeshDraw& draw = draws[i];
+            C3D_ASSERT(draw.meshIndex < numberOfBlas);
+
+            mat3 xform = transpose(glm::mat3_cast(draw.orientation)) * draw.scale;
+
+            VkAccelerationStructureInstanceKHR instance = {};
+            memcpy(instance.transform.matrix[0], &xform[0], sizeof(f32) * 3);
+            memcpy(instance.transform.matrix[1], &xform[1], sizeof(f32) * 3);
+            memcpy(instance.transform.matrix[2], &xform[2], sizeof(f32) * 3);
+
+            instance.transform.matrix[0][3] = draw.position.x;
+            instance.transform.matrix[1][3] = draw.position.y;
+            instance.transform.matrix[2][3] = draw.position.z;
+
+            instance.instanceCustomIndex            = i;
+            instance.mask                           = 0xFF;
+            instance.accelerationStructureReference = blasAddresses[draw.meshIndex];
+
+            memcpy(static_cast<VkAccelerationStructureInstanceKHR*>(instances.GetData()) + i, &instance, sizeof(VkAccelerationStructureInstanceKHR));
+        }
+
+        VkAccelerationStructureGeometryKHR geometry    = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR };
+        geometry.geometryType                          = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+        geometry.geometry.instances.sType              = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+        geometry.geometry.instances.data.deviceAddress = instances.GetDeviceAddress();
+
+        VkAccelerationStructureBuildGeometryInfoKHR buildInfo = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
+
+        buildInfo.type          = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+        buildInfo.flags         = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;  // TODO: fast build?
+        buildInfo.mode          = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+        buildInfo.geometryCount = 1;
+        buildInfo.pGeometries   = &geometry;
+
+        uint32_t primitiveCount = uint32_t(numberOfDraws);
+
+        VkAccelerationStructureBuildSizesInfoKHR sizeInfo = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR };
+        vkGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primitiveCount, &sizeInfo);
+
+        INFO_LOG("TLAS AccelerationStructureSize: {} MB, ScratchSize: {} MB.", BytesToMebiBytes(sizeInfo.accelerationStructureSize), BytesToMebiBytes(sizeInfo.buildScratchSize));
+
+        if (!tlasBuffer.Create(context, "TLAS_BUFFER", sizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        {
+            ERROR_LOG("Failed to create TLAS Buffer.");
+            return false;
+        }
+
+        VulkanBuffer scratch;
+        if (!scratch.Create(context, "TLAS_SCRATCH_BUFFER", sizeInfo.buildScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        {
+            ERROR_LOG("Failed to create TLAS Scratch Buffer.");
+            return false;
+        }
+
+        VkAccelerationStructureCreateInfoKHR accelerationInfo = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
+
+        accelerationInfo.buffer = tlasBuffer.GetHandle();
+        accelerationInfo.size   = sizeInfo.accelerationStructureSize;
+        accelerationInfo.type   = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+
+        auto result = vkCreateAccelerationStructureKHR(device, &accelerationInfo, context->allocator, &tlas);
+        if (!VkUtils::IsSuccess(result))
+        {
+            ERROR_LOG("Failed to create Acceleration Structure with error: '{}'.", VkUtils::ResultString(result));
+            return false;
+        }
+
+        buildInfo.dstAccelerationStructure  = tlas;
+        buildInfo.scratchData.deviceAddress = scratch.GetDeviceAddress();
+
+        VkAccelerationStructureBuildRangeInfoKHR buildRange           = {};
+        buildRange.primitiveCount                                     = primitiveCount;
+        const VkAccelerationStructureBuildRangeInfoKHR* buildRangePtr = &buildRange;
+
+        auto commandPool   = context->commandPool;
+        auto commandBuffer = context->commandBuffer;
+
+        VK_CHECK(vkResetCommandPool(device, commandPool, 0));
+
+        VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        beginInfo.flags                    = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+        vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &buildInfo, &buildRangePtr);
+
+        VK_CHECK(vkEndCommandBuffer(commandBuffer));
+
+        VkSubmitInfo submitInfo       = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers    = &commandBuffer;
+
+        VK_CHECK(vkQueueSubmit(context->device.GetDeviceQueue(), 1, &submitInfo, VK_NULL_HANDLE));
+
+        context->device.WaitIdle();
+
+        // Finally destroy our temporary buffers
+        scratch.Destroy();
+        instances.Destroy();
+
+        return true;
+    }
+
 }  // namespace C3D

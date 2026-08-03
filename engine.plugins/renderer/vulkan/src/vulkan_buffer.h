@@ -12,6 +12,15 @@ namespace C3D
     class VulkanBuffer
     {
     public:
+        VulkanBuffer() = default;
+        ~VulkanBuffer();
+
+        VulkanBuffer(const VulkanBuffer& other) = delete;
+        VulkanBuffer(VulkanBuffer&& other)      = delete;
+
+        VulkanBuffer& operator=(const VulkanBuffer& other) = delete;
+        VulkanBuffer& operator=(VulkanBuffer&& other)      = delete;
+
         bool Create(VulkanContext* context, const char* name, u64 size, VkBufferUsageFlags flags, VkMemoryPropertyFlags memoryFlags);
 
         /** @brief Uploads the data stored in this buffer to the GPU. */

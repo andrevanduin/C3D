@@ -9,6 +9,8 @@
 
 namespace C3D
 {
+    VulkanBuffer::~VulkanBuffer() { Destroy(); }
+
     bool VulkanBuffer::Create(VulkanContext* context, const char* name, u64 size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryFlags)
     {
         m_context     = context;
@@ -30,9 +32,17 @@ namespace C3D
         vkGetBufferMemoryRequirements(device, m_handle, &memoryRequirements);
         m_requiredSize = memoryRequirements.size;
 
+        VkMemoryAllocateFlagsInfo flagsInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO };
+        flagsInfo.flags                     = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+
         VkMemoryAllocateInfo allocateInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
         allocateInfo.allocationSize       = memoryRequirements.size;
         allocateInfo.memoryTypeIndex      = m_context->device.SelectMemoryType(memoryRequirements.memoryTypeBits, memoryFlags);
+
+        if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
+        {
+            allocateInfo.pNext = &flagsInfo;
+        }
 
         VK_CHECK(vkAllocateMemory(device, &allocateInfo, m_context->allocator, &m_memory));
 
@@ -139,6 +149,8 @@ namespace C3D
 
             vkDestroyBuffer(device, m_handle, m_context->allocator);
             vkFreeMemory(device, m_memory, m_context->allocator);
+
+            m_context = nullptr;
         }
 
         m_name.Destroy();
