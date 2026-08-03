@@ -50,6 +50,7 @@ namespace C3D
         void SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth) override;
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) override;
         void SetCamera(const Camera& camera) override;
+        void SetSunDirection(const vec3& sunDirection) override;
 
         bool SupportsFeature(RendererSupportFlag feature) const override;
 
@@ -128,6 +129,7 @@ namespace C3D
         VkDescriptorSet m_textureDescriptorSet;
 
         Camera m_camera;
+        vec3 m_sunDirection = vec3(1.0f);
 
         VkQueryPool m_queryPoolTimestamps;
         VkQueryPool m_queryPoolStatistics;

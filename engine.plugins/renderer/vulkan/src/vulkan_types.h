@@ -106,6 +106,7 @@ namespace C3D
     struct alignas(16) Globals
     {
         mat4 projection;
+        vec3 sunDirection;
         CullData cullData;
         f32 screenWidth, screenHeight;
     };

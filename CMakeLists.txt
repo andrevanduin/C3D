@@ -3,8 +3,6 @@
 #
 cmake_minimum_required (VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 20)
-
 if (WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd26812")
     set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_WIN32_KHR)
@@ -12,6 +10,7 @@ endif()
 
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_STANDARD 23)
 set(PDB_VERSION "NONE" CACHE STRING "The version number for the PDB file")
 
 project ("C3DEngine")

@@ -1,8 +1,6 @@
 
 cmake_minimum_required (VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 20)
-
 file(GLOB_RECURSE C3DEngine_SRC "src/*.h" "src/*.cpp")
 
 add_library(C3DEngineCore SHARED ${C3DEngine_SRC})

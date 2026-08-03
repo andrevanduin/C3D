@@ -274,6 +274,8 @@ namespace C3D
 
     void RenderSystem::SetCamera(const Camera& camera) const { m_backendPlugin->SetCamera(camera); }
 
+    void RenderSystem::SetSunDirection(const vec3& sunDirection) const { m_backendPlugin->SetSunDirection(sunDirection); }
+
     u32 RenderSystem::GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<Vertex>& vertices)
     {
         // Determine our upper bound of meshlets

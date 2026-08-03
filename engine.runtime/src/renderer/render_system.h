@@ -41,6 +41,7 @@ namespace C3D
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) const;
 
         void SetCamera(const Camera& camera) const;
+        void SetSunDirection(const vec3& sunDirection) const;
 
     private:
         u32 GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<Vertex>& vertices);

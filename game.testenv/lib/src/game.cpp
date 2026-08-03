@@ -106,8 +106,9 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
             return false;
         }
 
-        // Finally set out camera
+        // Finally set out camera and sun direction
         Renderer.SetCamera(sceneAsset.camera);
+        Renderer.SetSunDirection(sceneAsset.sunDirection);
 
         // Cleanup our scene asset since we are done with it
         sceneManager.Cleanup(sceneAsset);

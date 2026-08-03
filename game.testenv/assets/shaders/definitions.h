@@ -59,6 +59,7 @@ struct CullData
 struct Globals
 {
     mat4 projection;
+    vec3 sunDirection;
     CullData cullData;
     float screenWidth, screenHeight;
 };

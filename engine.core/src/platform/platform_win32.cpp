@@ -598,7 +598,7 @@ namespace C3D
         // This makes the slot available to be filled by a different FileWatch in the future
         Win32FileWatch& watch = state.fileWatches[watchId];
 
-        INFO_LOG("Stopped watching: '{}'.", watch.filePath);
+        TRACE("Stopped watching: '{}'.", watch.filePath);
 
         watch.id = INVALID_ID;
         watch.filePath.Clear();

@@ -990,6 +990,7 @@ namespace C3D
 
         Globals globals      = {};
         globals.projection   = projection;
+        globals.sunDirection = m_sunDirection;
         globals.cullData     = cullData;
         globals.screenWidth  = static_cast<f32>(window.width);
         globals.screenHeight = static_cast<f32>(window.height);
@@ -1673,6 +1674,8 @@ namespace C3D
     }
 
     void VulkanRendererPlugin::SetCamera(const Camera& camera) { m_camera = camera; }
+
+    void VulkanRendererPlugin::SetSunDirection(const vec3& sunDirection) { m_sunDirection = sunDirection; }
 
     bool VulkanRendererPlugin::SupportsFeature(RendererSupportFlag feature) const
     {

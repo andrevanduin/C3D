@@ -26,7 +26,7 @@ namespace C3D
         m_name    = name;
         m_context = context;
 
-        INFO_LOG("Creating ShaderModule: '{}'.", m_name);
+        TRACE("Creating ShaderModule: '{}'.", m_name);
 
         DetermineShaderStage();
 
@@ -43,7 +43,7 @@ namespace C3D
 
     bool VulkanShaderModule::Recreate()
     {
-        INFO_LOG("Recreating ShaderModule: '{}'.", m_name);
+        TRACE("Recreating ShaderModule: '{}'.", m_name);
 
         auto result = CreateInternal();
         if (!result)
@@ -60,7 +60,7 @@ namespace C3D
     {
         if (m_handle)
         {
-            INFO_LOG("Destroying ShaderModule: '{}'.", m_name);
+            TRACE("Destroying ShaderModule: '{}'.", m_name);
             m_name.Destroy();
 
             vkDestroyShaderModule(m_context->device.GetLogical(), m_handle, m_context->allocator);
@@ -72,7 +72,7 @@ namespace C3D
         ShaderManager ShaderManager;
         ShaderAsset shader;
 
-        INFO_LOG("Loading GLSL file: '{}'.", m_name);
+        TRACE("Loading GLSL file: '{}'.", m_name);
 
         if (!ShaderManager.Read(m_name, shader))
         {

@@ -140,7 +140,19 @@ namespace C3D
          */
         virtual void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) = 0;
 
+        /**
+         * @brief Sets a Camera to be used by the Renderer.
+         *
+         * @param camera The camera to be used
+         */
         virtual void SetCamera(const Camera& camera) = 0;
+
+        /**
+         * @brief Sets the Sun Direction to be used by the Renderer.
+         *
+         * @param sunDirection The sun direction to be used
+         */
+        virtual void SetSunDirection(const vec3& sunDirection) = 0;
 
         /**
          * @brief Method that returns if the requested feature is supported by the current renderer backend.

@@ -6,8 +6,8 @@
 
 namespace C3D
 {
-    constexpr auto HASH_MAP_DEFAULT_CAPACITY   = 32;
-    constexpr f64 HASH_MAP_DEFAULT_LOAD_FACTOR = 0.75;
+    constexpr u32 HASH_MAP_DEFAULT_CAPACITY    = 32;
+    constexpr f32 HASH_MAP_DEFAULT_LOAD_FACTOR = 0.75f;
 
     /**
      * @brief Implementation of a HashMap with Open-Adressing using Robin Hood probing and backshift deletion.
@@ -19,7 +19,7 @@ namespace C3D
      * when the HashMap is 50% full we grow the HashMap)
      * @tparam Allocator The allocator used by this HashMap
      */
-    template <class Key, class Value, class HashFunc = std::hash<Key>, f64 LF = HASH_MAP_DEFAULT_LOAD_FACTOR, class Allocator = DynamicAllocator>
+    template <class Key, class Value, class HashFunc = std::hash<Key>, f32 LF = HASH_MAP_DEFAULT_LOAD_FACTOR, class Allocator = DynamicAllocator>
     class HashMap
     {
         static_assert(LF > 0.0, "The Load Factor of a HashMap must be > 0.0");

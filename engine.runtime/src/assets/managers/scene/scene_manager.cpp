@@ -172,8 +172,7 @@ namespace C3D
         translation[2] = m[3][2];
 
         // Compute determinant to determine handedness
-        f32 det = m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
-                  m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+        f32 det = m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
 
         f32 sign = (det < 0.f) ? -1.f : 1.f;
 
@@ -320,11 +319,10 @@ namespace C3D
                     ScopedTimer timer(String::FromFormat("Remapping vertex and index buffers of: '{}'.", sceneMesh.name));
 
                     DynamicArray<u32> remap(sceneMesh.indices.Size());
-                    u64 uniqueVertices = meshopt_generateVertexRemap(remap.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(),
-                                                                     sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex));
+                    u64 uniqueVertices = meshopt_generateVertexRemap(remap.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(), sceneMesh.vertices.GetData(),
+                                                                     sceneMesh.vertices.Size(), sizeof(Vertex));
 
-                    meshopt_remapVertexBuffer(sceneMesh.vertices.GetData(), sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex),
-                                              remap.GetData());
+                    meshopt_remapVertexBuffer(sceneMesh.vertices.GetData(), sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex), remap.GetData());
                     meshopt_remapIndexBuffer(sceneMesh.indices.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(), remap.GetData());
 
                     INFO_LOG("Went from {} vertices to {} vertices.", sceneMesh.vertices.Size(), uniqueVertices);
@@ -339,8 +337,7 @@ namespace C3D
                     u32 vertexCount = sceneMesh.vertices.Size();
 
                     meshopt_optimizeVertexCache(sceneMesh.indices.GetData(), sceneMesh.indices.GetData(), indexCount, vertexCount);
-                    meshopt_optimizeVertexFetch(sceneMesh.vertices.GetData(), sceneMesh.indices.GetData(), indexCount, sceneMesh.vertices.GetData(),
-                                                vertexCount, sizeof(Vertex));
+                    meshopt_optimizeVertexFetch(sceneMesh.vertices.GetData(), sceneMesh.indices.GetData(), indexCount, sceneMesh.vertices.GetData(), vertexCount, sizeof(Vertex));
                 }
 
                 {
@@ -436,6 +433,24 @@ namespace C3D
                     scene.camera.position    = vec3(translation[0], translation[1], translation[2]);
                     scene.camera.orientation = quat(rotation[3], rotation[0], rotation[1], rotation[2]);
                     scene.camera.fovY        = nodeCam.perspective.yFov;
+                }
+
+                if (!node.extensions.Empty())
+                {
+                    for (const auto& ext : node.extensions)
+                    {
+                        if (ext.type == GLTFExtensionType::NodeLightsPunctual)
+                        {
+                            const auto& lightsPunctual = ext.Get<GLTFNodeLightsPunctualExtension>();
+                            if (lightsPunctual.light != INVALID_ID)
+                            {
+                                f32 matrix[16];
+                                node.TransformWorld(matrix);
+
+                                scene.sunDirection = vec3(matrix[8], matrix[9], matrix[10]);
+                            }
+                        }
+                    }
                 }
             }
 
