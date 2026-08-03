@@ -197,8 +197,8 @@ namespace C3D
             }
         }
 
-        INFO_LOG("Center + radius took: {:2.f}ms", centerRadiusClock.GetTotalElapsedMs());
-        INFO_LOG("Meshlet generation took: {:2.f}ms", meshletGenerationClock.GetTotalElapsedMs());
+        TRACE("Center + radius took: {:.2f} ms", centerRadiusClock.GetTotalElapsedMs());
+        INFO_LOG("Meshlet generation finished (took: {:.2f} ms).", meshletGenerationClock.GetTotalElapsedMs());
 
         return m_backendPlugin->UploadGeometry(m_geometry);
     }

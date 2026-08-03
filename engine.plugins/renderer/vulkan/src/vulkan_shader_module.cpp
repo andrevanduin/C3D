@@ -37,7 +37,7 @@ namespace C3D
             return false;
         }
 
-        INFO_LOG("ShaderModule: '{}' created successfully.", name);
+        TRACE("ShaderModule: '{}' created successfully.", name);
         return true;
     }
 
@@ -52,7 +52,7 @@ namespace C3D
             return false;
         }
 
-        INFO_LOG("ShaderModule: '{}' recreated successfully.", m_name);
+        TRACE("ShaderModule: '{}' recreated successfully.", m_name);
         return true;
     }
 
@@ -195,7 +195,7 @@ namespace C3D
     {
         ScopedTimer timer("Compilation");
 
-        INFO_LOG("Compiling: '{}' into SPIR-V for ShaderModule.", m_name);
+        TRACE("Compiling: '{}' into SPIR-V for ShaderModule.", m_name);
 
         // Set target SPIR-V version
         shaderc_compile_options_t options = shaderc_compile_options_initialize();

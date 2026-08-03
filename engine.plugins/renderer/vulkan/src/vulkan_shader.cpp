@@ -15,7 +15,7 @@ namespace C3D
 {
     bool VulkanShader::Create(const VulkanShaderCreateInfo& createInfo)
     {
-        INFO_LOG("Creating: '{}'.", createInfo.name);
+        TRACE("Creating: '{}'.", createInfo.name);
 
         m_context           = createInfo.context;
         m_name              = createInfo.name;
@@ -119,8 +119,7 @@ namespace C3D
         vkCmdPushDescriptorSetWithTemplate(commandBuffer, m_updateTemplate, m_pipelineLayout, 0, descriptors);
     }
 
-    void VulkanShader::BindDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint bindpoint, u32 firstSet, u32 count,
-                                         const VkDescriptorSet* sets) const
+    void VulkanShader::BindDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint bindpoint, u32 firstSet, u32 count, const VkDescriptorSet* sets) const
     {
         vkCmdBindDescriptorSets(commandBuffer, bindpoint, m_pipelineLayout, firstSet, count, sets, 0, nullptr);
     }
@@ -134,7 +133,7 @@ namespace C3D
     {
         if (m_context)
         {
-            INFO_LOG("Destroying: '{}'.", m_name);
+            TRACE("Destroying: '{}'.", m_name);
 
             Event.Unregister(m_watchedFilesCallback);
 
@@ -428,7 +427,7 @@ namespace C3D
         createInfo.pDepthStencilState      = &depthStencilState;
 
         VkPipelineColorBlendAttachmentState colorAttachmentState = {};
-        colorAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorAttachmentState.colorWriteMask                      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
         VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
         colorBlendState.attachmentCount                     = 1;
@@ -551,8 +550,7 @@ namespace C3D
             return nullptr;
         }
 
-        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE, updateTemplate,
-                                 String::FromFormat("DESCRIPTOR_UPDATE_TEMPLATE_{}", m_name));
+        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE, updateTemplate, String::FromFormat("DESCRIPTOR_UPDATE_TEMPLATE_{}", m_name));
 
         return updateTemplate;
     }

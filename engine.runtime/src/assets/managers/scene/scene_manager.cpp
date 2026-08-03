@@ -207,6 +207,8 @@ namespace C3D
 
     bool SceneManager::CreateSceneAsset(GLTFAsset& asset, SceneAsset& scene)
     {
+        INFO_LOG("Creating Scene Asset: '{}'.", scene.name);
+
         ScopedTimer timer(String::FromFormat("Using GLTFAsset to create SceneAsset."));
 
         {
@@ -325,7 +327,7 @@ namespace C3D
                     meshopt_remapVertexBuffer(sceneMesh.vertices.GetData(), sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex), remap.GetData());
                     meshopt_remapIndexBuffer(sceneMesh.indices.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(), remap.GetData());
 
-                    INFO_LOG("Went from {} vertices to {} vertices.", sceneMesh.vertices.Size(), uniqueVertices);
+                    TRACE("Went from {} vertices to {} vertices.", sceneMesh.vertices.Size(), uniqueVertices);
 
                     sceneMesh.vertices.Resize(uniqueVertices);
                 }

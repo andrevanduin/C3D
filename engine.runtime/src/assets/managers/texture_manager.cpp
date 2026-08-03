@@ -24,7 +24,7 @@ namespace C3D
                 return false;
             }
 
-            INFO_LOG("Successfully parsed all: {} bytes of DDS file: '{}'.", asset.size, path);
+            TRACE("Successfully parsed all: {} bytes of DDS file: '{}'.", asset.size, path);
         }
         else
         {

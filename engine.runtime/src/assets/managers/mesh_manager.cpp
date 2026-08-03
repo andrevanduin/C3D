@@ -169,16 +169,15 @@ namespace C3D
             meshopt_remapVertexBuffer(asset.vertices.GetData(), vertices.GetData(), indexCount, sizeof(Vertex), remap.GetData());
             meshopt_remapIndexBuffer(asset.indices.GetData(), nullptr, indexCount, remap.GetData());
 
-            INFO_LOG("Went from {} to {} vertices (reduced by {:.2f}%).", vertices.Size(), uniqueVertexCount,
-                     (static_cast<f32>(uniqueVertexCount) - vertices.Size()) / vertices.Size() * -100);
+            TRACE("Went from {} to {} vertices (reduced by {:.2f}%).", vertices.Size(), uniqueVertexCount,
+                  (static_cast<f32>(uniqueVertexCount) - vertices.Size()) / vertices.Size() * -100);
         }
 
         {
             ScopedTimer timer(String::FromFormat("Optimization for Vertex Cache and Fetch of: '{}'.", asset.name));
 
             meshopt_optimizeVertexCache(asset.indices.GetData(), asset.indices.GetData(), indexCount, asset.vertices.Size());
-            meshopt_optimizeVertexFetch(asset.vertices.GetData(), asset.indices.GetData(), indexCount, asset.vertices.GetData(), asset.vertices.Size(),
-                                        sizeof(Vertex));
+            meshopt_optimizeVertexFetch(asset.vertices.GetData(), asset.indices.GetData(), indexCount, asset.vertices.GetData(), asset.vertices.Size(), sizeof(Vertex));
         }
 
         // Cleanup our internal data and reset our counters etc.

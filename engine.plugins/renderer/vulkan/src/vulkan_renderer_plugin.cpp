@@ -392,14 +392,14 @@ namespace C3D
             m_blasBuffer.Destroy();
         }
 
-        INFO_LOG("Destroying Vulkan Shaders.");
-
         INFO_LOG("Destroying Vulkan Shader Modules.");
         for (auto& m : m_shaderModules)
         {
             m.Destroy();
         }
         m_shaderModules.Destroy();
+
+        INFO_LOG("Destroying Vulkan Shaders.");
 
         m_meshShader.Destroy();
         m_meshPostShader.Destroy();
@@ -467,6 +467,8 @@ namespace C3D
             shader_module_names.PushBack("meshlet.task");
         }
 
+        INFO_LOG("Creating Vulkan Shader Modules.");
+
         m_shaderModules.Create();
         for (auto name : shader_module_names)
         {
@@ -477,6 +479,8 @@ namespace C3D
                 return false;
             }
         }
+
+        INFO_LOG("Creating Vulkan Shaders.");
 
         VulkanShaderCreateInfo createInfo;
         createInfo.context           = &m_context;
@@ -1610,7 +1614,7 @@ namespace C3D
         {
             m_meshletVisibilityBytes = (meshletVisibilityCount + 31) / 32 * sizeof(u32);
 
-            INFO_LOG("Total meshlet visiblity count: {}; Size is: {}MB.", meshletVisibilityCount, BytesToMebiBytes(m_meshletVisibilityBytes));
+            INFO_LOG("Total meshlet visiblity count: {}; Size is: {:.2f} KB.", meshletVisibilityCount, BytesToKibiBytes(m_meshletVisibilityBytes));
 
             if (!m_meshletVisibilityBuffer.Create(&m_context, "MESHLET_VISIBILITY", m_meshletVisibilityBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
@@ -1651,7 +1655,7 @@ namespace C3D
         {
             m_meshletVisibilityBytes = (meshletVisibilityCount + 31) / 32 * sizeof(u32);
 
-            INFO_LOG("Total meshlet visiblity count: {}; Size is: {}MB.", meshletVisibilityCount, BytesToMebiBytes(m_meshletVisibilityBytes));
+            INFO_LOG("Total meshlet visiblity count: {}; Size is: {:.2f} MB.", meshletVisibilityCount, BytesToMebiBytes(m_meshletVisibilityBytes));
 
             if (!m_meshletVisibilityBuffer.Create(&m_context, "MESHLET_VISIBILITY", m_meshletVisibilityBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))

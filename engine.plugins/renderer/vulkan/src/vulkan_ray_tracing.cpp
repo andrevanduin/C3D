@@ -79,7 +79,7 @@ namespace C3D
             totalScratchSize      = (totalScratchSize + sizeInfo.buildScratchSize + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
         }
 
-        INFO_LOG("BLAS AccelerationStructureSize: {} MB BLAS BuildScratchSize: {} MB.", BytesToMebiBytes(totalAccelerationSize), BytesToMebiBytes(totalScratchSize));
+        INFO_LOG("BLAS AccelerationStructureSize: {:.2f} MB BLAS BuildScratchSize: {:.2f} MB.", BytesToMebiBytes(totalAccelerationSize), BytesToMebiBytes(totalScratchSize));
 
         // Create our buffer to hold the BLAS
         if (!blasBuffer.Create(context, "BLAS_BUFFER", totalAccelerationSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -230,7 +230,8 @@ namespace C3D
         VkAccelerationStructureBuildSizesInfoKHR sizeInfo = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR };
         vkGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primitiveCount, &sizeInfo);
 
-        INFO_LOG("TLAS AccelerationStructureSize: {} MB, ScratchSize: {} MB.", BytesToMebiBytes(sizeInfo.accelerationStructureSize), BytesToMebiBytes(sizeInfo.buildScratchSize));
+        INFO_LOG("TLAS AccelerationStructureSize: {:.2f} MB, ScratchSize: {:.2f} MB.", BytesToMebiBytes(sizeInfo.accelerationStructureSize),
+                 BytesToMebiBytes(sizeInfo.buildScratchSize));
 
         if (!tlasBuffer.Create(context, "TLAS_BUFFER", sizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
                                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
