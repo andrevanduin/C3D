@@ -4,6 +4,8 @@
 #include <logger/logger.h>
 #include <platform/platform_types.h>
 
+#include "metrics/metrics.h"
+#include "metrics/types.h"
 #include "vulkan_context.h"
 #include "vulkan_utils.h"
 
@@ -129,6 +131,8 @@ namespace C3D
             return false;
         }
 
+        MetricsAllocate(GPU_ALLOCATOR_ID, MemoryType::Texture, memoryRequirements.size, memoryRequirements.size, m_memory);
+
         result = vkBindImageMemory(device, m_image, m_memory, 0);
         if (!VkUtils::IsSuccess(result))
         {
@@ -168,6 +172,8 @@ namespace C3D
 
         if (m_memory)
         {
+            MetricsFree(GPU_ALLOCATOR_ID, MemoryType::Texture, m_size, m_size, m_memory);
+
             vkFreeMemory(device, m_memory, m_context->allocator);
             m_memory = nullptr;
         }

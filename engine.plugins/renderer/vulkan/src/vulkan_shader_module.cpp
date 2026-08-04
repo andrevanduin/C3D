@@ -219,7 +219,7 @@ namespace C3D
             const char* errorMessage = shaderc_result_get_error_message(compilationResult);
             u64 errorCount           = shaderc_result_get_num_errors(compilationResult);
 
-            ERROR_LOG("Compilation failed with {} error(s).", errorCount);
+            ERROR_LOG("Compilation failed with {} error(s) for '{}'.", errorCount, m_name);
 
             String totalErrorMsg = "1.";
             u32 lineNumber       = 1;

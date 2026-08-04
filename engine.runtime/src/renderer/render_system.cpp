@@ -5,6 +5,7 @@
 
 #include "assets/managers/texture_manager.h"
 #include "cson/cson_types.h"
+#include "defines.h"
 #include "logger/logger.h"
 #include "math/c3d_math.h"
 #include "mesh.h"
@@ -190,27 +191,26 @@ namespace C3D
                     meshopt_optimizeVertexCache(lodIndices.GetData(), lodIndices.GetData(), lodIndices.Size(), vertexCount);
                 }
             }
-
-            while (m_geometry.meshlets.Size() % 64)
-            {
-                m_geometry.meshlets.EmplaceBack();
-            }
         }
 
         TRACE("Center + radius took: {:.2f} ms", centerRadiusClock.GetTotalElapsedMs());
-        INFO_LOG("Meshlet generation finished (took: {:.2f} ms).", meshletGenerationClock.GetTotalElapsedMs());
+        INFO_LOG("Finished Meshlet generation (took: {:.2f} ms).", meshletGenerationClock.GetTotalElapsedMs());
 
         return m_backendPlugin->UploadGeometry(m_geometry);
     }
 
     bool RenderSystem::UploadTextures(const DynamicArray<String>& texturePaths)
     {
+        Clock clock(ClockFlags::StartOnCreate);
+
         TextureManager textureManager;
         TextureAsset texture;
 
         // Use the staging buffer directly to write the texture data to temporarily before uploading to GPU memory
         texture.buffer     = m_backendPlugin->GetStagingBuffer();
         texture.bufferSize = m_backendPlugin->GetStagingBufferSize();
+
+        u64 totalTextureSize = 0;
 
         for (const auto& texturePath : texturePaths)
         {
@@ -225,7 +225,14 @@ namespace C3D
                 ERROR_LOG("Failed to upload texture: '{}'.", texturePath);
                 return false;
             }
+
+            totalTextureSize += texture.size;
         }
+
+        clock.End();
+
+        INFO_LOG("Finished parsing and uploading {} textures, with a total size of {:.2f} MB (took {:.2f} ms).", texturePaths.Size(), BytesToMebiBytes(totalTextureSize),
+                 clock.GetElapsedMs());
 
         return true;
     }

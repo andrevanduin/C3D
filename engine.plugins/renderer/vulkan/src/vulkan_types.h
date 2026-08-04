@@ -15,6 +15,15 @@ namespace C3D
     /** @brief The minimum number of images in flight. */
     constexpr u32 MIN_IMAGES = 3;
 
+    /** @brief The number of GBuffers used. */
+    constexpr u32 GBUFFER_COUNT = 2;
+
+    /** @brief The formats used in the GBuffer. */
+    constexpr VkFormat GBUFFER_FORMATS[GBUFFER_COUNT] = {
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+    };
+
 #define VK_CHECK_SWAPCHAIN(call, msg)                                                                                      \
     {                                                                                                                      \
         VkResult result_ = call;                                                                                           \
@@ -51,8 +60,8 @@ namespace C3D
         /** @brief The current frame index. */
         u64 frameIndex = 0;
 
-        /** @brief The color target of our window. */
-        VulkanTexture colorTarget;
+        /** @brief The gBuffer targets of our window. */
+        VulkanTexture gBufferTargets[GBUFFER_COUNT];
         /** @brief The depth target of our window. */
         VulkanTexture depthTarget;
         /** @brief The depth pyramid of our window. */
@@ -106,14 +115,22 @@ namespace C3D
     struct alignas(16) Globals
     {
         mat4 projection;
-        vec3 sunDirection;
-        i32 shadowsEnabled;
         CullData cullData;
         f32 screenWidth, screenHeight;
     };
 
     struct alignas(16) DepthReduceData
     {
+        vec2 imageSize;
+    };
+
+    struct alignas(16) ShadeData
+    {
+        vec3 sunDirection;
+        float padding;
+
+        mat4 inverseViewProjection;
+
         vec2 imageSize;
     };
 

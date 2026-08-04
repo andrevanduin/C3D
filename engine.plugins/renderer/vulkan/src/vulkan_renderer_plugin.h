@@ -58,13 +58,13 @@ namespace C3D
         u32 GetStagingBufferSize() const override { return m_context.stagingBuffer.GetSize(); }
 
     private:
-        void BeginRendering(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
+        void BeginRendering(VkCommandBuffer commandBuffer, VulkanTexture* gBufferTargets, const VulkanTexture& depthTarget, const VkClearColorValue& clearColor,
                             const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height, bool late) const;
 
         void CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const CullData& cullData, u32 timestamp, bool taskSubmit, bool late,
                       u32 postPass = 0) const;
-        void RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget, const VulkanTexture& depthPyramid,
-                        const Globals& globals, const Window& window, u32 query, u32 timeStamp, bool taskSubmit, bool clusterSubmit, bool late, u32 postPass = 0) const;
+        void RenderStep(VkCommandBuffer commandBuffer, VulkanTexture* gBufferTargets, const VulkanTexture& depthTarget, const VulkanTexture& depthPyramid, const Globals& globals,
+                        const Window& window, u32 query, u32 timeStamp, bool taskSubmit, bool clusterSubmit, bool late, u32 postPass = 0) const;
         void DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const;
 
         /** @brief A boolean indicating if we are using mesh shading. */
@@ -83,7 +83,7 @@ namespace C3D
         /** @brief A boolean indicating if we are doing LODs for meshes. */
         bool m_lodEnabled = true;
         /** @brief A boolean indicating if shadows are enabled (with Ray Tracing). */
-        bool m_shadowsEnabled = true;
+        bool m_shadingEnabled = true;
         /** @brief A boolean indicating if we are rendering debug lods. */
         bool m_debugLods = false;
         /** @brief The lod level we are displaying as part of our lod debugging. */
@@ -113,6 +113,7 @@ namespace C3D
         VulkanShader m_clusterPostMeshletShader;
 
         VulkanShader m_blitShader;
+        VulkanShader m_shadeShader;
 
         VkSampler m_textureSampler;
         VkSampler m_readSampler;
@@ -159,6 +160,9 @@ namespace C3D
 
         VkViewport m_viewport;
         VkRect2D m_scissor;
+
+        mat4 m_projection;
+        mat4 m_view;
 
         VulkanContext m_context;
     };
