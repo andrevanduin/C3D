@@ -119,11 +119,6 @@ namespace C3D
         f32 screenWidth, screenHeight;
     };
 
-    struct alignas(16) DepthReduceData
-    {
-        vec2 imageSize;
-    };
-
     struct alignas(16) ShadeData
     {
         vec3 sunDirection;

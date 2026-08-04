@@ -102,6 +102,7 @@ void main()
 
     SetMeshOutputsEXT(vertexCount, triangleCount);
 
+    uint baseVertex = meshlets[mi].baseVertex;
     uint vertexOffset = meshlets[mi].dataOffset;
     uint indexOffset = vertexOffset + vertexCount;
 
@@ -114,11 +115,11 @@ void main()
 
     for (uint i = ti; i < vertexCount; )
     {
-        uint vi = meshletData[vertexOffset + i] + meshDraw.vertexOffset;
+        uint vi = meshletData[vertexOffset + i] + baseVertex;
         
         Vertex v = vertices[vi];
 
-        vec3 position = vec3(v.x, v.y, v.z);
+        vec3 position = vec3(v.vx, v.vy, v.vz);
         vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
         vec4 tangent = vec4(v.tx, v.ty, v.tz, v.tw) / 127.0 - 1.0;
         vec2 texCoord = vec2(v.tu, v.tv);

@@ -257,6 +257,29 @@ namespace C3D
                                                 VK_SAMPLER_REDUCTION_MODE_MIN);
         CHECK_RESOURCE(m_depthSampler, "Depth Sampler");
 
+        // Create all required ShaderModules
+        DynamicArray<const char*> shader_module_names = { "draw_cull.comp", "cluster_cull.comp", "depth_reduce.comp",   "mesh.vert",
+                                                          "mesh.frag",      "task_submit.comp",  "cluster_submit.comp", "blit.comp" };
+
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+        {
+            shader_module_names.PushBack("meshlet.mesh");
+            shader_module_names.PushBack("meshlet.task");
+        }
+        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
+        {
+            shader_module_names.PushBack("shade.comp");
+        }
+
+        INFO_LOG("Creating Vulkan Shader Modules.");
+
+        m_shaderModules.Create();
+        for (auto name : shader_module_names)
+        {
+            m_shaderModules.Set(name, {});
+            CREATE_RESOURCE(m_shaderModules[name].Create(&m_context, name), "name");
+        }
+
         Event.Register(EventCodeDebug0, [this](const u16 code, void* sender, const EventContext& context) {
             switch (context.data.u32[0])
             {
@@ -467,33 +490,6 @@ namespace C3D
 
     bool VulkanRendererPlugin::OnRun(const Geometry& geometry)
     {
-        // Create all required ShaderModules
-        DynamicArray<const char*> shader_module_names = { "draw_cull.comp", "cluster_cull.comp", "depth_reduce.comp",   "mesh.vert",
-                                                          "mesh.frag",      "task_submit.comp",  "cluster_submit.comp", "blit.comp" };
-
-        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
-        {
-            shader_module_names.PushBack("meshlet.mesh");
-            shader_module_names.PushBack("meshlet.task");
-        }
-        if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
-        {
-            shader_module_names.PushBack("shade.comp");
-        }
-
-        INFO_LOG("Creating Vulkan Shader Modules.");
-
-        m_shaderModules.Create();
-        for (auto name : shader_module_names)
-        {
-            m_shaderModules.Set(name, {});
-            if (!m_shaderModules[name].Create(&m_context, name))
-            {
-                ERROR_LOG("Failed to create: '{}' ShaderModule.", name);
-                return false;
-            }
-        }
-
         INFO_LOG("Creating Vulkan Shaders.");
 
         VulkanShaderCreateInfo createInfo;
@@ -543,7 +539,7 @@ namespace C3D
         CREATE_RESOURCE(m_clusterCullLateShader.Create(createInfo), "ClusterCullLate Shader");
 
         createInfo.name              = "DEPTH_REDUCE_SHADER";
-        createInfo.pushConstantsSize = sizeof(DepthReduceData);
+        createInfo.pushConstantsSize = sizeof(vec4);
         createInfo.modules           = { &m_shaderModules["depth_reduce.comp"] };
         createInfo.constants         = {};
 
@@ -905,9 +901,9 @@ namespace C3D
             u32 levelWidth  = Max<u32>(1, depthPyramid.GetWidth() >> i);
             u32 levelHeight = Max<u32>(1, depthPyramid.GetHeight() >> i);
 
-            DepthReduceData depthReduceData = { vec2(levelWidth, levelHeight) };
+            vec4 reduceData = vec4(levelWidth, levelHeight, 0, 0);
 
-            m_depthReduceShader.PushConstants(commandBuffer, &depthReduceData, sizeof(depthReduceData));
+            m_depthReduceShader.PushConstants(commandBuffer, &reduceData, sizeof(reduceData));
             m_depthReduceShader.Dispatch(commandBuffer, levelWidth, levelHeight, 1);
 
             auto reduceBarrier = VkUtils::ImageBarrier(depthPyramid.GetImage(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
@@ -1680,7 +1676,6 @@ namespace C3D
             draw.orientation = glm::rotate(glm::quat(0, 0, 0, 1), angle, axis);
 
             draw.meshIndex               = static_cast<u32>(meshIndex);
-            draw.vertexOffset            = mesh.vertexOffset;
             draw.meshletVisibilityOffset = meshletVisibilityCount;
 
             u32 meshletCount = 0;
@@ -1721,7 +1716,6 @@ namespace C3D
         {
             const auto& mesh = geometry.meshes[draw.meshIndex];
 
-            draw.vertexOffset            = mesh.vertexOffset;
             draw.meshletVisibilityOffset = meshletVisibilityCount;
 
             u32 meshletCount = 0;

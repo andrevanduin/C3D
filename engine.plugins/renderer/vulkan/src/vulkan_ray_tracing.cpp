@@ -56,10 +56,10 @@ namespace C3D
             geo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
             geo.flags        = VK_GEOMETRY_OPAQUE_BIT_KHR;
 
-            C3D_ASSERT_MSG(offsetof(Vertex, pos.z) == offsetof(Vertex, pos.x) + sizeof(float) * 2, "Vertex layout mismatch!");
+            C3D_ASSERT_MSG(offsetof(Vertex, vz) == offsetof(Vertex, vx) + sizeof(uint16_t) * 2, "Vertex layout mismatch!");
 
             geo.geometry.triangles.sType                    = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-            geo.geometry.triangles.vertexFormat             = VK_FORMAT_R32G32B32_SFLOAT;
+            geo.geometry.triangles.vertexFormat             = VK_FORMAT_R16G16B16_SFLOAT;
             geo.geometry.triangles.vertexData.deviceAddress = vbAddress + mesh.vertexOffset * sizeof(Vertex);
             geo.geometry.triangles.vertexStride             = sizeof(Vertex);
             geo.geometry.triangles.maxVertex                = mesh.vertexCount - 1;
@@ -68,7 +68,7 @@ namespace C3D
 
             buildInfo.sType         = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
             buildInfo.type          = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-            buildInfo.flags         = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
+            buildInfo.flags         = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
             buildInfo.mode          = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
             buildInfo.geometryCount = 1;
             buildInfo.pGeometries   = &geo;
@@ -251,7 +251,7 @@ namespace C3D
         VkAccelerationStructureBuildGeometryInfoKHR buildInfo = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
 
         buildInfo.type          = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-        buildInfo.flags         = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;  // TODO: fast build?
+        buildInfo.flags         = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
         buildInfo.mode          = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
         buildInfo.geometryCount = 1;
         buildInfo.pGeometries   = &geometry;

@@ -4,6 +4,7 @@
 #include <meshoptimizer/src/meshoptimizer.h>
 
 #include "assets/managers/texture_manager.h"
+#include "containers/dynamic_array.h"
 #include "cson/cson_types.h"
 #include "defines.h"
 #include "logger/logger.h"
@@ -105,10 +106,13 @@ namespace C3D
 
             m_geometry.vertices.Insert(m_geometry.vertices.end(), asset.vertices.begin(), asset.vertices.end());
 
+            DynamicArray<vec3> positions(vertexCount);
             DynamicArray<vec3> normals(vertexCount);
+
             for (u64 i = 0; i < vertexCount; ++i)
             {
                 const Vertex& v = asset.vertices[i];
+                positions[i]    = vec3(DequantizeHalf(v.vx), DequantizeHalf(v.vy), DequantizeHalf(v.vz));
                 normals[i]      = vec3(v.nx / 127.f - 1.f, v.ny / 127.f - 1.f, v.nz / 127.f - 1.f);
             }
 
@@ -118,15 +122,15 @@ namespace C3D
             {
                 centerRadiusClock.Begin();
 
-                for (const auto& v : asset.vertices)
+                for (const auto& v : positions)
                 {
-                    center += v.pos;
+                    center += v;
                 }
                 center /= static_cast<f32>(vertexCount);
 
-                for (const auto& v : asset.vertices)
+                for (const auto& v : positions)
                 {
-                    radius = Max(radius, glm::distance(center, v.pos));
+                    radius = Max(radius, glm::distance(center, v));
                 }
 
                 centerRadiusClock.End();
@@ -140,7 +144,7 @@ namespace C3D
             DynamicArray<u32> lodIndices = asset.indices;
 
             f32 lodError         = 0.f;
-            f32 lodScale         = meshopt_simplifyScale(&asset.vertices[0].pos.x, vertexCount, sizeof(Vertex));
+            f32 lodScale         = meshopt_simplifyScale(&positions[0].x, vertexCount, sizeof(vec3));
             f32 normalWeights[3] = { 1.f, 1.f, 1.f };
 
             while (mesh.lodCount < ARRAY_SIZE(mesh.lods))
@@ -156,7 +160,7 @@ namespace C3D
                 lod.meshletOffset = static_cast<u32>(m_geometry.meshlets.Size());
 
                 meshletGenerationClock.Begin();
-                lod.meshletCount = buildMeshlets ? GenerateMeshlets(lodIndices, asset.vertices) : 0;
+                lod.meshletCount = buildMeshlets ? GenerateMeshlets(lodIndices, positions, mesh.vertexOffset) : 0;
                 meshletGenerationClock.End();
 
                 if (mesh.lodCount < ARRAY_SIZE(mesh.lods))
@@ -169,8 +173,8 @@ namespace C3D
 
                     u64 nextIndicesSizeTarget = (static_cast<u64>(static_cast<f64>(lodIndices.Size()) * 0.65) / 3) * 3;
                     u64 nextIndicesSize =
-                        meshopt_simplifyWithAttributes(lodIndices.GetData(), lodIndices.GetData(), lodIndices.Size(), &asset.vertices[0].pos.x, vertexCount, sizeof(Vertex),
-                                                       &normals[0].x, sizeof(vec3), normalWeights, 3, nullptr, nextIndicesSizeTarget, maxError, options, &nextError);
+                        meshopt_simplifyWithAttributes(lodIndices.GetData(), lodIndices.GetData(), lodIndices.Size(), &positions[0].x, vertexCount, sizeof(vec3), &normals[0].x,
+                                                       sizeof(vec3), normalWeights, 3, nullptr, nextIndicesSizeTarget, maxError, options, &nextError);
 
                     if (nextIndicesSize == lodIndices.Size() || nextIndicesSize == 0)
                     {
@@ -283,7 +287,7 @@ namespace C3D
 
     void RenderSystem::SetSunDirection(const vec3& sunDirection) const { m_backendPlugin->SetSunDirection(sunDirection); }
 
-    u32 RenderSystem::GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<Vertex>& vertices)
+    u32 RenderSystem::GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<vec3>& positions, u32 baseVertex)
     {
         // Determine our upper bound of meshlets
         u32 maxMeshlets = meshopt_buildMeshletsBound(indices.Size(), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES);
@@ -292,8 +296,8 @@ namespace C3D
         DynamicArray<u32> meshletVertices(meshlets.Size() * MESHLET_MAX_VERTICES);
         DynamicArray<u8> meshletTriangles(meshlets.Size() * MESHLET_MAX_TRIANGLES * 3);
         // Generate our meshlets
-        u32 numMeshlets = meshopt_buildMeshlets(meshlets.GetData(), meshletVertices.GetData(), meshletTriangles.GetData(), indices.GetData(), indices.Size(), &vertices[0].pos.x,
-                                                vertices.Size(), sizeof(Vertex), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES, MESHLET_CONE_WEIGHT);
+        u32 numMeshlets = meshopt_buildMeshlets(meshlets.GetData(), meshletVertices.GetData(), meshletTriangles.GetData(), indices.GetData(), indices.Size(), &positions[0].x,
+                                                positions.Size(), sizeof(vec3), MESHLET_MAX_VERTICES, MESHLET_MAX_TRIANGLES, MESHLET_CONE_WEIGHT);
         //  Resize our meshlet array to the actual number of meshlets
         meshlets.Resize(numMeshlets);
 
@@ -303,6 +307,7 @@ namespace C3D
             m.vertexCount   = meshlet.vertex_count;
             m.triangleCount = meshlet.triangle_count;
             m.dataOffset    = m_geometry.meshletData.Size();
+            m.baseVertex    = baseVertex;
 
             // Populate the vertex indices
             for (u32 i = 0; i < meshlet.vertex_count; ++i)
@@ -322,7 +327,7 @@ namespace C3D
             }
 
             meshopt_Bounds bounds = meshopt_computeMeshletBounds(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count,
-                                                                 &vertices[0].pos.x, vertices.Size(), sizeof(Vertex));
+                                                                 &positions[0].x, positions.Size(), sizeof(vec3));
 
             m.center = vec3(bounds.center[0], bounds.center[1], bounds.center[2]);
             m.radius = bounds.radius;

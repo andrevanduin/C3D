@@ -264,9 +264,9 @@ namespace C3D
                 // Store the positions into our vertices
                 for (u32 i = 0; i < posAccessor->count; ++i)
                 {
-                    sceneMesh.vertices[i].pos.x = scratchBuffer[i * 3 + 0];
-                    sceneMesh.vertices[i].pos.y = scratchBuffer[i * 3 + 1];
-                    sceneMesh.vertices[i].pos.z = scratchBuffer[i * 3 + 2];
+                    sceneMesh.vertices[i].vx = QuantizeHalf(scratchBuffer[i * 3 + 0]);
+                    sceneMesh.vertices[i].vy = QuantizeHalf(scratchBuffer[i * 3 + 1]);
+                    sceneMesh.vertices[i].vz = QuantizeHalf(scratchBuffer[i * 3 + 2]);
                 }
 
                 // Get the normals

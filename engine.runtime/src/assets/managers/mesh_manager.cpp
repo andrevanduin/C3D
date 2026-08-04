@@ -65,8 +65,9 @@ namespace C3D
             ScopedTimer timer(String::FromFormat("Importing: '{}'.", asset.path));
 
             // Open our file
-            FILE* file = fopen(asset.path.Data(), "rb");
-            if (!file)
+            FILE* file  = nullptr;
+            auto result = fopen_s(&file, asset.path.Data(), "rb");
+            if (result != 0)
             {
                 ERROR_LOG("Failed to read file: '{}'.", asset.path);
                 return false;
@@ -141,7 +142,9 @@ namespace C3D
 
                 Vertex vertex = {};
 
-                vertex.pos = { m_vs.data[vi * 3 + 0], m_vs.data[vi * 3 + 1], m_vs.data[vi * 3 + 2] };
+                vertex.vx = QuantizeHalf(m_vs.data[vi * 3 + 0]);
+                vertex.vy = QuantizeHalf(m_vs.data[vi * 3 + 1]);
+                vertex.vz = QuantizeHalf(m_vs.data[vi * 3 + 2]);
 
                 vertex.nx = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 0] * 127.f + 127.5f);
                 vertex.ny = (vni == FACE_INDEX_NOT_POPULATED) ? 127.f : static_cast<u8>(m_vns.data[vni * 3 + 1] * 127.f + 127.5f);

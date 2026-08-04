@@ -48,9 +48,12 @@ namespace C3D
         i8 coneAxis[3];
         /** @brief The cone cutoff. Used in the backface culling test in the task shader. */
         i8 coneCutoff;
+
         /** @brief An index into the MeshletData array where the data for this meshlet starts.
          * The first elements will be the vertex indices. Then at dataOffset + vertexCount the triangle indices are stored */
         u32 dataOffset = 0;
+        /** @brief The base vertex of this Meshlet. */
+        u32 baseVertex;
         /** @brief The number of vertices in this Meshlet. */
         u8 vertexCount = 0;
         /** @brief The number of triangles in this Meshlet. */
@@ -96,9 +99,9 @@ namespace C3D
         quat orientation;
 
         u32 meshIndex;
-        u32 vertexOffset;
         u32 meshletVisibilityOffset;
         u32 postPass;
+        u32 flags;
 
         u32 albedoTexture   = 0;
         u32 normalTexture   = 0;

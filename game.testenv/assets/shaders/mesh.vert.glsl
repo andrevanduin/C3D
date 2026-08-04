@@ -38,7 +38,7 @@ void main()
     MeshDraw meshDraw = draws[drawId];
 
     Vertex v = vertices[gl_VertexIndex];
-    vec3 position = vec3(v.x, v.y, v.z);
+    vec3 position = vec3(v.vx, v.vy, v.vz);
     vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
     vec4 tangent = vec4(v.tx, v.ty, v.tz, v.tw) / 127.0 - 1.0;
     vec2 texCoord = vec2(v.tu, v.tv);

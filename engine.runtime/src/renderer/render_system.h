@@ -44,7 +44,7 @@ namespace C3D
         void SetSunDirection(const vec3& sunDirection) const;
 
     private:
-        u32 GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<Vertex>& vertices);
+        u32 GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<vec3>& positions, u32 baseVertex);
 
         /** @brief A pointer to the backend rendering plugin used to actually render things on the screen. */
         RendererPlugin* m_backendPlugin = nullptr;
