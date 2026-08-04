@@ -771,8 +771,7 @@ namespace C3D
             // If our string is shorter than the sequence our string can not start with the sequence.
             if (m_size < sequence.Size()) return false;
 
-            return std::equal(begin(), begin() + sequence.Size(), sequence.begin(), sequence.end(),
-                              [](const char a, const char b) { return std::tolower(a) == std::tolower(b); });
+            return std::equal(begin(), begin() + sequence.Size(), sequence.begin(), sequence.end(), [](const char a, const char b) { return std::tolower(a) == std::tolower(b); });
         }
 
         /** @brief Checks if string starts with provided character. */
@@ -978,8 +977,7 @@ namespace C3D
             {
                 // Four-byte character
                 advance = 4;
-                return ((codepoint & 0b00000111) << 18) + ((m_data[index + 1] & 0b00111111) << 12) + ((m_data[index + 2] & 0b00111111) << 6) +
-                       (m_data[index + 3] & 0b00111111);
+                return ((codepoint & 0b00000111) << 18) + ((m_data[index + 1] & 0b00111111) << 12) + ((m_data[index + 2] & 0b00111111) << 6) + (m_data[index + 3] & 0b00111111);
             }
 
             ERROR_LOG("Invalid 5 or 6-byte character in String.");
@@ -1391,7 +1389,7 @@ struct fmt::formatter<C3D::BasicString<Allocator>>
     }
 
     template <typename FormatContext>
-    auto format(const C3D::BasicString<Allocator>& str, FormatContext& ctx)
+    auto format(const C3D::BasicString<Allocator>& str, FormatContext& ctx) const
     {
         return fmt::format_to(ctx.out(), "{}", str.Data());
     }

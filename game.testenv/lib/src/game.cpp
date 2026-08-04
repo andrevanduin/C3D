@@ -15,6 +15,8 @@
 #include <string/cstring.h>
 #include <system/system_manager.h>
 
+#include "input/keys.h"
+
 TestEnv::TestEnv(void* state) : m_state(reinterpret_cast<GameState*>(state)) {}
 
 bool TestEnv::OnBoot()
@@ -119,47 +121,16 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
 
 void TestEnv::OnUpdate(C3D::FrameData& frameData)
 {
-    if (Input.IsKeyPressed(C3D::KeyM))
+    constexpr static C3D::Keys KEYS[] = { C3D::KeyM, C3D::KeyC, C3D::KeyK, C3D::KeyS, C3D::KeyO, C3D::KeyL, C3D::KeyP, C3D::KeyT };
+
+    for (auto key : KEYS)
     {
-        C3D::EventContext context;
-        context.data.u32[0] = C3D::KeyM;
-        Event.Fire(C3D::EventCodeDebug0, nullptr, context);
-    }
-    if (Input.IsKeyPressed(C3D::KeyC))
-    {
-        C3D::EventContext context;
-        context.data.u32[0] = C3D::KeyC;
-        Event.Fire(C3D::EventCodeDebug0, nullptr, context);
-    }
-    if (Input.IsKeyPressed(C3D::KeyK))
-    {
-        C3D::EventContext context;
-        context.data.u32[0] = C3D::KeyK;
-        Event.Fire(C3D::EventCodeDebug0, nullptr, context);
-    }
-    if (Input.IsKeyPressed(C3D::KeyO))
-    {
-        C3D::EventContext context;
-        context.data.u32[0] = C3D::KeyO;
-        Event.Fire(C3D::EventCodeDebug0, nullptr, context);
-    }
-    if (Input.IsKeyPressed(C3D::KeyL))
-    {
-        C3D::EventContext context;
-        context.data.u32[0] = C3D::KeyL;
-        Event.Fire(C3D::EventCodeDebug0, nullptr, context);
-    }
-    if (Input.IsKeyPressed(C3D::KeyP))
-    {
-        C3D::EventContext context;
-        context.data.u32[0] = C3D::KeyP;
-        Event.Fire(C3D::EventCodeDebug0, nullptr, context);
-    }
-    if (Input.IsKeyPressed(C3D::KeyT))
-    {
-        C3D::EventContext context;
-        context.data.u32[0] = C3D::KeyT;
-        Event.Fire(C3D::EventCodeDebug0, nullptr, context);
+        if (Input.IsKeyPressed(key))
+        {
+            C3D::EventContext context;
+            context.data.u32[0] = key;
+            Event.Fire(C3D::EventCodeDebug0, nullptr, context);
+        }
     }
 
     for (u32 i = 0; i < 9; i++)

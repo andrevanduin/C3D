@@ -38,6 +38,13 @@
         return false;                                 \
     }
 
+#define CHECK_RESOURCE(res, fail_msg)                 \
+    if (res == nullptr)                               \
+    {                                                 \
+        ERROR_LOG("Failed to create: {}.", fail_msg); \
+        return false;                                 \
+    }
+
 namespace C3D
 {
     bool VulkanRendererPlugin::OnInit(const RendererPluginConfig& config)
@@ -127,6 +134,8 @@ namespace C3D
         }
 
         // Create our buffers
+        INFO_LOG("Creating buffers...");
+
         if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(128), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
         {
@@ -214,45 +223,36 @@ namespace C3D
             }
         }
 
-        m_textureDescriptorSetLayout =
-            VkUtils::CreateDescriptorSetLayout(&m_context, "TEXTURE_DESCRIPTOR_SET_LAYOUT", 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_DESCRIPTROS,
-                                               VK_SHADER_STAGE_FRAGMENT_BIT, VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT);
+        INFO_LOG("Creating descriptors...");
 
-        if (!m_textureDescriptorSetLayout)
-        {
-            ERROR_LOG("Failed to create Texture Descriptor Set Layout.");
-            return false;
-        }
+        m_textureDescriptorSetLayout = VkUtils::CreateDescriptorSetLayout(
+            &m_context, "TEXTURE_DESCRIPTOR_SET_LAYOUT", 0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_DESCRIPTROS, VK_SHADER_STAGE_FRAGMENT_BIT,
+            VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT,
+            VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
 
-        m_textureDescriptorPool = VkUtils::CreateDescriptorPool(&m_context, "TEXTURE_DESCRIPTOR_POOL", MAX_ACTIVE_DESCRIPTORS);
-        if (!m_textureDescriptorPool)
-        {
-            ERROR_LOG("Failed to create Texture Descriptor Pool.");
-            return false;
-        }
+        CHECK_RESOURCE(m_textureDescriptorSetLayout, "Texture Descriptor Set Layout");
+
+        m_textureDescriptorPool = VkUtils::CreateDescriptorPool(&m_context, "TEXTURE_DESCRIPTOR_POOL", VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_ACTIVE_DESCRIPTORS,
+                                                                VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT);
+        CHECK_RESOURCE(m_textureDescriptorPool, "Texture Descriptor Pool");
 
         m_textureDescriptorSet = VkUtils::CreateDescriptorSet(&m_context, "TEXTURE_DESCRIPTOR_SET", MAX_ACTIVE_DESCRIPTORS, m_textureDescriptorPool, m_textureDescriptorSetLayout);
-        if (!m_textureDescriptorSet)
-        {
-            ERROR_LOG("Failed to create Texture Descriptor Set.");
-            return false;
-        }
+        CHECK_RESOURCE(m_textureDescriptorSet, "Texture Descriptor Set");
 
-        // Create our depth sampler
-        m_depthSampler = VkUtils::CreateSampler(&m_context, "DEPTH_SAMPLER", VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_REDUCTION_MODE_MIN);
-        if (!m_depthSampler)
-        {
-            ERROR_LOG("Failed to create depth sampler.");
-            return false;
-        }
+        INFO_LOG("Creating Samplers...");
 
         // Create our texture sampler
-        m_textureSampler = VkUtils::CreateSampler(&m_context, "TEXTURE_SAMPLER", VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
-        if (!m_textureSampler)
-        {
-            ERROR_LOG("Failed to create texture sampler.");
-            return false;
-        }
+        m_textureSampler = VkUtils::CreateSampler(&m_context, "TEXTURE_SAMPLER", VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+        CHECK_RESOURCE(m_textureSampler, "Texture Sampler");
+
+        // Create our read sampler
+        m_readSampler = VkUtils::CreateSampler(&m_context, "READ_SAMPLER", VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        CHECK_RESOURCE(m_readSampler, "Read Sampler");
+
+        // Create our depth sampler
+        m_depthSampler = VkUtils::CreateSampler(&m_context, "DEPTH_SAMPLER", VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                                                VK_SAMPLER_REDUCTION_MODE_MIN);
+        CHECK_RESOURCE(m_depthSampler, "Depth Sampler");
 
         Event.Register(EventCodeDebug0, [this](const u16 code, void* sender, const EventContext& context) {
             switch (context.data.u32[0])
@@ -277,6 +277,16 @@ namespace C3D
                         WARN_LOG("Ray tracing is not supported by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
                     }
                     break;
+                case C3D::KeyS:
+                    if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
+                    {
+                        m_shadowsEnabled ^= true;
+                    }
+                    else
+                    {
+                        WARN_LOG("Ray Tracing is not supported by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
+                    }
+                    break;
                 case C3D::KeyC:
                     m_cullingEnabled ^= true;
                     break;
@@ -290,9 +300,6 @@ namespace C3D
                     m_debugLods ^= true;
                     m_debugLodStep = 0;
                     break;
-                case C3D::KeyP:
-                    m_debugPyramid ^= true;
-                    break;
                 case C3D::KeyT:
                     m_taskShadingEnabled ^= true;
                     break;
@@ -301,11 +308,7 @@ namespace C3D
             return true;
         });
         Event.Register(EventCodeDebug1, [this](const u16 code, void* sender, const EventContext& context) {
-            if (m_debugPyramid)
-            {
-                m_debugPyramidLevel = context.data.u32[0];
-            }
-            else if (m_debugLods)
+            if (m_debugLods)
             {
                 m_debugLodStep = context.data.u32[0];
             }
@@ -417,18 +420,21 @@ namespace C3D
 
         m_clusterSubmitShader.Destroy();
 
+        m_blitShader.Destroy();
+
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
-            m_meshletShader.Destroy();
-            m_meshletLateShader.Destroy();
-            m_meshletPostShader.Destroy();
+            m_taskMeshletShader.Destroy();
+            m_taskMeshletLateShader.Destroy();
+            m_taskMeshletPostShader.Destroy();
             m_clusterMeshletShader.Destroy();
             m_clusterPostMeshletShader.Destroy();
         }
 
         INFO_LOG("Destroying Vulkan Samplers.");
-        vkDestroySampler(device, m_depthSampler, m_context.allocator);
         vkDestroySampler(device, m_textureSampler, m_context.allocator);
+        vkDestroySampler(device, m_readSampler, m_context.allocator);
+        vkDestroySampler(device, m_depthSampler, m_context.allocator);
 
         INFO_LOG("Destroying Query pools");
         vkDestroyQueryPool(device, m_queryPoolTimestamps, m_context.allocator);
@@ -458,8 +464,8 @@ namespace C3D
     bool VulkanRendererPlugin::OnRun(const Geometry& geometry)
     {
         // Create all required ShaderModules
-        DynamicArray<const char*> shader_module_names = { "draw_cull.comp", "cluster_cull.comp", "depth_reduce.comp",  "mesh.vert",
-                                                          "mesh.frag",      "task_submit.comp",  "cluster_submit.comp" };
+        DynamicArray<const char*> shader_module_names = { "draw_cull.comp", "cluster_cull.comp", "depth_reduce.comp",   "mesh.vert",
+                                                          "mesh.frag",      "task_submit.comp",  "cluster_submit.comp", "blit.comp" };
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
@@ -567,20 +573,20 @@ namespace C3D
             createInfo.constants         = { /* late = */ false, /* task = */ true };
             createInfo.modules           = { &m_shaderModules["meshlet.task"], &m_shaderModules["meshlet.mesh"], &m_shaderModules["mesh.frag"] };
 
-            CREATE_RESOURCE(m_meshletShader.Create(createInfo), "Meshlet Shader");
+            CREATE_RESOURCE(m_taskMeshletShader.Create(createInfo), "Meshlet Shader");
 
             createInfo.name              = "MESHLET_LATE_SHADER";
             createInfo.pushConstantsSize = sizeof(Globals);
             createInfo.constants         = { /* late = */ true, /* task = */ true };
             createInfo.modules           = { &m_shaderModules["meshlet.task"], &m_shaderModules["meshlet.mesh"], &m_shaderModules["mesh.frag"] };
 
-            CREATE_RESOURCE(m_meshletLateShader.Create(createInfo), "MeshletLate Shader");
+            CREATE_RESOURCE(m_taskMeshletLateShader.Create(createInfo), "MeshletLate Shader");
 
             createInfo.name              = "MESHLET_POST_SHADER";
             createInfo.pushConstantsSize = sizeof(Globals);
             createInfo.constants         = { /* late = */ true, /* task = */ true, /* post = */ 1 };
 
-            CREATE_RESOURCE(m_meshletPostShader.Create(createInfo), "MeshletPost Shader");
+            CREATE_RESOURCE(m_taskMeshletPostShader.Create(createInfo), "MeshletPost Shader");
 
             createInfo.name              = "CLUSTER_MESHLET_SHADER";
             createInfo.pushConstantsSize = sizeof(Globals);
@@ -595,9 +601,16 @@ namespace C3D
             CREATE_RESOURCE(m_clusterPostMeshletShader.Create(createInfo), "MeshletClusterPost Shader");
         }
 
+        createInfo.name              = "BLIT_SHADER";
+        createInfo.bindPoint         = VK_PIPELINE_BIND_POINT_COMPUTE;
+        createInfo.modules           = { &m_shaderModules["blit.comp"] };
+        createInfo.pushConstantsSize = sizeof(vec4);
+
+        CREATE_RESOURCE(m_blitShader.Create(createInfo), "Blit Shader");
+
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
         {
-            if (!VulkanRayTracing::BuildBLAS(&m_context, geometry, m_vertexBuffer, m_indexBuffer, m_blas, m_blasBuffer))
+            if (!VulkanRayTracing::BuildBLAS(&m_context, geometry.meshes, m_vertexBuffer, m_indexBuffer, m_blas, m_blasBuffer))
             {
                 ERROR_LOG("Failed to create BLAS.");
                 return false;
@@ -795,9 +808,8 @@ namespace C3D
 
             shader.Bind(commandBuffer);
 
-            DescriptorInfo descriptors[] = {
-                m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_clusterIndexBuffer, DescriptorInfo(), m_tlas
-            };
+            DescriptorInfo descriptors[] = { m_drawCommandBuffer,  m_drawBuffer,     m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer,
+                                             m_clusterIndexBuffer, DescriptorInfo(), m_tlas,          m_textureSampler };
             shader.PushDescriptorSet(commandBuffer, descriptors);
             shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
             shader.PushConstants(commandBuffer, &passGlobals, sizeof(globals));
@@ -806,13 +818,12 @@ namespace C3D
         }
         else if (taskSubmit)
         {
-            auto& shader = postPass == 1 ? m_meshletPostShader : late ? m_meshletLateShader : m_meshletShader;
+            auto& shader = postPass == 1 ? m_taskMeshletPostShader : late ? m_taskMeshletLateShader : m_taskMeshletShader;
             shader.Bind(commandBuffer);
 
             DescriptorInfo pyramidDesc(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL);
-            DescriptorInfo descriptors[] = {
-                m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_meshletVisibilityBuffer, pyramidDesc, m_tlas
-            };
+            DescriptorInfo descriptors[] = { m_drawCommandBuffer,       m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer,
+                                             m_meshletVisibilityBuffer, pyramidDesc,  m_tlas,          m_textureSampler };
             shader.PushDescriptorSet(commandBuffer, descriptors);
             shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
             shader.PushConstants(commandBuffer, &passGlobals, sizeof(globals));
@@ -825,7 +836,8 @@ namespace C3D
 
             shader.Bind(commandBuffer);
 
-            DescriptorInfo descriptors[] = { m_drawCommandBuffer, m_drawBuffer, m_vertexBuffer, DescriptorInfo(), DescriptorInfo(), DescriptorInfo(), DescriptorInfo(), m_tlas };
+            DescriptorInfo descriptors[] = { m_drawCommandBuffer, m_drawBuffer,     m_vertexBuffer, DescriptorInfo(), DescriptorInfo(),
+                                             DescriptorInfo(),    DescriptorInfo(), m_tlas,         m_textureSampler };
             shader.PushDescriptorSet(commandBuffer, descriptors);
             shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
 
@@ -992,12 +1004,13 @@ namespace C3D
         cullData.pyramidWidth  = depthPyramidWidth;
         cullData.pyramidHeight = depthPyramidHeight;
 
-        Globals globals      = {};
-        globals.projection   = projection;
-        globals.sunDirection = m_sunDirection;
-        globals.cullData     = cullData;
-        globals.screenWidth  = static_cast<f32>(window.width);
-        globals.screenHeight = static_cast<f32>(window.height);
+        Globals globals        = {};
+        globals.projection     = projection;
+        globals.sunDirection   = m_sunDirection;
+        globals.shadowsEnabled = m_shadowsEnabled;
+        globals.cullData       = cullData;
+        globals.screenWidth    = static_cast<f32>(window.width);
+        globals.screenHeight   = static_cast<f32>(window.height);
 
         auto& colorTarget  = backendState->colorTarget;
         auto& depthTarget  = backendState->depthTarget;
@@ -1045,9 +1058,10 @@ namespace C3D
 
     bool VulkanRendererPlugin::End(Window& window)
     {
-        auto backendState   = window.rendererState->backendState;
-        auto commandBuffer  = backendState->GetCommandBuffer();
-        auto swapchainImage = backendState->swapchain.GetImage(backendState->imageIndex);
+        auto backendState       = window.rendererState->backendState;
+        auto commandBuffer      = backendState->GetCommandBuffer();
+        auto swapchainImage     = backendState->swapchain.GetImage(backendState->imageIndex);
+        auto swapchainImageView = backendState->swapchain.GetView(backendState->imageIndex);
 
         auto& colorTarget  = backendState->colorTarget;
         auto& depthPyramid = backendState->depthPyramid;
@@ -1055,52 +1069,27 @@ namespace C3D
         // Setup some copy barriers
         VkImageMemoryBarrier2 copyBarriers[] = {
             VkUtils::ImageBarrier(colorTarget.GetImage(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
-            VkUtils::ImageBarrier(swapchainImage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL),
-            VkUtils::ImageBarrier(depthPyramid.GetImage(), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
-                                  VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL),
+                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL),
+            VkUtils::ImageBarrier(swapchainImage, 0, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL),
         };
 
         // Wait for color target to be in TRANSFER_SRC_OPTIMAL and wait for swapchain image to be in TRANSFER_DST_OPTIMAL
         VkUtils::PipelineBarrier(commandBuffer, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, ARRAY_SIZE(copyBarriers), copyBarriers);
 
-        if (m_debugPyramid)
-        {
-            u32 depthPyramidWidth  = backendState->depthPyramid.GetWidth();
-            u32 depthPyramidHeight = backendState->depthPyramid.GetHeight();
+        m_blitShader.Bind(commandBuffer);
 
-            VkImageBlit blitRegion               = {};
-            blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blitRegion.srcSubresource.mipLevel   = m_debugPyramidLevel;
-            blitRegion.srcSubresource.layerCount = 1;
-            blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blitRegion.dstSubresource.layerCount = 1;
+        DescriptorInfo descriptors[] = { { swapchainImageView, VK_IMAGE_LAYOUT_GENERAL }, { m_readSampler, colorTarget.GetView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } };
 
-            blitRegion.srcOffsets[0] = { 0, 0, 0 };
-            blitRegion.srcOffsets[1] = { Max<i32>(1, depthPyramidWidth >> m_debugPyramidLevel), Max<i32>(1, depthPyramidHeight >> m_debugPyramidLevel), 1 };
-            blitRegion.dstOffsets[0] = { 0, 0, 0 };
-            blitRegion.dstOffsets[1] = { window.width, window.height, 1 };
+        m_blitShader.PushDescriptorSet(commandBuffer, descriptors);
 
-            vkCmdBlitImage(commandBuffer, backendState->depthPyramid.GetImage(), VK_IMAGE_LAYOUT_GENERAL, swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blitRegion,
-                           VK_FILTER_NEAREST);
-        }
-        else
-        {
-            // Copy the contents of our color target to the current swapchain image
-            VkImageCopy copyRegion               = {};
-            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.srcSubresource.layerCount = 1;
-            copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.dstSubresource.layerCount = 1;
-            copyRegion.extent                    = { window.width, window.height, 1 };
+        vec4 blitData = vec4(static_cast<f32>(window.width), static_cast<f32>(window.height), 0, 0);
+        m_blitShader.PushConstants(commandBuffer, &blitData, sizeof(blitData));
 
-            vkCmdCopyImage(commandBuffer, colorTarget.GetImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapchainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-        }
+        m_blitShader.Dispatch(commandBuffer, window.width, window.height, 1);
 
         // Setup a present barrier
-        auto presentBarrier = VkUtils::ImageBarrier(swapchainImage, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                                    VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        auto presentBarrier =
+            VkUtils::ImageBarrier(swapchainImage, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL, 0, 0, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
         // Wait for the swapchain image to go from TRANSFER_DST_OPTIMAL to PRESENT_SRC_KHR
         VkUtils::PipelineBarrier(commandBuffer, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 1, &presentBarrier);
@@ -1235,7 +1224,7 @@ namespace C3D
         createInfo.width   = window.width;
         createInfo.height  = window.height;
         createInfo.format  = m_context.device.GetPreferredImageFormat();
-        createInfo.usage   = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        createInfo.usage   = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
         // Create color and depth target for this window
         if (!backend->colorTarget.Create(createInfo))
@@ -1566,7 +1555,7 @@ namespace C3D
         // Ensure we start indexing at 1 since 0 will be our "missing" texture
         write.dstArrayElement = m_textures.Size() + 1;
         write.descriptorCount = 1;
-        write.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
         write.pImageInfo      = &imageInfo;
 
         vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, nullptr);
@@ -1655,7 +1644,7 @@ namespace C3D
         {
             m_meshletVisibilityBytes = (meshletVisibilityCount + 31) / 32 * sizeof(u32);
 
-            INFO_LOG("Total meshlet visiblity count: {}; Size is: {:.2f} MB.", meshletVisibilityCount, BytesToMebiBytes(m_meshletVisibilityBytes));
+            INFO_LOG("Total meshlet visiblity count: {}; Size is: {:.2f} KB.", meshletVisibilityCount, BytesToKibiBytes(m_meshletVisibilityBytes));
 
             if (!m_meshletVisibilityBuffer.Create(&m_context, "MESHLET_VISIBILITY", m_meshletVisibilityBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))

@@ -13,6 +13,8 @@ namespace C3D
     class RendererPlugin
     {
     public:
+        virtual ~RendererPlugin() {}
+
         virtual bool OnInit(const RendererPluginConfig& config) = 0;
         virtual void OnShutdown()                               = 0;
 

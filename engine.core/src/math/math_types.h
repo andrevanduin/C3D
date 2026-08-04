@@ -2,8 +2,9 @@
 #pragma once
 #include <fmt/format.h>
 
+#define GLM_ENABLE_EXPERIMENTAL
+
 #include <glm/glm.hpp>
-#include <glm/gtx/euler_angles.hpp>
 #include <glm/gtx/hash.hpp>
 #include <glm/gtx/transform.hpp>
 

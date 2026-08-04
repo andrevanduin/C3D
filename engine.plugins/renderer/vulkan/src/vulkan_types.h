@@ -107,6 +107,7 @@ namespace C3D
     {
         mat4 projection;
         vec3 sunDirection;
+        i32 shadowsEnabled;
         CullData cullData;
         f32 screenWidth, screenHeight;
     };

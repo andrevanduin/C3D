@@ -21,7 +21,7 @@ namespace C3D
                     break;
             }
 
-            Memory.Delete(extension.data);
+            Memory.Free(extension.data);
             extension.data = nullptr;
         }
     }

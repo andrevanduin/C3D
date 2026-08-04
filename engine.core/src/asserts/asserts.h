@@ -7,9 +7,9 @@
 #ifdef C3D_ASSERTIONS_ENABLED
 #if _MSC_VER
 #include <intrin.h>
-#define DebugBreak() __debugbreak();
+#define AssertBreak() __debugbreak();
 #else
-#define DebugBreak() __builtin_trap()
+#define AssertBreak() __builtin_trap()
 #endif
 
 void C3D_API ReportAssertionFailure(const char* expression, const char* message, const char* file, i32 line);
@@ -18,13 +18,13 @@ void C3D_API ReportAssertionFailure(const char* expression, const char* file, i3
 #define C3D_FAIL(msg)                                            \
     {                                                            \
         ReportAssertionFailure("FAIL", msg, __FILE__, __LINE__); \
-        DebugBreak();                                            \
+        AssertBreak();                                           \
     }
 
 #define C3D_NOT_IMPLEMENTED()                                               \
     {                                                                       \
         ReportAssertionFailure("Not implemented yet.", __FILE__, __LINE__); \
-        DebugBreak();                                                       \
+        AssertBreak();                                                      \
     }
 
 #define C3D_ASSERT(expr)                                       \
@@ -35,7 +35,7 @@ void C3D_API ReportAssertionFailure(const char* expression, const char* file, i3
         else                                                   \
         {                                                      \
             ReportAssertionFailure(#expr, __FILE__, __LINE__); \
-            DebugBreak();                                      \
+            AssertBreak();                                     \
         }                                                      \
     }
 
@@ -47,7 +47,7 @@ void C3D_API ReportAssertionFailure(const char* expression, const char* file, i3
         else                                                            \
         {                                                               \
             ReportAssertionFailure(#expr, message, __FILE__, __LINE__); \
-            DebugBreak();                                               \
+            AssertBreak();                                              \
         }                                                               \
     }
 
@@ -60,7 +60,7 @@ void C3D_API ReportAssertionFailure(const char* expression, const char* file, i3
         else                                                   \
         {                                                      \
             ReportAssertionFailure(#expr, __FILE__, __LINE__); \
-            DebugBreak();                                      \
+            AssertBreak();                                     \
         }                                                      \
     }
 
@@ -72,7 +72,7 @@ void C3D_API ReportAssertionFailure(const char* expression, const char* file, i3
         else                                                            \
         {                                                               \
             ReportAssertionFailure(#expr, message, __FILE__, __LINE__); \
-            DebugBreak();                                               \
+            AssertBreak();                                              \
         }                                                               \
     }
 #else

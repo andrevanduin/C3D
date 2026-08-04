@@ -39,6 +39,8 @@ namespace C3D
 
         VkImage GetImage(u32 index) const { return m_images[index]; }
 
+        VkImageView GetView(u32 index) const { return m_views[index]; }
+
         u32 GetImageCount() const { return m_imageCount; }
 
     private:
@@ -65,6 +67,8 @@ namespace C3D
         u32 m_imageCount = 0;
         /** @brief The swapchain images. */
         DynamicArray<VkImage> m_images;
+        /** @brief The swapchain image views. */
+        DynamicArray<VkImageView> m_views;
         /** @brief The currently used surface format. */
         VkSurfaceFormatKHR m_surfaceFormat;
         /** @brief A handle to the Vulkan swapchain. */

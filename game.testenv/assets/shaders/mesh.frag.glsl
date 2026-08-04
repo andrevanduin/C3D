@@ -8,14 +8,6 @@
 
 #define RAYTRACE 1
 
-#if RAYTRACE
-#extension GL_EXT_ray_query: require
-
-layout (constant_id = 2) const int POST = 0;
-
-layout (binding = 7) uniform accelerationStructureEXT tlas;
-#endif
-
 layout (push_constant) uniform block
 {
     Globals globals;
@@ -34,7 +26,19 @@ layout (location = 2) in vec3 normal;
 layout (location = 3) in vec4 tangent;
 layout (location = 4) in vec3 wpos;
 
-layout (binding = 0, set = 1) uniform sampler2D textures[];
+#if RAYTRACE
+#extension GL_EXT_ray_query: require
+
+layout (constant_id = 2) const int POST = 0;
+
+layout (binding = 7) uniform accelerationStructureEXT tlas;
+#endif
+
+layout (binding = 8) uniform sampler textureSampler;
+
+layout (binding = 0, set = 1) uniform texture2D textures[];
+
+#define SAMP(id) sampler2D(textures[nonuniformEXT(id)], textureSampler)
 
 void main()
 {
@@ -43,19 +47,19 @@ void main()
     vec4 albedo = vec4(0.5f, 0.5f, 0.5f, 1);
     if (meshDraw.albedoTexture > 0)
     {
-        albedo = texture(textures[nonuniformEXT(meshDraw.albedoTexture)], uv);
+        albedo = texture(SAMP(meshDraw.albedoTexture), uv);
     }
 
     vec3 normalMap = vec3(0, 0, 1);
     if (meshDraw.normalTexture > 0)
     {
-        normalMap = texture(textures[nonuniformEXT(meshDraw.normalTexture)], uv).rgb * 2 - 1;
+        normalMap = texture(SAMP(meshDraw.normalTexture), uv).rgb * 2 - 1;
     }
 
     vec3 emissive = vec3(0.0f);
     if (meshDraw.emissiveTexture > 0)
     {
-        emissive = texture(textures[nonuniformEXT(meshDraw.emissiveTexture)], uv).rgb;
+        emissive = texture(SAMP(meshDraw.emissiveTexture), uv).rgb;
     }
 
     vec3 biTangent = cross(normal, tangent.xyz) * tangent.w;
@@ -65,11 +69,16 @@ void main()
     float ndotl = max(dot(nrm, globals.sunDirection), 0.0);
 
 #if RAYTRACE
-    rayQueryEXT rq;
-    rayQueryInitializeEXT(rq, tlas, gl_RayFlagsTerminateOnFirstHitEXT, 0xff, wpos, 1e-2f, globals.sunDirection, 100);
-    rayQueryProceedEXT(rq);
+    if (globals.shadowsEnabled == 1)
+    {
+        uint rayFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsCullNoOpaqueEXT;
 
-    ndotl *= (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionNoneEXT) ? 1.0 : 0.05;
+        rayQueryEXT rq;
+        rayQueryInitializeEXT(rq, tlas, rayFlags, /* cullMask = */1, wpos, 1e-2, globals.sunDirection, 1e3);
+        rayQueryProceedEXT(rq);
+
+        ndotl *= (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionNoneEXT) ? 1.0 : 0.05;
+    }
 #endif
 
     outputColor = vec4(albedo.rgb * sqrt(ndotl + 0.05) + emissive, albedo.a);

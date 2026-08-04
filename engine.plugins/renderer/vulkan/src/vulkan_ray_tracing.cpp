@@ -7,7 +7,7 @@
 #include "logger/logger.h"
 #include "math/math_types.h"
 #include "renderer/vertex.h"
-#include "time/scoped_timer.h"
+#include "time/clock.h"
 #include "vulkan_buffer.h"
 #include "vulkan_utils.h"
 
@@ -15,24 +15,26 @@ namespace C3D
 {
     // Required by the spec for acceleration structures, it could be smaller for the scratch buffer but we don't care about that for now
     const u32 ALIGNMENT = 256;
+    // Default size of the scratch buffer
+    const u64 DEFAULT_SCRATCH_SIZE = MebiBytes(16);
 
-    bool VulkanRayTracing::BuildBLAS(VulkanContext* context, const Geometry& geometry, const VulkanBuffer& vb, const VulkanBuffer& ib,
+    bool VulkanRayTracing::BuildBLAS(VulkanContext* context, const DynamicArray<Mesh>& meshes, const VulkanBuffer& vb, const VulkanBuffer& ib,
                                      DynamicArray<VkAccelerationStructureKHR>& blas, VulkanBuffer& blasBuffer)
     {
-        ScopedTimer timer("Building BLAS");
+        Clock clock(ClockFlags::StartOnCreate);
 
-        u32 numberOfMeshes = geometry.meshes.Size();
+        u32 numberOfMeshes = meshes.Size();
 
         DynamicArray<u32> primitiveCounts(numberOfMeshes);
         DynamicArray<VkAccelerationStructureGeometryKHR> geometries(numberOfMeshes);
         DynamicArray<VkAccelerationStructureBuildGeometryInfoKHR> buildInfos(numberOfMeshes);
 
         u64 totalAccelerationSize = 0;
-        u64 totalScratchSize      = 0;
+        u64 maxScratchBufferSize  = 0;
 
         DynamicArray<u64> accelerationOffsets(numberOfMeshes);
         DynamicArray<u64> accelerationSizes(numberOfMeshes);
-        DynamicArray<u64> scratchOffsets(numberOfMeshes);
+        DynamicArray<u64> scratchSizes(numberOfMeshes);
 
         VkDeviceAddress vbAddress = vb.GetDeviceAddress();
         VkDeviceAddress ibAddress = ib.GetDeviceAddress();
@@ -41,7 +43,7 @@ namespace C3D
 
         for (u32 i = 0; i < numberOfMeshes; ++i)
         {
-            const auto& mesh = geometry.meshes[i];
+            const auto& mesh = meshes[i];
             auto& geo        = geometries[i];
             auto& buildInfo  = buildInfos[i];
 
@@ -57,13 +59,13 @@ namespace C3D
             geo.geometry.triangles.vertexFormat             = VK_FORMAT_R32G32B32_SFLOAT;
             geo.geometry.triangles.vertexData.deviceAddress = vbAddress + mesh.vertexOffset * sizeof(Vertex);
             geo.geometry.triangles.vertexStride             = sizeof(Vertex);
-            geo.geometry.triangles.maxVertex                = mesh.vertexCount;
+            geo.geometry.triangles.maxVertex                = mesh.vertexCount - 1;
             geo.geometry.triangles.indexType                = VK_INDEX_TYPE_UINT32;
             geo.geometry.triangles.indexData.deviceAddress  = ibAddress + mesh.lods[0].indexOffset * sizeof(u32);
 
             buildInfo.sType         = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
             buildInfo.type          = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-            buildInfo.flags         = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+            buildInfo.flags         = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
             buildInfo.mode          = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
             buildInfo.geometryCount = 1;
             buildInfo.pGeometries   = &geo;
@@ -73,13 +75,11 @@ namespace C3D
 
             accelerationOffsets[i] = totalAccelerationSize;
             accelerationSizes[i]   = sizeInfo.accelerationStructureSize;
-            scratchOffsets[i]      = totalScratchSize;
+            scratchSizes[i]        = sizeInfo.buildScratchSize;
 
             totalAccelerationSize = (totalAccelerationSize + sizeInfo.accelerationStructureSize + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
-            totalScratchSize      = (totalScratchSize + sizeInfo.buildScratchSize + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
+            maxScratchBufferSize  = Max(maxScratchBufferSize, sizeInfo.buildScratchSize);
         }
-
-        INFO_LOG("BLAS AccelerationStructureSize: {:.2f} MB BLAS BuildScratchSize: {:.2f} MB.", BytesToMebiBytes(totalAccelerationSize), BytesToMebiBytes(totalScratchSize));
 
         // Create our buffer to hold the BLAS
         if (!blasBuffer.Create(context, "BLAS_BUFFER", totalAccelerationSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -91,12 +91,15 @@ namespace C3D
 
         // Create our scratch buffer for the BLAS creation
         VulkanBuffer scratch;
-        if (!scratch.Create(context, "BLAS_SCRATCH_BUFFER", totalScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+        if (!scratch.Create(context, "BLAS_SCRATCH_BUFFER", Max(DEFAULT_SCRATCH_SIZE, maxScratchBufferSize),
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
             ERROR_LOG("Failed to create BLAS scratch buffer.");
             return false;
         }
+
+        INFO_LOG("BLAS AccelerationStructureSize: {:.2f} MB BLAS BuildScratchSize: {:.2f} MB (max {:.2f} MB).", BytesToMebiBytes(totalAccelerationSize),
+                 BytesToMebiBytes(scratch.GetSize()), BytesToMebiBytes(maxScratchBufferSize));
 
         VkDeviceAddress scratchAddress = scratch.GetDeviceAddress();
 
@@ -122,12 +125,6 @@ namespace C3D
                 ERROR_LOG("Failed to create vk Acceleration Structure with error: '{}'.", VkUtils::ResultString(result));
                 return false;
             }
-
-            buildInfos[i].dstAccelerationStructure  = blas[i];
-            buildInfos[i].scratchData.deviceAddress = scratchAddress + scratchOffsets[i];
-
-            buildRanges[i].primitiveCount = primitiveCounts[i];
-            buildRangePtrs[i]             = &buildRanges[i];
         }
 
         auto commandPool   = context->commandPool;
@@ -142,7 +139,33 @@ namespace C3D
 
         VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
-        vkCmdBuildAccelerationStructuresKHR(commandBuffer, numberOfMeshes, buildInfos.GetData(), buildRangePtrs.GetData());
+        auto scratchBarrier = VkUtils::BufferBarrier(scratch.GetHandle(), VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+                                                     VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);
+
+        for (u32 start = 0; start < numberOfMeshes;)
+        {
+            u64 scratchOffset = 0;
+
+            // Aggregate the range that fits into our allocated scratch buffer
+            u64 i = start;
+            while (i < numberOfMeshes && scratchOffset + scratchSizes[i] <= scratch.GetSize())
+            {
+                buildInfos[i].scratchData.deviceAddress = scratchAddress + scratchOffset;
+                buildInfos[i].dstAccelerationStructure  = blas[i];
+                buildRanges[i].primitiveCount           = primitiveCounts[i];
+                buildRangePtrs[i]                       = &buildRanges[i];
+
+                scratchOffset = (scratchOffset + scratchSizes[i] + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
+                ++i;
+            }
+
+            C3D_ASSERT(i > start);
+
+            vkCmdBuildAccelerationStructuresKHR(commandBuffer, i - start, &buildInfos[start], &buildRangePtrs[start]);
+            start = i;
+
+            VkUtils::PipelineBarrier(commandBuffer, 0, 1, &scratchBarrier, 0, nullptr);
+        }
 
         VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
@@ -157,13 +180,17 @@ namespace C3D
         // Finally destroy our scratch buffer since we are done with it
         scratch.Destroy();
 
+        clock.End();
+
+        INFO_LOG("Building BLAS took: {:.2f} ms.", clock.GetElapsedMs());
+
         return true;
     }
 
     bool VulkanRayTracing::BuildTLAS(VulkanContext* context, const DynamicArray<MeshDraw>& draws, const DynamicArray<VkAccelerationStructureKHR>& blas,
                                      VkAccelerationStructureKHR& tlas, VulkanBuffer& tlasBuffer)
     {
-        ScopedTimer timer("Building TLAS");
+        Clock clock(ClockFlags::StartOnCreate);
 
         auto device = context->device.GetLogical();
 
@@ -206,7 +233,8 @@ namespace C3D
             instance.transform.matrix[2][3] = draw.position.z;
 
             instance.instanceCustomIndex            = i;
-            instance.mask                           = 0xFF;
+            instance.mask                           = 1 << draw.postPass;
+            instance.flags                          = draw.postPass ? VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR : 0;
             instance.accelerationStructureReference = blasAddresses[draw.meshIndex];
 
             memcpy(static_cast<VkAccelerationStructureInstanceKHR*>(instances.GetData()) + i, &instance, sizeof(VkAccelerationStructureInstanceKHR));
@@ -293,6 +321,9 @@ namespace C3D
         // Finally destroy our temporary buffers
         scratch.Destroy();
         instances.Destroy();
+
+        clock.End();
+        INFO_LOG("Building TLAS took: {:.2f} ms.", clock.GetElapsedMs());
 
         return true;
     }

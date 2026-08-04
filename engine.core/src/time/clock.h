@@ -4,9 +4,17 @@
 
 namespace C3D
 {
+    enum ClockFlags
+    {
+        None          = 0x0,
+        StartOnCreate = 0x1,
+    };
+
     class C3D_API Clock
     {
     public:
+        Clock(ClockFlags flags = ClockFlags::None);
+
         /** @brief Begin the measured time frame. */
         void Begin();
 

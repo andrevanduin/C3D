@@ -41,8 +41,7 @@ namespace C3D
          */
         VkImageMemoryBarrier2 ImageBarrier(VkImage image, VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask, VkImageLayout oldLayout,
                                            VkPipelineStageFlags2 dstStageMask, VkAccessFlags2 dstAccessMask, VkImageLayout newLayout,
-                                           VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, u32 baseMipLevel = 0,
-                                           u32 levelCount = VK_REMAINING_MIP_LEVELS);
+                                           VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, u32 baseMipLevel = 0, u32 levelCount = VK_REMAINING_MIP_LEVELS);
 
         /**
          * @brief Creates a Vulkan Buffer Barrier.
@@ -54,8 +53,8 @@ namespace C3D
          * @param dstAccessMask The destination access mask
          * @return A VkBufferMemoryBarrier2
          */
-        VkBufferMemoryBarrier2 BufferBarrier(VkBuffer buffer, VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask,
-                                             VkPipelineStageFlags2 dstStageMask, VkAccessFlags dstAccessMask);
+        VkBufferMemoryBarrier2 BufferBarrier(VkBuffer buffer, VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask, VkPipelineStageFlags2 dstStageMask,
+                                             VkAccessFlags dstAccessMask);
 
         /**
          * @brief Sets up a Vulkan Pipeline Barrier.
@@ -67,8 +66,8 @@ namespace C3D
          * @param imageBarrierCount The number of image barriers
          * @param pImageBarriers A pointer to the image barriers
          */
-        void PipelineBarrier(VkCommandBuffer commandBuffer, VkDependencyFlags dependencyFlags, u32 bufferBarrierCount,
-                             const VkBufferMemoryBarrier2* pBufferBarriers, u32 imageBarrierCount, const VkImageMemoryBarrier2* pImageBarriers);
+        void PipelineBarrier(VkCommandBuffer commandBuffer, VkDependencyFlags dependencyFlags, u32 bufferBarrierCount, const VkBufferMemoryBarrier2* pBufferBarriers,
+                             u32 imageBarrierCount, const VkImageMemoryBarrier2* pImageBarriers);
 
         /**
          * @brief Creates a Vulkan Command Pool.
@@ -126,8 +125,7 @@ namespace C3D
          * @param levelCount The number of levels in this view
          * @return A VkImageView if successful; nullptr otherwise
          */
-        VkImageView CreateImageView(VulkanContext* context, const String& name, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel,
-                                    u32 levelCount);
+        VkImageView CreateImageView(VulkanContext* context, const String& name, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel, u32 levelCount);
 
         /**
          * @brief Calculates the number of mip levels required for an image of given width and height.
@@ -143,10 +141,13 @@ namespace C3D
          *
          * @param context  A pointer to the Vulkan context
          * @param name The name of the sampler (used for debugging purposes)
+         * @param filter The filter to be used by the sampler
+         * @param mipmapMode The mipmap mode to be used by the sampler
+         * @param addressMode The address mode to be used by the sampler
          * @param reductionMode The reduction mode used by the sampler
          * @return A VkSampler if successful; nullptr otherwise
          */
-        VkSampler CreateSampler(VulkanContext* context, const String& name, VkSamplerMipmapMode mipmapMode, VkSamplerAddressMode addressMode,
+        VkSampler CreateSampler(VulkanContext* context, const String& name, VkFilter filter, VkSamplerMipmapMode mipmapMode, VkSamplerAddressMode addressMode,
                                 VkSamplerReductionMode reductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE);
 
         /**
@@ -177,20 +178,23 @@ namespace C3D
          * @param count The number of descriptors
          * @param stageFlags The shader stages in which the descriptor is used
          * @param bindingFlags The flags used by the binding
+         * @param layoutFlags The flags used the layout
          * @return A VkDescriptorSetLayout if successful; nullptr otherwise
          */
-        VkDescriptorSetLayout CreateDescriptorSetLayout(VulkanContext* context, const String& name, u32 binding, VkDescriptorType type, u32 count,
-                                                        VkShaderStageFlags stageFlags, VkDescriptorBindingFlags bindingFlags);
+        VkDescriptorSetLayout CreateDescriptorSetLayout(VulkanContext* context, const String& name, u32 binding, VkDescriptorType type, u32 count, VkShaderStageFlags stageFlags,
+                                                        VkDescriptorBindingFlags bindingFlags, VkDescriptorSetLayoutCreateFlags layoutFlags);
 
         /**
-         * @brief Create a Descriptor Pool.
+         * @brief
          *
          * @param context A pointer to the Vulkan context
          * @param name The name of the Descriptor Pool (used for debugging purposes)
+         * @param descriptorType The type of descriptor that the pool should be able to allocate
          * @param descriptorCount The number of descriptors the pool should be able to allocate
+         * @param flags The flags used to create the pool
          * @return A VkDescriptorPool if successful; nullptr otherwise
          */
-        VkDescriptorPool CreateDescriptorPool(VulkanContext* context, const String& name, u32 descriptorCount);
+        VkDescriptorPool CreateDescriptorPool(VulkanContext* context, const String& name, VkDescriptorType descriptorType, u32 descriptorCount, VkDescriptorPoolCreateFlags flags);
 
         /**
          * @brief Create a Descriptor Set.

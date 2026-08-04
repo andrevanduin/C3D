@@ -9,10 +9,6 @@ add_subdirectory ("vendor")
 
 target_compile_definitions(C3DEngineRuntime PUBLIC C3D_EXPORT)
 
-if (WIN32)
-    target_compile_options(C3DEngineRuntime PRIVATE /EHsc /wd4002)
-endif()
-
 if (UNIX)
     find_package(X11 REQUIRED)
     message(STATUS "X11_FOUND = ${X11_FOUND}")

@@ -40,6 +40,13 @@ namespace C3D
             buffer.range  = range;
         }
 
+        DescriptorInfo(VkSampler sampler)
+        {
+            image.sampler     = sampler;
+            image.imageView   = VK_NULL_HANDLE;
+            image.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        }
+
         DescriptorInfo(const VulkanBuffer& buffer_)
         {
             buffer.buffer = buffer_.GetHandle();

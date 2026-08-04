@@ -207,8 +207,8 @@ namespace C3D
     }
 
     VkImageMemoryBarrier2 VkUtils::ImageBarrier(VkImage image, VkPipelineStageFlags2 srcStageMask, VkAccessFlags2 srcAccessMask, VkImageLayout oldLayout,
-                                                VkPipelineStageFlags2 dstStageMask, VkAccessFlags2 dstAccessMask, VkImageLayout newLayout,
-                                                VkImageAspectFlags aspectMask, u32 baseMipLevel, u32 levelCount)
+                                                VkPipelineStageFlags2 dstStageMask, VkAccessFlags2 dstAccessMask, VkImageLayout newLayout, VkImageAspectFlags aspectMask,
+                                                u32 baseMipLevel, u32 levelCount)
     {
         VkImageMemoryBarrier2 barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
 
@@ -229,8 +229,8 @@ namespace C3D
         return barrier;
     }
 
-    VkBufferMemoryBarrier2 VkUtils::BufferBarrier(VkBuffer buffer, VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask,
-                                                  VkPipelineStageFlags2 dstStageMask, VkAccessFlags dstAccessMask)
+    VkBufferMemoryBarrier2 VkUtils::BufferBarrier(VkBuffer buffer, VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask, VkPipelineStageFlags2 dstStageMask,
+                                                  VkAccessFlags dstAccessMask)
     {
         VkBufferMemoryBarrier2 barrier = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2 };
 
@@ -247,8 +247,8 @@ namespace C3D
         return barrier;
     }
 
-    void VkUtils::PipelineBarrier(VkCommandBuffer commandBuffer, VkDependencyFlags dependencyFlags, u32 bufferBarrierCount,
-                                  const VkBufferMemoryBarrier2* pBufferBarriers, u32 imageBarrierCount, const VkImageMemoryBarrier2* pImageBarriers)
+    void VkUtils::PipelineBarrier(VkCommandBuffer commandBuffer, VkDependencyFlags dependencyFlags, u32 bufferBarrierCount, const VkBufferMemoryBarrier2* pBufferBarriers,
+                                  u32 imageBarrierCount, const VkImageMemoryBarrier2* pImageBarriers)
     {
         VkDependencyInfo dependencyInfo         = { VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
         dependencyInfo.dependencyFlags          = dependencyFlags;
@@ -385,8 +385,7 @@ namespace C3D
         }
     }
 
-    VkImageView VkUtils::CreateImageView(VulkanContext* context, const String& name, VkImage image, VkFormat format, VkImageAspectFlags aspectMask,
-                                         u32 mipLevel, u32 levelCount)
+    VkImageView VkUtils::CreateImageView(VulkanContext* context, const String& name, VkImage image, VkFormat format, VkImageAspectFlags aspectMask, u32 mipLevel, u32 levelCount)
     {
         VkImageViewCreateInfo createInfo         = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
         createInfo.image                         = image;
@@ -406,8 +405,7 @@ namespace C3D
             return nullptr;
         }
 
-        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_IMAGE_VIEW, view,
-                                 String::FromFormat("{}_IMAGE_VIEW_MIP_{}_LEVEL_COUNT_{})", name, mipLevel, levelCount));
+        VK_SET_DEBUG_OBJECT_NAME(context, VK_OBJECT_TYPE_IMAGE_VIEW, view, String::FromFormat("{}_IMAGE_VIEW_MIP_{}_LEVEL_COUNT_{})", name, mipLevel, levelCount));
 
         return view;
     }
@@ -424,14 +422,14 @@ namespace C3D
         return result;
     }
 
-    VkSampler VkUtils::CreateSampler(VulkanContext* context, const String& name, VkSamplerMipmapMode mipmapMode, VkSamplerAddressMode addressMode,
+    VkSampler VkUtils::CreateSampler(VulkanContext* context, const String& name, VkFilter filter, VkSamplerMipmapMode mipmapMode, VkSamplerAddressMode addressMode,
                                      VkSamplerReductionMode reductionMode)
     {
         // TODO: Make more configurable in the future
         VkSamplerCreateInfo createInfo = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
-        createInfo.magFilter        = VK_FILTER_LINEAR;
-        createInfo.minFilter        = VK_FILTER_LINEAR;
+        createInfo.magFilter        = filter;
+        createInfo.minFilter        = filter;
         createInfo.mipmapMode       = mipmapMode;
         createInfo.addressModeU     = addressMode;
         createInfo.addressModeV     = addressMode;
@@ -500,7 +498,7 @@ namespace C3D
     }
 
     VkDescriptorSetLayout VkUtils::CreateDescriptorSetLayout(VulkanContext* context, const String& name, u32 binding, VkDescriptorType type, u32 count,
-                                                             VkShaderStageFlags stageFlags, VkDescriptorBindingFlags bindingFlags)
+                                                             VkShaderStageFlags stageFlags, VkDescriptorBindingFlags bindingFlags, VkDescriptorSetLayoutCreateFlags layoutFlags)
     {
         VkDescriptorSetLayoutBinding setBinding = { binding, type, count, stageFlags, nullptr };
 
@@ -510,6 +508,7 @@ namespace C3D
 
         VkDescriptorSetLayoutCreateInfo setCreateInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
         setCreateInfo.pNext                           = &setBindingFlags;
+        setCreateInfo.flags                           = layoutFlags;
         setCreateInfo.bindingCount                    = 1;
         setCreateInfo.pBindings                       = &setBinding;
 
@@ -527,10 +526,12 @@ namespace C3D
         return setLayout;
     }
 
-    VkDescriptorPool VkUtils::CreateDescriptorPool(VulkanContext* context, const String& name, u32 descriptorCount)
+    VkDescriptorPool VkUtils::CreateDescriptorPool(VulkanContext* context, const String& name, VkDescriptorType descriptorType, u32 descriptorCount,
+                                                   VkDescriptorPoolCreateFlags flags)
     {
-        VkDescriptorPoolSize poolSize       = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, descriptorCount };
+        VkDescriptorPoolSize poolSize       = { descriptorType, descriptorCount };
         VkDescriptorPoolCreateInfo poolInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+        poolInfo.flags                      = flags;
         poolInfo.maxSets                    = 1;
         poolInfo.poolSizeCount              = 1;
         poolInfo.pPoolSizes                 = &poolSize;
@@ -614,17 +615,14 @@ namespace C3D
 
     void VkUtils::SetDebugObjectName(const VulkanContext* context, VkObjectType type, void* handle, const String& name)
     {
-        const VkDebugUtilsObjectNameInfoEXT nameInfo = { VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, type, reinterpret_cast<uint64_t>(handle),
-                                                         name.Data() };
+        const VkDebugUtilsObjectNameInfoEXT nameInfo = { VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, type, reinterpret_cast<uint64_t>(handle), name.Data() };
 
         VK_CHECK(vkSetDebugUtilsObjectNameEXT(context->device.GetLogical(), &nameInfo));
     }
 
     void VkUtils::SetDebugObjectTag(const VulkanContext* context, VkObjectType type, void* handle, u64 tagSize, const void* tagData)
     {
-        const VkDebugUtilsObjectTagInfoEXT tagInfo = {
-            VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT, nullptr, type, reinterpret_cast<uint64_t>(handle), 0, tagSize, tagData
-        };
+        const VkDebugUtilsObjectTagInfoEXT tagInfo = { VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT, nullptr, type, reinterpret_cast<uint64_t>(handle), 0, tagSize, tagData };
 
         VK_CHECK(vkSetDebugUtilsObjectTagEXT(context->device.GetLogical(), &tagInfo));
     }

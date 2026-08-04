@@ -1,6 +1,7 @@
 
 #include "cson_reader.h"
 
+#include "cson_types.h"
 #include "platform/file.h"
 #include "string/string_utils.h"
 
@@ -510,6 +511,8 @@ namespace C3D
                     return true;
                 }
             }
+            default:
+                break;
         }
 
         return ParseError(token, "a valid value");
@@ -536,6 +539,8 @@ namespace C3D
                 m_parseMode = CSONParseMode::ArraySeparatorOrEnd;
                 return true;
             }
+            default:
+                break;
         }
 
         return ParseError(token, "a valid number");

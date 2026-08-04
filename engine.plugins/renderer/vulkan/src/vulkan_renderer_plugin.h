@@ -82,10 +82,8 @@ namespace C3D
         bool m_clusterOcclusionCullingEnabled = true;
         /** @brief A boolean indicating if we are doing LODs for meshes. */
         bool m_lodEnabled = true;
-        /** @brief A boolean indicating if we are rendering our depth pyramid for debugging. */
-        bool m_debugPyramid = false;
-        /** @brief The (mip) level we are displaying as part of our depth pyramid debugging. */
-        u32 m_debugPyramidLevel = 0;
+        /** @brief A boolean indicating if shadows are enabled (with Ray Tracing). */
+        bool m_shadowsEnabled = true;
         /** @brief A boolean indicating if we are rendering debug lods. */
         bool m_debugLods = false;
         /** @brief The lod level we are displaying as part of our lod debugging. */
@@ -97,25 +95,27 @@ namespace C3D
 
         VulkanShader m_meshShader;
         VulkanShader m_meshPostShader;
-        VulkanShader m_meshletShader;
-        VulkanShader m_meshletLateShader;
-        VulkanShader m_meshletPostShader;
-        VulkanShader m_clusterMeshletShader;
-        VulkanShader m_clusterPostMeshletShader;
+
+        VulkanShader m_taskCullShader;
+        VulkanShader m_taskCullLateShader;
+        VulkanShader m_taskSubmitShader;
+        VulkanShader m_taskMeshletShader;
+        VulkanShader m_taskMeshletLateShader;
+        VulkanShader m_taskMeshletPostShader;
 
         VulkanShader m_drawCullShader;
         VulkanShader m_drawCullLateShader;
 
-        VulkanShader m_taskCullShader;
-        VulkanShader m_taskCullLateShader;
-
         VulkanShader m_clusterCullShader;
         VulkanShader m_clusterCullLateShader;
-
-        VulkanShader m_taskSubmitShader;
         VulkanShader m_clusterSubmitShader;
+        VulkanShader m_clusterMeshletShader;
+        VulkanShader m_clusterPostMeshletShader;
+
+        VulkanShader m_blitShader;
 
         VkSampler m_textureSampler;
+        VkSampler m_readSampler;
         VkSampler m_depthSampler;
 
         DynamicArray<MeshDraw> m_draws;

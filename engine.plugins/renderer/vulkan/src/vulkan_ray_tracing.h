@@ -10,7 +10,7 @@ namespace C3D
 {
     namespace VulkanRayTracing
     {
-        bool BuildBLAS(VulkanContext* context, const Geometry& geometry, const VulkanBuffer& vb, const VulkanBuffer& ib, DynamicArray<VkAccelerationStructureKHR>& blas,
+        bool BuildBLAS(VulkanContext* context, const DynamicArray<Mesh>& meshes, const VulkanBuffer& vb, const VulkanBuffer& ib, DynamicArray<VkAccelerationStructureKHR>& blas,
                        VulkanBuffer& blasBuffer);
 
         bool BuildTLAS(VulkanContext* context, const DynamicArray<MeshDraw>& draws, const DynamicArray<VkAccelerationStructureKHR>& blas, VkAccelerationStructureKHR& tlas,
