@@ -2,6 +2,7 @@
 #pragma once
 #include <fmt/format.h>
 
+#include <iterator>
 #include <string>
 
 #include "defines.h"
@@ -109,11 +110,18 @@ namespace C3D
         template <typename... Args>
         void FromFormat(const char* format, Args&&... args)
         {
-            auto endIt = fmt::vformat_to(m_data, format, fmt::make_format_args(args...));
-            // Get the size of the newly created string
-            auto size = endIt - m_data;
+            auto result = fmt::format_to_n(m_data, sizeof(m_data), fmt::runtime(format), args...);
             // Ensure that the string is null terminated
-            m_data[size] = '\0';
+            if (result.size < sizeof(m_data))
+            {
+                // If we wrote less than Capacity bytes then we add a '\0' byte after the number of characters written
+                m_data[result.size] = '\0';
+            }
+            else
+            {
+                // Otherwise we simply add a '\0' byte all the way at the end
+                m_data[sizeof(m_data) - 1] = '\0';
+            }
         }
 
         /** @brief Removes all starting whitespace characters from the string. */

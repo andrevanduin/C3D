@@ -11,6 +11,7 @@
 #include "logger/logger.h"
 #include "math/c3d_math.h"
 #include "platform/path.h"
+#include "time/clock.h"
 #include "time/scoped_timer.h"
 
 #define PARSE_ARRAY_OF_OBJECTS_PROP(name, parseFunc, asset)           \
@@ -139,13 +140,19 @@ namespace C3D
         // Copy the name of the asset
         asset.name = name;
 
-        auto result = ImportGltfFile(rootPath, asset);
-        if (!result)
         {
-            ERROR_LOG("Failed to parse gltf file.");
+            Clock clock(ClockFlags::StartOnCreate);
+            if (!ImportGltfFile(rootPath, asset))
+            {
+                ERROR_LOG("Failed to parse GLTF file.");
+                return false;
+            }
+
+            clock.End();
+            INFO_LOG("Finished importing Scene: '{}' from GLTF file (took: {:.2f} ms).", asset.name, clock.GetElapsedMs());
         }
 
-        return result;
+        return true;
     }
 
     void SceneManager::Cleanup(SceneAsset& asset)

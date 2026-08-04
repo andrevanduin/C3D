@@ -818,8 +818,8 @@ namespace C3D
             return nullptr;
         }
 
-        const auto library        = static_cast<HMODULE>(libraryData);
-        const FARPROC funcAddress = GetProcAddress(library, name);
+        const auto library     = static_cast<HMODULE>(libraryData);
+        const auto funcAddress = GetProcAddress(library, name);
         if (!funcAddress)
         {
             const auto errorMsg = GetLastErrorMsg();
@@ -827,7 +827,7 @@ namespace C3D
             return nullptr;
         }
 
-        return funcAddress;
+        return reinterpret_cast<void*>(funcAddress);
     }
 
     constexpr DynamicLibraryPrefix Platform::GetDynamicLibraryPrefix() { return ""; }
