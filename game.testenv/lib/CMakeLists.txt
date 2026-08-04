@@ -1,14 +1,11 @@
 
 cmake_minimum_required (VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 23)
-
 file(GLOB_RECURSE TestEnvLib_SRC "*.h" "*.cpp")
 
 add_library(TestEnvLib SHARED ${TestEnvLib_SRC})
 
 if (WIN32)
-    target_link_options(TestEnvLib PUBLIC /MANIFEST:NO)
     set_target_properties(TestEnvLib PROPERTIES PDB_NAME "TestEnvLib${RANDOM_PDB_VERSION}")
 endif()
 

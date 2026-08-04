@@ -5,6 +5,14 @@
 
 namespace C3D
 {
+    Clock::Clock(ClockFlags flags)
+    {
+        if (flags & ClockFlags::StartOnCreate)
+        {
+            Begin();
+        }
+    }
+
     void Clock::Begin() { m_startTime = Platform::GetAbsoluteTime(); }
 
     void Clock::End()

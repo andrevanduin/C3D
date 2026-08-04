@@ -2,8 +2,9 @@
 #pragma once
 #include <fmt/format.h>
 
+#define GLM_ENABLE_EXPERIMENTAL
+
 #include <glm/glm.hpp>
-#include <glm/gtx/euler_angles.hpp>
 #include <glm/gtx/hash.hpp>
 #include <glm/gtx/transform.hpp>
 
@@ -22,6 +23,7 @@ typedef glm::vec4 vec4;
 typedef glm::ivec4 ivec4;
 typedef glm::uvec4 uvec4;
 
+typedef glm::mat3 mat3;
 typedef glm::mat4 mat4;
 
 typedef glm::quat quat;
@@ -84,10 +86,7 @@ namespace C3D
          * @param point The point we want to check against
          * @return true if point is inside, false otherwise
          */
-        bool PointIsInside(const vec2& point) const
-        {
-            return point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + height;
-        }
+        bool PointIsInside(const vec2& point) const { return point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + height; }
     };
 
     struct Circle2D

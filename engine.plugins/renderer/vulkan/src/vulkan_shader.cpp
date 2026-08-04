@@ -6,16 +6,19 @@
 #include <platform/platform.h>
 #include <system/system_manager.h>
 
+#include "asserts/asserts.h"
+#include "defines.h"
 #include "logger/logger.h"
 #include "vulkan_context.h"
 #include "vulkan_shader_module.h"
+#include "vulkan_types.h"
 #include "vulkan_utils.h"
 
 namespace C3D
 {
     bool VulkanShader::Create(const VulkanShaderCreateInfo& createInfo)
     {
-        INFO_LOG("Creating: '{}'.", createInfo.name);
+        TRACE("Creating: '{}'.", createInfo.name);
 
         m_context           = createInfo.context;
         m_name              = createInfo.name;
@@ -119,8 +122,7 @@ namespace C3D
         vkCmdPushDescriptorSetWithTemplate(commandBuffer, m_updateTemplate, m_pipelineLayout, 0, descriptors);
     }
 
-    void VulkanShader::BindDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint bindpoint, u32 firstSet, u32 count,
-                                         const VkDescriptorSet* sets) const
+    void VulkanShader::BindDescriptorSet(VkCommandBuffer commandBuffer, VkPipelineBindPoint bindpoint, u32 firstSet, u32 count, const VkDescriptorSet* sets) const
     {
         vkCmdBindDescriptorSets(commandBuffer, bindpoint, m_pipelineLayout, firstSet, count, sets, 0, nullptr);
     }
@@ -134,7 +136,7 @@ namespace C3D
     {
         if (m_context)
         {
-            INFO_LOG("Destroying: '{}'.", m_name);
+            TRACE("Destroying: '{}'.", m_name);
 
             Event.Unregister(m_watchedFilesCallback);
 
@@ -379,6 +381,16 @@ namespace C3D
         VkGraphicsPipelineCreateInfo createInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
         createInfo.layout                       = layout;
 
+        // NOTE: Because we are using dynamic rendering we need to provide this structure to pNext of createInfo
+        VkPipelineRenderingCreateInfo gBufferInfo = { VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+
+        gBufferInfo.colorAttachmentCount    = GBUFFER_COUNT;
+        gBufferInfo.pColorAttachmentFormats = GBUFFER_FORMATS;
+        // TODO: We are hardcoding the depth format here which we might want to make configurable later
+        gBufferInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
+
+        createInfo.pNext = &gBufferInfo;
+
         DynamicArray<VkSpecializationMapEntry> specializationEntries;
         VkSpecializationInfo specializationInfo = FillSpecializationInfo(specializationEntries, m_constants);
 
@@ -427,12 +439,17 @@ namespace C3D
         depthStencilState.depthCompareOp   = VK_COMPARE_OP_GREATER;
         createInfo.pDepthStencilState      = &depthStencilState;
 
-        VkPipelineColorBlendAttachmentState colorAttachmentState = {};
-        colorAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendAttachmentState colorAttachmentStates[8] = {};
+        C3D_ASSERT(gBufferInfo.colorAttachmentCount <= ARRAY_SIZE(colorAttachmentStates));
+
+        for (u32 i = 0; i < gBufferInfo.colorAttachmentCount; ++i)
+        {
+            colorAttachmentStates[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        }
 
         VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-        colorBlendState.attachmentCount                     = 1;
-        colorBlendState.pAttachments                        = &colorAttachmentState;
+        colorBlendState.attachmentCount                     = gBufferInfo.colorAttachmentCount;
+        colorBlendState.pAttachments                        = colorAttachmentStates;
         createInfo.pColorBlendState                         = &colorBlendState;
 
         VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
@@ -446,17 +463,6 @@ namespace C3D
         createInfo.renderPass         = VK_NULL_HANDLE;
         createInfo.basePipelineHandle = VK_NULL_HANDLE;
         createInfo.basePipelineIndex  = -1;
-
-        // NOTE: Because we are using dynamic rendering we need to provide this structure to pNext of createInfo
-        VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-        pipelineRenderingCreateInfo.colorAttachmentCount          = 1;
-        // TODO: We are hardcoding the depth format here which we might want to make configurable later
-        pipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
-
-        auto surfaceFormat = m_context->device.GetPreferredSurfaceFormat();
-
-        pipelineRenderingCreateInfo.pColorAttachmentFormats = &surfaceFormat.format;
-        createInfo.pNext                                    = &pipelineRenderingCreateInfo;
 
         VkPipeline pipeline;
 
@@ -551,8 +557,7 @@ namespace C3D
             return nullptr;
         }
 
-        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE, updateTemplate,
-                                 String::FromFormat("DESCRIPTOR_UPDATE_TEMPLATE_{}", m_name));
+        VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE, updateTemplate, String::FromFormat("DESCRIPTOR_UPDATE_TEMPLATE_{}", m_name));
 
         return updateTemplate;
     }

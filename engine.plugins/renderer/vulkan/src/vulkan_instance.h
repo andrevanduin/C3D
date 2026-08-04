@@ -4,8 +4,11 @@
 
 #include "vulkan_context.h"
 
-namespace C3D::VulkanInstance
+namespace C3D
 {
-    bool Create(VulkanContext& context, const char* applicationName, u32 applicationVersion);
-    void Destroy(VulkanContext& context);
-}  // namespace C3D::VulkanInstance
+    namespace VulkanInstance
+    {
+        bool Create(VulkanContext& context, const char* applicationName, u32 applicationVersion);
+        void Destroy(VulkanContext& context);
+    }  // namespace VulkanInstance
+}  // namespace C3D

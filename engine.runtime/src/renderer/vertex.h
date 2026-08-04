@@ -1,14 +1,13 @@
 
 #pragma once
 #include "defines.h"
-#include "math/math_types.h"
 
 namespace C3D
 {
     struct Vertex
     {
         /** @brief The position of the vertex. */
-        vec3 pos;
+        uint16_t vx, vy, vz, vw;
         /** @brief The normal of the vertex. */
         u8 nx, ny, nz, nw;
         /** @brief The tangents of the vertex. */

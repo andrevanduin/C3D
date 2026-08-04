@@ -52,6 +52,7 @@ namespace C3D
         RenderSystem,
         RenderData,
         RenderView,
+        Buffer,
         Game,
         Transform,
         Entity,

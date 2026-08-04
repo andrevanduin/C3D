@@ -2,6 +2,7 @@
 #pragma once
 #include "assets/types/texture_types.h"
 #include "defines.h"
+#include "mesh.h"
 #include "types.h"
 
 namespace C3D
@@ -12,16 +13,19 @@ namespace C3D
     class RendererPlugin
     {
     public:
+        virtual ~RendererPlugin() {}
+
         virtual bool OnInit(const RendererPluginConfig& config) = 0;
         virtual void OnShutdown()                               = 0;
 
         /**
-         * @brief Creates renderer-specfic resources.
-         * Useful for when there are resources that need to be created that can't yet be created during OnInit()
+         * @brief Gets called after the OnRun() method for the main application has ran.
+         * Useful since the user might create some resources during OnRun() which we need to do something with in the Renderer after.
          *
+         * @param geometry The geometry that should be rendered (which is managed by the RenderSystem)
          * @return True if successful; false otherwise
          */
-        virtual bool CreateResources() = 0;
+        virtual bool OnRun(const Geometry& geometry) = 0;
 
         /**
          * @brief Begins rendering the frame.
@@ -83,19 +87,38 @@ namespace C3D
          */
         virtual void OnDestroyWindow(Window& window) = 0;
 
-        virtual bool UploadGeometry(const Window& window, const Geometry& geometry) = 0;
+        /**
+         * @brief Method used to upload geometry to the GPU.
+         *
+         * @param geometry The geometry that you want to upload
+         * @return True if successful; false otherwise
+         */
+        virtual bool UploadGeometry(const Geometry& geometry) = 0;
 
         /**
          * @brief Method used to upload a texture asset to the GPU memory.
          *
-         * @param window
          * @param texture The path to the texture
          * @return True if successful; false otherwise
          */
-        virtual bool UploadTexture(const Window& window, const TextureAsset& asset) = 0;
+        virtual bool UploadTexture(const TextureAsset& asset) = 0;
 
-        virtual bool GenerateDrawCommands(const Window& window, const Geometry& geometry)                                    = 0;
-        virtual bool UploadDrawCommands(const Window& window, const Geometry& geometry, const DynamicArray<MeshDraw>& draws) = 0;
+        /**
+         * @brief Method to generate draw command (randomly) for the provdided geometry.
+         *
+         * @param geometry The geometry you want to generate draw commands for
+         * @return True if successful; false otherwise
+         */
+        virtual bool GenerateDrawCommands(const Geometry& geometry) = 0;
+
+        /**
+         * @brief Method to upload draw commands based on the provided Geometry and Draws.
+         *
+         * @param geometry The geometry you want to upload draw commands for
+         * @param draws An array containing the actual draws that you want the GPU to execute
+         * @return True if successful; false otherwise
+         */
+        virtual bool UploadDrawCommands(const Geometry& geometry, const DynamicArray<MeshDraw>& draws) = 0;
 
         /**
          * @brief Sets the viewport.
@@ -119,7 +142,19 @@ namespace C3D
          */
         virtual void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) = 0;
 
+        /**
+         * @brief Sets a Camera to be used by the Renderer.
+         *
+         * @param camera The camera to be used
+         */
         virtual void SetCamera(const Camera& camera) = 0;
+
+        /**
+         * @brief Sets the Sun Direction to be used by the Renderer.
+         *
+         * @param sunDirection The sun direction to be used
+         */
+        virtual void SetSunDirection(const vec3& sunDirection) = 0;
 
         /**
          * @brief Method that returns if the requested feature is supported by the current renderer backend.

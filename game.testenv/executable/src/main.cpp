@@ -115,7 +115,7 @@ void C3D::InitApplication()
 
 void C3D::DestroyApplication()
 {
-    Memory.Delete(applicationState);
+    Memory.Free(applicationState);
     Memory.Delete(application);
 
     applicationLib.Unload();

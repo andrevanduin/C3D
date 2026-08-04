@@ -19,13 +19,13 @@ namespace C3D
         bool OnInit(const CSONObject& config) override;
         void OnShutdown() override;
 
-        bool CreateResources() const;
+        bool OnRun() const;
 
-        bool UploadMeshes(const Window& window, const DynamicArray<MeshAsset>& meshes);
-        bool UploadTextures(const Window& window, const DynamicArray<String>& texturePaths);
+        bool UploadMeshes(const DynamicArray<MeshAsset>& meshes);
+        bool UploadTextures(const DynamicArray<String>& texturePaths);
 
-        bool GenerateDrawCommands(const Window& window) const;
-        bool UploadDrawCommands(const Window& window, const DynamicArray<MeshDraw>& draws) const;
+        bool GenerateDrawCommands() const;
+        bool UploadDrawCommands(const DynamicArray<MeshDraw>& draws) const;
 
         bool Begin(Window& window) const;
         bool End(Window& window) const;
@@ -41,18 +41,17 @@ namespace C3D
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) const;
 
         void SetCamera(const Camera& camera) const;
+        void SetSunDirection(const vec3& sunDirection) const;
 
     private:
-        u32 GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<Vertex>& vertices);
+        u32 GenerateMeshlets(const DynamicArray<u32>& indices, const DynamicArray<vec3>& positions, u32 baseVertex);
 
         /** @brief A pointer to the backend rendering plugin used to actually render things on the screen. */
         RendererPlugin* m_backendPlugin = nullptr;
         /** @brief A dynamic library object to load the rendering plugin. */
         DynamicLibrary m_backendDynamicLibrary;
-
         /** @brief The configuration for our render system. */
         RenderSystemConfig m_config;
-
         /** @brief A structure holding all the geometry ready for rendering. */
         Geometry m_geometry;
     };

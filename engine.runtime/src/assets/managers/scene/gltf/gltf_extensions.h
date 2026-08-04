@@ -29,7 +29,7 @@ namespace C3D
     constexpr auto KHR_LIGHTS_PUNCTUAL = "KHR_lights_punctual";
     struct GLTFNodeLightsPunctualExtension
     {
-        u32 light;
+        u32 light = INVALID_ID;
     };
 
     enum class GLTFLightPunctualType

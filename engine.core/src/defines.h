@@ -125,14 +125,14 @@ constexpr u64 MebiBytes(const u64 amount) { return amount * 1024 * 1024; }
 constexpr u64 KibiBytes(const u64 amount) { return amount * 1024; }
 
 /** @brief Converts the provided number of bytes to gibibytes. */
-constexpr u64 BytesToGibiBytes(const u64 amount) { return amount / 1024 / 1024 / 1024; }
+constexpr f64 BytesToGibiBytes(const u64 amount) { return static_cast<f64>(amount) / 1024 / 1024 / 1024; }
 /** @brief Converts the provided number of bytes to mebibytes. */
-constexpr u64 BytesToMebiBytes(const u64 amount) { return amount / 1024 / 1024; }
+constexpr f64 BytesToMebiBytes(const u64 amount) { return static_cast<f64>(amount) / 1024 / 1024; }
 /** @brief Converts the provided number of bytes to kibibytes. */
-constexpr u64 BytesToKibiBytes(const u64 amount) { return amount / 1024; }
+constexpr f64 BytesToKibiBytes(const u64 amount) { return static_cast<f64>(amount) / 1024; }
 
 /** @brief Converts the provided number of mebibytes to gibibytes. */
-constexpr u64 MebiBytesToGibiBytes(const u64 amount) { return amount / 1024; }
+constexpr f64 MebiBytesToGibiBytes(const u64 amount) { return static_cast<f64>(amount) / 1024; }
 
 /** @brief Gets the number of bytes from amount of gigabytes (GB) (amount * 1000 * 1000 * 1000) */
 constexpr u64 GigaBytes(const u64 amount) { return amount * 1000 * 1000 * 1000; }
@@ -143,12 +143,6 @@ constexpr u64 KiloBytes(const u64 amount) { return amount * 1000; }
 
 C3D_INLINE u64 GetAligned(const u64 operand, const u64 granularity) { return (operand + (granularity - 1)) & ~(granularity - 1); }
 
-C3D_INLINE Range GetAlignedRange(const u64 offset, const u64 size, const u64 granularity)
-{
-    return { GetAligned(offset, granularity), GetAligned(size, granularity) };
-}
+C3D_INLINE Range GetAlignedRange(const u64 offset, const u64 size, const u64 granularity) { return { GetAligned(offset, granularity), GetAligned(size, granularity) }; }
 
-C3D_INLINE constexpr u32 FourCC(const char (&str)[5])
-{
-    return (unsigned(str[0]) << 0) | (unsigned(str[1]) << 8) | (unsigned(str[2]) << 16) | (unsigned(str[3]) << 24);
-}
+C3D_INLINE constexpr u32 FourCC(const char (&str)[5]) { return (unsigned(str[0]) << 0) | (unsigned(str[1]) << 8) | (unsigned(str[2]) << 16) | (unsigned(str[3]) << 24); }

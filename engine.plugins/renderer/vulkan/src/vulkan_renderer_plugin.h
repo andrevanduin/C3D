@@ -3,6 +3,9 @@
 #include <renderer/mesh.h>
 #include <renderer/renderer_plugin.h>
 
+#include "containers/dynamic_array.h"
+#include "containers/hash_map.h"
+#include "string/string.h"
 #include "vulkan_buffer.h"
 #include "vulkan_context.h"
 #include "vulkan_shader.h"
@@ -26,7 +29,7 @@ namespace C3D
         bool OnInit(const RendererPluginConfig& config) override;
         void OnShutdown() override;
 
-        bool CreateResources() override;
+        bool OnRun(const Geometry& geometry) override;
 
         bool Begin(Window& window) override;
         bool End(Window& window) override;
@@ -38,15 +41,16 @@ namespace C3D
         bool OnResizeWindow(Window& window) override;
         void OnDestroyWindow(Window& window) override;
 
-        bool UploadGeometry(const Window& window, const Geometry& geometry) override;
-        bool UploadTexture(const Window& window, const TextureAsset& texture) override;
+        bool UploadGeometry(const Geometry& geometry) override;
+        bool UploadTexture(const TextureAsset& texture) override;
 
-        bool GenerateDrawCommands(const Window& window, const Geometry& geometry) override;
-        bool UploadDrawCommands(const Window& window, const Geometry& geometry, const DynamicArray<MeshDraw>& draws) override;
+        bool GenerateDrawCommands(const Geometry& geometry) override;
+        bool UploadDrawCommands(const Geometry& geometry, const DynamicArray<MeshDraw>& draws) override;
 
         void SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth) override;
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) override;
         void SetCamera(const Camera& camera) override;
+        void SetSunDirection(const vec3& sunDirection) override;
 
         bool SupportsFeature(RendererSupportFlag feature) const override;
 
@@ -54,18 +58,19 @@ namespace C3D
         u32 GetStagingBufferSize() const override { return m_context.stagingBuffer.GetSize(); }
 
     private:
-        void BeginRendering(VkCommandBuffer commandBuffer, VkImageView colorView, VkImageView depthView, const VkClearColorValue& clearColor,
+        void BeginRendering(VkCommandBuffer commandBuffer, VulkanTexture* gBufferTargets, const VulkanTexture& depthTarget, const VkClearColorValue& clearColor,
                             const VkClearDepthStencilValue& clearDepthStencil, u32 width, u32 height, bool late) const;
 
-        void CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const CullData& cullData, u32 timestamp,
-                      bool taskSubmit, bool late, u32 postPass = 0) const;
-        void RenderStep(VkCommandBuffer commandBuffer, const VulkanTexture& colorTarget, const VulkanTexture& depthTarget, const VulkanTexture& depthPyramid,
-                        const Globals& globals, const Window& window, u32 query, u32 timeStamp, bool taskSubmit, bool clusterSubmit, bool late,
-                        u32 postPass = 0) const;
+        void CullStep(VkCommandBuffer commandBuffer, const VulkanShader& shader, VulkanTexture& depthPyramid, const CullData& cullData, u32 timestamp, bool taskSubmit, bool late,
+                      u32 postPass = 0) const;
+        void RenderStep(VkCommandBuffer commandBuffer, VulkanTexture* gBufferTargets, const VulkanTexture& depthTarget, const VulkanTexture& depthPyramid, const Globals& globals,
+                        const Window& window, u32 query, u32 timeStamp, bool taskSubmit, bool clusterSubmit, bool late, u32 postPass = 0) const;
         void DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const;
 
         /** @brief A boolean indicating if we are using mesh shading. */
         bool m_meshShadingEnabled = true;
+        /** @brief A boolean indicating if we are using ray tracing. */
+        bool m_rayTracingEnabled = true;
         /** @brief A boolean indicating if we are using task shaders during mesh shading.
          * This works well on Nvidia but gives bad performance on AMD */
         bool m_taskShadingEnabled = false;
@@ -77,60 +82,55 @@ namespace C3D
         bool m_clusterOcclusionCullingEnabled = true;
         /** @brief A boolean indicating if we are doing LODs for meshes. */
         bool m_lodEnabled = true;
-        /** @brief A boolean indicating if we are rendering our depth pyramid for debugging. */
-        bool m_debugPyramid = false;
-        /** @brief The (mip) level we are displaying as part of our depth pyramid debugging. */
-        u32 m_debugPyramidLevel = 0;
+        /** @brief A boolean indicating if shadows are enabled (with Ray Tracing). */
+        bool m_shadingEnabled = true;
         /** @brief A boolean indicating if we are rendering debug lods. */
         bool m_debugLods = false;
         /** @brief The lod level we are displaying as part of our lod debugging. */
         u32 m_debugLodStep = 0;
 
-        VulkanShaderModule m_cullShaderModule;
-        VulkanShaderModule m_clusterCullShaderModule;
-
-        VulkanShaderModule m_taskSubmitShaderModule;
-        VulkanShaderModule m_clusterSubmitShaderModule;
-
-        VulkanShaderModule m_depthReduceShaderModule;
-        VulkanShaderModule m_meshShaderModule;
-        VulkanShaderModule m_fragmentShaderModule;
-        VulkanShaderModule m_meshletShaderModule;
-        VulkanShaderModule m_meshletTaskShaderModule;
+        HashMap<String, VulkanShaderModule> m_shaderModules;
 
         VulkanShader m_depthReduceShader;
 
         VulkanShader m_meshShader;
         VulkanShader m_meshPostShader;
-        VulkanShader m_meshletShader;
-        VulkanShader m_meshletLateShader;
-        VulkanShader m_meshletPostShader;
-        VulkanShader m_clusterMeshletShader;
-        VulkanShader m_clusterPostMeshletShader;
+
+        VulkanShader m_taskCullShader;
+        VulkanShader m_taskCullLateShader;
+        VulkanShader m_taskSubmitShader;
+        VulkanShader m_taskMeshletShader;
+        VulkanShader m_taskMeshletLateShader;
+        VulkanShader m_taskMeshletPostShader;
 
         VulkanShader m_drawCullShader;
         VulkanShader m_drawCullLateShader;
 
-        VulkanShader m_taskCullShader;
-        VulkanShader m_taskCullLateShader;
-
         VulkanShader m_clusterCullShader;
         VulkanShader m_clusterCullLateShader;
-
-        VulkanShader m_taskSubmitShader;
         VulkanShader m_clusterSubmitShader;
+        VulkanShader m_clusterMeshletShader;
+        VulkanShader m_clusterPostMeshletShader;
+
+        VulkanShader m_blitShader;
+        VulkanShader m_shadeShader;
 
         VkSampler m_textureSampler;
+        VkSampler m_readSampler;
         VkSampler m_depthSampler;
 
         DynamicArray<MeshDraw> m_draws;
         DynamicArray<VulkanTexture> m_textures;
+
+        DynamicArray<VkAccelerationStructureKHR> m_blas;
+        VkAccelerationStructureKHR m_tlas;
 
         VkDescriptorPool m_textureDescriptorPool;
         VkDescriptorSetLayout m_textureDescriptorSetLayout;
         VkDescriptorSet m_textureDescriptorSet;
 
         Camera m_camera;
+        vec3 m_sunDirection = vec3(1.0f);
 
         VkQueryPool m_queryPoolTimestamps;
         VkQueryPool m_queryPoolStatistics;
@@ -155,8 +155,14 @@ namespace C3D
         VulkanBuffer m_clusterIndexBuffer;
         VulkanBuffer m_clusterCountBuffer;
 
+        VulkanBuffer m_blasBuffer;
+        VulkanBuffer m_tlasBuffer;
+
         VkViewport m_viewport;
         VkRect2D m_scissor;
+
+        mat4 m_projection;
+        mat4 m_view;
 
         VulkanContext m_context;
     };

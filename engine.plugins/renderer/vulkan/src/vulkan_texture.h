@@ -80,6 +80,8 @@ namespace C3D
         DynamicArray<VkImageView> m_mipViews;
         /** @brief A handle to the underlying memory used for this Vulkan Texture. */
         VkDeviceMemory m_memory = nullptr;
+        /** @brief The size in bytes required for the underlying memory. */
+        u32 m_size = 0;
         /** @brief A pointer to our Vulkan context. */
         VulkanContext* m_context = nullptr;
     };

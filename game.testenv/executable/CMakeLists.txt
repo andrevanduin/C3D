@@ -1,16 +1,10 @@
 
 cmake_minimum_required (VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 23)
-
 add_executable (TestEnv "src/main.cpp")
 
 target_link_libraries(TestEnv PUBLIC C3DEngineRuntime)
 target_compile_definitions(TestEnv PRIVATE GLM_FORCE_XYZW_ONLY GLM_FORCE_QUAT_DATA_XYZW GLM_FORCE_QUAT_CTOR_XYZW)
-
-if (WIN32)
-	target_link_options(TestEnv PUBLIC /MANIFEST:NO)
-endif()
 
 add_custom_target(CopyEngineCoreDLL
 	COMMAND ${CMAKE_COMMAND} -E copy 

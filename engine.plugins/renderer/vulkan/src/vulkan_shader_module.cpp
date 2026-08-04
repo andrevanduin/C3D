@@ -26,7 +26,7 @@ namespace C3D
         m_name    = name;
         m_context = context;
 
-        INFO_LOG("Creating ShaderModule: '{}'.", m_name);
+        TRACE("Creating ShaderModule: '{}'.", m_name);
 
         DetermineShaderStage();
 
@@ -37,13 +37,13 @@ namespace C3D
             return false;
         }
 
-        INFO_LOG("ShaderModule: '{}' created successfully.", name);
+        TRACE("ShaderModule: '{}' created successfully.", name);
         return true;
     }
 
     bool VulkanShaderModule::Recreate()
     {
-        INFO_LOG("Recreating ShaderModule: '{}'.", m_name);
+        TRACE("Recreating ShaderModule: '{}'.", m_name);
 
         auto result = CreateInternal();
         if (!result)
@@ -52,7 +52,7 @@ namespace C3D
             return false;
         }
 
-        INFO_LOG("ShaderModule: '{}' recreated successfully.", m_name);
+        TRACE("ShaderModule: '{}' recreated successfully.", m_name);
         return true;
     }
 
@@ -60,7 +60,7 @@ namespace C3D
     {
         if (m_handle)
         {
-            INFO_LOG("Destroying ShaderModule: '{}'.", m_name);
+            TRACE("Destroying ShaderModule: '{}'.", m_name);
             m_name.Destroy();
 
             vkDestroyShaderModule(m_context->device.GetLogical(), m_handle, m_context->allocator);
@@ -72,7 +72,7 @@ namespace C3D
         ShaderManager ShaderManager;
         ShaderAsset shader;
 
-        INFO_LOG("Loading GLSL file: '{}'.", m_name);
+        TRACE("Loading GLSL file: '{}'.", m_name);
 
         if (!ShaderManager.Read(m_name, shader))
         {
@@ -195,7 +195,7 @@ namespace C3D
     {
         ScopedTimer timer("Compilation");
 
-        INFO_LOG("Compiling: '{}' into SPIR-V for ShaderModule.", m_name);
+        TRACE("Compiling: '{}' into SPIR-V for ShaderModule.", m_name);
 
         // Set target SPIR-V version
         shaderc_compile_options_t options = shaderc_compile_options_initialize();
@@ -219,7 +219,7 @@ namespace C3D
             const char* errorMessage = shaderc_result_get_error_message(compilationResult);
             u64 errorCount           = shaderc_result_get_num_errors(compilationResult);
 
-            ERROR_LOG("Compilation failed with {} error(s).", errorCount);
+            ERROR_LOG("Compilation failed with {} error(s) for '{}'.", errorCount, m_name);
 
             String totalErrorMsg = "1.";
             u32 lineNumber       = 1;
@@ -304,8 +304,10 @@ namespace C3D
                 return VK_DESCRIPTOR_TYPE_SAMPLER;
             case SpvOpTypeSampledImage:
                 return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            case SpvOpTypeAccelerationStructureKHR:
+                return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
             default:
-                C3D_FAIL("Unknown resource type");
+                C3D_FAIL(String::FromFormat("Unknown resource type: {}.", static_cast<u32>(op)).Data());
                 return VkDescriptorType(0);
         }
     }
@@ -411,6 +413,7 @@ namespace C3D
                 case SpvOpTypeImage:
                 case SpvOpTypeSampler:
                 case SpvOpTypeSampledImage:
+                case SpvOpTypeAccelerationStructureKHR:
                 {
                     C3D_ASSERT(wordCount >= 2);
 
@@ -468,9 +471,7 @@ namespace C3D
         {
             // Set 0 is reserved for push descriptors
             if (id.opCode == SpvOpVariable &&
-                (id.storageClass == SpvStorageClassUniform || id.storageClass == SpvStorageClassUniformConstant ||
-                 id.storageClass == SpvStorageClassStorageBuffer) &&
-                id.set == 0)
+                (id.storageClass == SpvStorageClassUniform || id.storageClass == SpvStorageClassUniformConstant || id.storageClass == SpvStorageClassStorageBuffer) && id.set == 0)
             {
                 C3D_ASSERT(id.binding < 32);
                 C3D_ASSERT(ids[id.typeId].opCode == SpvOpTypePointer);

@@ -1,17 +1,13 @@
 
 cmake_minimum_required (VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 20)
-
 file(GLOB_RECURSE C3DEngine_SRC "src/*.h" "src/*.cpp")
 
 add_library(C3DEngineCore SHARED ${C3DEngine_SRC})
 
-target_compile_definitions(C3DEngineCore PUBLIC C3D_EXPORT)
+add_subdirectory ("vendor")
 
-if (WIN32)
-    target_compile_options(C3DEngineCore PRIVATE /EHsc /wd4002)
-endif()
+target_compile_definitions(C3DEngineCore PUBLIC C3D_EXPORT)
 
 if (UNIX)
     find_package(X11 REQUIRED)
@@ -23,6 +19,6 @@ endif()
 
 target_link_libraries(C3DEngineCore PUBLIC fmt::fmt spdlog::spdlog glm::glm "${OS_SPECIFIC_LIBS}")
 
-target_include_directories(C3DEngineCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src" "${spdlog_SOURCE_DIR}/include" "${fmt_SOURCE_DIR}/include" "${glm_SOURCE_DIR}")
+target_include_directories(C3DEngineCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src") #"${spdlog_SOURCE_DIR}/include" "${fmt_SOURCE_DIR}/include" "${glm_SOURCE_DIR}")
 
 include_directories(SYSTEM "${spdlog_SOURCE_DIR}/include" "${fmt_SOURCE_DIR}/include" "${glm_SOURCE_DIR}")

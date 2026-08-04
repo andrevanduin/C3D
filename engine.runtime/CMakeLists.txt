@@ -1,8 +1,6 @@
 
 cmake_minimum_required (VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 23)
-
 file(GLOB_RECURSE C3DEngine_SRC "src/*.h" "src/*.cpp" "vendor/stb/*.c")
 
 add_library(C3DEngineRuntime SHARED ${C3DEngine_SRC})
@@ -10,10 +8,6 @@ add_library(C3DEngineRuntime SHARED ${C3DEngine_SRC})
 add_subdirectory ("vendor")
 
 target_compile_definitions(C3DEngineRuntime PUBLIC C3D_EXPORT)
-
-if (WIN32)
-    target_compile_options(C3DEngineRuntime PRIVATE /EHsc /wd4002)
-endif()
 
 if (UNIX)
     find_package(X11 REQUIRED)

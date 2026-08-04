@@ -22,6 +22,7 @@ namespace C3D
         PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING      = 0x1,
         PHYSICAL_DEVICE_SUPPORT_FLAG_PUSH_DESCRIPTORS  = 0x2,
         PHYSICAL_DEVICE_SUPPORT_FLAG_PERFORMANCE_QUERY = 0x4,
+        PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING       = 0x8,
     };
     using PhysicalDeviceSupportFlags = u8;
 
@@ -106,7 +107,7 @@ namespace C3D
         bool DeviceSupportsMandatoryRequirements(VkPhysicalDevice device, DynamicArray<const char*>& requiredExtensions);
 
         /** @brief Selects the ideal physical GPU present on the system. */
-        bool SelectPhyiscalDevice(DynamicArray<const char*>& requiredExtensions);
+        bool SelectPhysicalDevice(DynamicArray<const char*>& requiredExtensions);
 
         /** @brief Finds the index of the graphics queue family. */
         u32 SelectGraphicsFamilyIndex(VkPhysicalDevice handle);

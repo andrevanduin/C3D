@@ -17,7 +17,7 @@
 
 struct Vertex
 {
-    float x, y, z;
+    float16_t vx, vy, vz, vw;
     uint8_t nx, ny, nz, nw;
     uint8_t tx, ty, tz, tw;
     float16_t tu, tv;
@@ -32,6 +32,7 @@ struct Meshlet
     int8_t coneCutoff;
 
     uint dataOffset;
+    uint baseVertex;
     uint8_t vertexCount;
     uint8_t triangleCount;
 };
@@ -40,7 +41,7 @@ struct CullData
 {
     mat4 view;
 
-    float p00, p11, zNear, zFar;        // Symmertric projection parameters
+    float p00, p11, zNear, zFar;        // Symmetric projection parameters
     float frustum[4];                   // Data for left/right/top/bottom planes
     float lodTarget;                    // lod target error at z=1
     float pyramidWidth, pyramidHeight;  // Depth pyramid size in texels
@@ -92,9 +93,9 @@ struct MeshDraw
     vec4 orientation;
 
     uint meshIndex;
-    uint vertexOffset;  // == meshes[meshIndex].vertexOffset, improves data locality in the mesh shader
     uint meshletVisibilityOffset;
     uint postPass;
+    uint flags;
 
     uint albedoTexture;
     uint normalTexture;

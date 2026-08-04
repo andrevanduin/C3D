@@ -20,7 +20,7 @@ namespace C3D
         };
 
         // First we select the ideal phyiscal device
-        if (!SelectPhyiscalDevice(requiredExtensions))
+        if (!SelectPhysicalDevice(requiredExtensions))
         {
             ERROR_LOG("No valid physical device could be selected.");
             return false;
@@ -30,6 +30,14 @@ namespace C3D
         if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
             requiredExtensions.PushBack(VK_EXT_MESH_SHADER_EXTENSION_NAME);
+        }
+
+        // Enable Ray tracing extensions if it's supported
+        if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
+        {
+            requiredExtensions.PushBack(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+            requiredExtensions.PushBack(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+            requiredExtensions.PushBack(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
         }
 
         float queuePriorities[] = { 1.0f };
@@ -75,6 +83,11 @@ namespace C3D
         device12Features.samplerFilterMinmax               = VK_TRUE;
         device12Features.scalarBlockLayout                 = VK_TRUE;
 
+        if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
+        {
+            device12Features.bufferDeviceAddress = VK_TRUE;
+        }
+
         // Bindless features
         device12Features.descriptorIndexing                           = VK_TRUE;
         device12Features.shaderSampledImageArrayNonUniformIndexing    = VK_TRUE;
@@ -89,13 +102,14 @@ namespace C3D
         // Enable Vulkan 1.3 features
         VkPhysicalDeviceVulkan13Features device13Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
 
-        device13Features.dynamicRendering = VK_TRUE;
-        device13Features.synchronization2 = VK_TRUE;
-        device13Features.maintenance4     = VK_TRUE;
+        device13Features.dynamicRendering               = VK_TRUE;
+        device13Features.synchronization2               = VK_TRUE;
+        device13Features.maintenance4                   = VK_TRUE;
+        device13Features.shaderDemoteToHelperInvocation = VK_TRUE;
 
         device12Features.pNext = &device13Features;
 
-        // Mesh shaders
+        // Mesh shaders (only used if supported)
         VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT };
 
         meshShaderFeatures.meshShader = VK_TRUE;
@@ -104,6 +118,28 @@ namespace C3D
         if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
             device13Features.pNext = &meshShaderFeatures;
+        }
+
+        // Ray tracing (only used if supported)
+        VkPhysicalDeviceRayQueryFeaturesKHR featuresRayQueries = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR };
+
+        featuresRayQueries.rayQuery = VK_TRUE;
+
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR featuresRayTracing = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
+
+        featuresRayTracing.accelerationStructure = VK_TRUE;
+        featuresRayTracing.pNext                 = &featuresRayQueries;
+
+        if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
+        {
+            if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
+            {
+                meshShaderFeatures.pNext = &featuresRayTracing;
+            }
+            else
+            {
+                device13Features.pNext = &featuresRayTracing;
+            }
         }
 
         auto result = vkCreateDevice(m_physical.handle, &createInfo, m_context->allocator, &m_logical.handle);
@@ -150,8 +186,7 @@ namespace C3D
         if (presentModeCount != 0)
         {
             m_physical.swapchainSupportInfo.presentModes.Resize(presentModeCount);
-            VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical.handle, surface, &presentModeCount,
-                                                               m_physical.swapchainSupportInfo.presentModes.GetData()))
+            VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical.handle, surface, &presentModeCount, m_physical.swapchainSupportInfo.presentModes.GetData()))
         }
 
         INFO_LOG("Swapchain support information obtained.");
@@ -335,12 +370,16 @@ namespace C3D
             {
                 m_physical.supportFlags |= PHYSICAL_DEVICE_SUPPORT_FLAG_PERFORMANCE_QUERY;
             }
+            if (StringUtils::Equals(extension.extensionName, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME))
+            {
+                m_physical.supportFlags |= PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING;
+            }
         }
 
         return true;
     }
 
-    bool VulkanDevice::SelectPhyiscalDevice(DynamicArray<const char*>& requiredExtensions)
+    bool VulkanDevice::SelectPhysicalDevice(DynamicArray<const char*>& requiredExtensions)
     {
         // Get the number of phyiscal devices connected to the computer
         u32 physicalDeviceCount = 0;
@@ -385,12 +424,11 @@ namespace C3D
             INFO_LOG("GPU            - {}", props.deviceName);
             INFO_LOG("Type           - {}", VkPhysicalDeviceTypeToString(props.deviceType));
             INFO_LOG("GPU Memory     - {}GiB", MebiBytesToGibiBytes(gpuMemory));
-            INFO_LOG("Driver Version - {}.{}.{}", VK_VERSION_MAJOR(props.driverVersion), VK_VERSION_MINOR(props.driverVersion),
-                     VK_VERSION_PATCH(props.driverVersion));
-            INFO_LOG("API Version    - {}.{}.{}", VK_API_VERSION_MAJOR(props.apiVersion), VK_API_VERSION_MINOR(props.apiVersion),
-                     VK_API_VERSION_PATCH(props.apiVersion));
+            INFO_LOG("Driver Version - {}.{}.{}", VK_VERSION_MAJOR(props.driverVersion), VK_VERSION_MINOR(props.driverVersion), VK_VERSION_PATCH(props.driverVersion));
+            INFO_LOG("API Version    - {}.{}.{}", VK_API_VERSION_MAJOR(props.apiVersion), VK_API_VERSION_MINOR(props.apiVersion), VK_API_VERSION_PATCH(props.apiVersion));
             INFO_LOG("Features:");
             INFO_LOG("Mesh Shading      :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) ? " Not" : "");
+            INFO_LOG("Ray Tracing       :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING) ? " Not" : "");
             INFO_LOG("Push Descriptors  :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PUSH_DESCRIPTORS) ? " Not" : "");
             INFO_LOG("Performance Query :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PERFORMANCE_QUERY) ? " Not" : "");
             INFO_LOG("Limits:");

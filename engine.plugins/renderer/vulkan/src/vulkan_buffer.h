@@ -12,6 +12,15 @@ namespace C3D
     class VulkanBuffer
     {
     public:
+        VulkanBuffer() = default;
+        ~VulkanBuffer();
+
+        VulkanBuffer(const VulkanBuffer& other) = delete;
+        VulkanBuffer(VulkanBuffer&& other)      = delete;
+
+        VulkanBuffer& operator=(const VulkanBuffer& other) = delete;
+        VulkanBuffer& operator=(VulkanBuffer&& other)      = delete;
+
         bool Create(VulkanContext* context, const char* name, u64 size, VkBufferUsageFlags flags, VkMemoryPropertyFlags memoryFlags);
 
         /** @brief Uploads the data stored in this buffer to the GPU. */
@@ -29,10 +38,11 @@ namespace C3D
          */
         void Fill(VkCommandBuffer commandBuffer, u64 offset, u64 size, u32 value) const;
 
-        VkBufferMemoryBarrier2 Barrier(VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask, VkPipelineStageFlags2 dstStageMask,
-                                       VkAccessFlags dstAccessMask) const;
+        VkBufferMemoryBarrier2 Barrier(VkPipelineStageFlags2 srcStageMask, VkAccessFlags srcAccessMask, VkPipelineStageFlags2 dstStageMask, VkAccessFlags dstAccessMask) const;
 
         void Destroy();
+
+        VkDeviceAddress GetDeviceAddress() const;
 
         VkBuffer GetHandle() const { return m_handle; }
         const VkBuffer* GetHandlePtr() const { return &m_handle; }

@@ -13,6 +13,7 @@ namespace C3D
         SceneAsset() : IAsset(AssetType::Scene) {}
 
         Camera camera;
+        vec3 sunDirection;
 
         DynamicArray<MeshAsset> meshes;
         DynamicArray<MeshDraw> draws;

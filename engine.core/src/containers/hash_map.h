@@ -6,8 +6,8 @@
 
 namespace C3D
 {
-    constexpr auto HASH_MAP_DEFAULT_CAPACITY    = 32;
-    constexpr auto HASH_MAP_DEFAULT_LOAD_FACTOR = 0.75;
+    constexpr u32 HASH_MAP_DEFAULT_CAPACITY    = 32;
+    constexpr f32 HASH_MAP_DEFAULT_LOAD_FACTOR = 0.75f;
 
     /**
      * @brief Implementation of a HashMap with Open-Adressing using Robin Hood probing and backshift deletion.
@@ -19,7 +19,7 @@ namespace C3D
      * when the HashMap is 50% full we grow the HashMap)
      * @tparam Allocator The allocator used by this HashMap
      */
-    template <class Key, class Value, class HashFunc = std::hash<Key>, double LF = HASH_MAP_DEFAULT_LOAD_FACTOR, class Allocator = DynamicAllocator>
+    template <class Key, class Value, class HashFunc = std::hash<Key>, f32 LF = HASH_MAP_DEFAULT_LOAD_FACTOR, class Allocator = DynamicAllocator>
     class HashMap
     {
         static_assert(LF > 0.0, "The Load Factor of a HashMap must be > 0.0");
@@ -104,7 +104,7 @@ namespace C3D
         void Create()
         {
             // Allocate memory for all the buckets
-            m_nodes    = m_allocator->Allocate<Node>(MemoryType::HashMap, HASH_MAP_DEFAULT_CAPACITY);
+            m_nodes    = m_allocator->template Allocate<Node>(MemoryType::HashMap, HASH_MAP_DEFAULT_CAPACITY);
             m_capacity = HASH_MAP_DEFAULT_CAPACITY;
         }
 
@@ -427,7 +427,7 @@ namespace C3D
             if (m_nodes == nullptr && m_capacity == 0)
             {
                 // Allocate memory for all the nodes
-                m_nodes    = m_allocator->Allocate<Node>(MemoryType::HashMap, capacity);
+                m_nodes    = m_allocator->template Allocate<Node>(MemoryType::HashMap, capacity);
                 m_capacity = capacity;
             }
         }
@@ -443,7 +443,7 @@ namespace C3D
             // Now grow our capacity by multiplying by 2 (to always ensure we are at a power of 2)
             m_capacity *= 2;
             // Allocate new space for our nodes
-            m_nodes = m_allocator->Allocate<Node>(MemoryType::HashMap, m_capacity);
+            m_nodes = m_allocator->template Allocate<Node>(MemoryType::HashMap, m_capacity);
             // Iterate over all our nodes and insert them again (to rehash with our new capacity)
             for (u64 i = 0; i < oldCapacity; ++i)
             {

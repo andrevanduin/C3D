@@ -33,6 +33,12 @@ namespace C3D
         /** @brief A staging buffer used to transfer data from CPU to GPU visible memory. */
         VulkanBuffer stagingBuffer;
 
+        /** @brief A command pool to allocate command buffers for commands not specific to a window. */
+        VkCommandPool commandPool;
+
+        /** @brief A command buffer for recording commands that are not specific to a window. */
+        VkCommandBuffer commandBuffer;
+
 #if defined(_DEBUG)
         /** @brief A pointer to the DebugUtilsMessenger extension object used for debugging purposes.*/
         VkDebugUtilsMessengerEXT debugMessenger;

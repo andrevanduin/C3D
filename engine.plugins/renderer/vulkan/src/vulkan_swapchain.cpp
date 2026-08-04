@@ -27,14 +27,22 @@ namespace C3D
         // Take a copy of the old swapchain handle (since it will be overridden by the Create() call)
         auto old = m_handle;
 
+        auto device = m_context->device.GetLogical();
+
+        // Destroy the old views
+        for (auto view : m_views)
+        {
+            vkDestroyImageView(device, view, m_context->allocator);
+        }
+
         // Create a new swapchain
         Create(window);
 
         // Wait for the device to be idle (otherwise we can't destroy the old swapchain yet)
         m_context->device.WaitIdle();
 
-        // Destroy the old one
-        vkDestroySwapchainKHR(m_context->device.GetLogical(), old, m_context->allocator);
+        // Destroy the old one swapchain
+        vkDestroySwapchainKHR(device, old, m_context->allocator);
 
         return true;
     }
@@ -43,6 +51,12 @@ namespace C3D
     {
         INFO_LOG("Destroying Vulkan Swapchain.");
         auto device = m_context->device.GetLogical();
+
+        // Destroy the image views
+        for (auto view : m_views)
+        {
+            vkDestroyImageView(device, view, m_context->allocator);
+        }
 
         // Destroy the swapchain itself
         vkDestroySwapchainKHR(device, m_handle, m_context->allocator);
@@ -109,7 +123,7 @@ namespace C3D
         createInfo.imageExtent.width     = window.width;
         createInfo.imageExtent.height    = window.height;
         createInfo.imageArrayLayers      = 1;
-        createInfo.imageUsage            = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        createInfo.imageUsage            = VK_IMAGE_USAGE_STORAGE_BIT;
         createInfo.queueFamilyIndexCount = 1;
         auto familyIndex                 = m_context->device.GetGraphicsFamilyIndex();
         createInfo.pQueueFamilyIndices   = &familyIndex;
@@ -142,8 +156,9 @@ namespace C3D
             return false;
         }
 
-        // Resize our array to hold all the images
+        // Resize our arrays to hold all the images and views
         m_images.Resize(m_imageCount);
+        m_views.Resize(m_imageCount);
 
         // Obtain the actual images from our swapchain
         result = vkGetSwapchainImagesKHR(device, m_handle, &m_imageCount, m_images.GetData());
@@ -153,10 +168,18 @@ namespace C3D
             return false;
         }
 
-        // Set some debug object names for each image
-        for (u32 i = 0; i < m_imageCount; i++)
+        // Set some debug object names for each image and create a view to it
+        for (u32 i = 0; i < m_imageCount; ++i)
         {
             VK_SET_DEBUG_OBJECT_NAME(m_context, VK_OBJECT_TYPE_IMAGE, m_images[i], String::FromFormat("{}_SWAPCHAIN_IMAGE_{}", window.name, i));
+
+            m_views[i] = VkUtils::CreateImageView(m_context, String::FromFormat("{}_SWAPCHAIN_IMAGE_VIEW_{}", window.name, i), m_images[i], m_surfaceFormat.format,
+                                                  VK_IMAGE_ASPECT_COLOR_BIT, 0, 1);
+            if (m_views[i] == nullptr)
+            {
+                ERROR_LOG("Failed to create Image View.");
+                return false;
+            }
         }
 
         return true;
