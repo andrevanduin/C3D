@@ -5,6 +5,7 @@
 
 #include "containers/dynamic_array.h"
 #include "containers/hash_map.h"
+#include "identifiers/uuid.h"
 #include "string/string.h"
 #include "vulkan_buffer.h"
 #include "vulkan_context.h"
@@ -49,7 +50,7 @@ namespace C3D
 
         void SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth) override;
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) override;
-        void SetCamera(const Camera& camera) override;
+        void SetActiveCamera(UUID cameraHandle) override;
         void SetSunDirection(const vec3& sunDirection) override;
 
         bool SupportsFeature(RendererSupportFlag feature) const override;
@@ -129,7 +130,7 @@ namespace C3D
         VkDescriptorSetLayout m_textureDescriptorSetLayout;
         VkDescriptorSet m_textureDescriptorSet;
 
-        Camera m_camera;
+        UUID m_activeCamera;
         vec3 m_sunDirection = vec3(1.0f);
 
         VkQueryPool m_queryPoolTimestamps;

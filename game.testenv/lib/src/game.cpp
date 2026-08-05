@@ -11,6 +11,7 @@
 #include <logger/logger.h>
 #include <math/ray.h>
 #include <metrics/metrics.h>
+#include <renderer/camera.h>
 #include <renderer/render_system.h>
 #include <string/cstring.h>
 #include <system/system_manager.h>
@@ -108,8 +109,15 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
             return false;
         }
 
+        // Get the default camera and copy over the scene camera settings
+        auto& camera = Camera.GetDefaultCamera();
+
+        camera.SetPosition(sceneAsset.camera.position);
+        camera.SetRotation(sceneAsset.camera.orientation);
+        camera.SetFovY(sceneAsset.camera.fovY);
+
         // Finally set out camera and sun direction
-        Renderer.SetCamera(sceneAsset.camera);
+        Renderer.SetActiveCamera(camera.GetHandle());
         Renderer.SetSunDirection(sceneAsset.sunDirection);
 
         // Cleanup our scene asset since we are done with it
@@ -121,7 +129,11 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
 
 void TestEnv::OnUpdate(C3D::FrameData& frameData)
 {
-    constexpr static C3D::Keys KEYS[] = { C3D::KeyM, C3D::KeyC, C3D::KeyK, C3D::KeyS, C3D::KeyO, C3D::KeyL, C3D::KeyP, C3D::KeyT };
+    constexpr static C3D::Keys KEYS[]         = { C3D::KeyM, C3D::KeyC, C3D::KeyK, C3D::KeyR, C3D::KeyO, C3D::KeyL, C3D::KeyP, C3D::KeyT };
+    constexpr static f32 DEFAULT_MOVE_SPEED   = 0.02f;
+    constexpr static f32 DEFAULT_ROTATE_SPEED = glm::radians(0.1f);
+    constexpr static f32 BOOST_MOVE_SPEED     = 0.2f;
+    constexpr static f32 BOOST_ROTATE_SPEED   = glm::radians(0.2f);
 
     for (auto key : KEYS)
     {
@@ -131,6 +143,51 @@ void TestEnv::OnUpdate(C3D::FrameData& frameData)
             context.data.u32[0] = key;
             Event.Fire(C3D::EventCodeDebug0, nullptr, context);
         }
+    }
+
+    auto& camera     = Camera.GetDefaultCamera();
+    auto moveSpeed   = Input.IsShiftDown() ? BOOST_MOVE_SPEED : DEFAULT_MOVE_SPEED;
+    auto rotateSpeed = Input.IsShiftDown() ? BOOST_ROTATE_SPEED : DEFAULT_ROTATE_SPEED;
+
+    if (Input.IsKeyDown(C3D::KeyW))
+    {
+        camera.MoveForward(moveSpeed);
+    }
+    if (Input.IsKeyDown(C3D::KeyS))
+    {
+        camera.MoveBackward(moveSpeed);
+    }
+    if (Input.IsKeyDown(C3D::KeyD))
+    {
+        camera.MoveRight(moveSpeed);
+    }
+    if (Input.IsKeyDown(C3D::KeyA))
+    {
+        camera.MoveLeft(moveSpeed);
+    }
+    if (Input.IsKeyDown(C3D::KeySpace))
+    {
+        camera.MoveUp(moveSpeed);
+    }
+    if (Input.IsKeyDown(C3D::KeyLControl))
+    {
+        camera.MoveDown(moveSpeed);
+    }
+    if (Input.IsKeyDown(C3D::KeyArrowLeft))
+    {
+        camera.AddYaw(-rotateSpeed);
+    }
+    if (Input.IsKeyDown(C3D::KeyArrowRight))
+    {
+        camera.AddYaw(rotateSpeed);
+    }
+    if (Input.IsKeyDown(C3D::KeyArrowUp))
+    {
+        camera.AddPitch(-rotateSpeed);
+    }
+    if (Input.IsKeyDown(C3D::KeyArrowDown))
+    {
+        camera.AddPitch(rotateSpeed);
     }
 
     for (u32 i = 0; i < 9; i++)

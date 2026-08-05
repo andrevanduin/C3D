@@ -45,7 +45,7 @@ struct fmt::formatter<C3D::UUID>
     }
 
     template <typename FormatContext>
-    auto format(const C3D::UUID& uuid, FormatContext& ctx)
+    auto format(const C3D::UUID& uuid, FormatContext& ctx) const
     {
         return fmt::format_to(ctx.out(), "{}", (u64)uuid);
     }

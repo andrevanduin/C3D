@@ -2,26 +2,28 @@
 #include "vulkan_renderer_plugin.h"
 
 #include <assets/managers/mesh_manager.h>
+#include <assets/types/texture_types.h>
 #include <config/config_system.h>
+#include <containers/dynamic_array.h>
+#include <defines.h>
 #include <engine.h>
 #include <events/event_system.h>
+#include <input/keys.h>
 #include <logger/logger.h>
 #include <metrics/metrics.h>
 #include <platform/platform.h>
 #include <platform/platform_types.h>
 #include <random/random.h>
+#include <renderer/camera.h>
+#include <renderer/mesh.h>
+#include <renderer/types.h>
+#include <renderer/vertex.h>
 #include <shaderc/shaderc.h>
 #include <system/system_manager.h>
+#include <time/clock.h>
 #include <time/scoped_timer.h>
 
-#include "assets/types/texture_types.h"
-#include "containers/dynamic_array.h"
-#include "defines.h"
-#include "input/keys.h"
 #include "platform/vulkan_platform.h"
-#include "renderer/mesh.h"
-#include "renderer/vertex.h"
-#include "time/clock.h"
 #include "vulkan_allocator.h"
 #include "vulkan_context.h"
 #include "vulkan_debugger.h"
@@ -258,8 +260,8 @@ namespace C3D
         CHECK_RESOURCE(m_depthSampler, "Depth Sampler");
 
         // Create all required ShaderModules
-        DynamicArray<const char*> shader_module_names = { "draw_cull.comp", "cluster_cull.comp", "depth_reduce.comp",   "mesh.vert",
-                                                          "mesh.frag",      "task_submit.comp",  "cluster_submit.comp", "blit.comp" };
+        DynamicArray<String> shader_module_names = { "draw_cull.comp", "cluster_cull.comp", "depth_reduce.comp",   "mesh.vert",
+                                                     "mesh.frag",      "task_submit.comp",  "cluster_submit.comp", "blit.comp" };
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
@@ -277,7 +279,7 @@ namespace C3D
         for (auto name : shader_module_names)
         {
             m_shaderModules.Set(name, {});
-            CREATE_RESOURCE(m_shaderModules[name].Create(&m_context, name), "name");
+            CREATE_RESOURCE(m_shaderModules[name].Create(&m_context, name.Data()), "name");
         }
 
         Event.Register(EventCodeDebug0, [this](const u16 code, void* sender, const EventContext& context) {
@@ -342,10 +344,12 @@ namespace C3D
             return true;
         });
 
-        // Setup a default camera
-        m_camera.position    = vec3(0);
-        m_camera.orientation = quat(1, 0, 0, 0);
-        m_camera.fovY        = glm::radians(70.0f);
+        // Setup some default values for the default camera
+        auto& defaultCamera = Camera.GetDefaultCamera();
+
+        defaultCamera.SetPosition(vec3(0));
+        defaultCamera.SetRotation(quat(1, 0, 0, 0));
+        defaultCamera.SetFovY(glm::radians(70.0f));
 
         INFO_LOG("Initialized successfully.");
         return true;
@@ -612,14 +616,14 @@ namespace C3D
 
         CREATE_RESOURCE(m_blitShader.Create(createInfo), "Blit Shader");
 
-        createInfo.name              = "SHADE_SHADER";
-        createInfo.modules           = { &m_shaderModules["shade.comp"] };
-        createInfo.pushConstantsSize = sizeof(ShadeData);
-
-        CREATE_RESOURCE(m_shadeShader.Create(createInfo), "Shade Shader");
-
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
         {
+            createInfo.name              = "SHADE_SHADER";
+            createInfo.modules           = { &m_shaderModules["shade.comp"] };
+            createInfo.pushConstantsSize = sizeof(ShadeData);
+
+            CREATE_RESOURCE(m_shadeShader.Create(createInfo), "Shade Shader");
+
             if (!VulkanRayTracing::BuildBLAS(&m_context, geometry.meshes, m_vertexBuffer, m_indexBuffer, m_blas, m_blasBuffer))
             {
                 ERROR_LOG("Failed to create BLAS.");
@@ -818,7 +822,7 @@ namespace C3D
 
         if (clusterSubmit)
         {
-            auto& shader = postPass == 1 ? m_clusterPostMeshletShader : m_clusterMeshletShader;
+            auto& shader = postPass >= 1 ? m_clusterPostMeshletShader : m_clusterMeshletShader;
 
             shader.Bind(commandBuffer);
 
@@ -832,7 +836,7 @@ namespace C3D
         }
         else if (taskSubmit)
         {
-            auto& shader = postPass == 1 ? m_taskMeshletPostShader : late ? m_taskMeshletLateShader : m_taskMeshletShader;
+            auto& shader = postPass >= 1 ? m_taskMeshletPostShader : late ? m_taskMeshletLateShader : m_taskMeshletShader;
             shader.Bind(commandBuffer);
 
             DescriptorInfo pyramidDesc(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL);
@@ -846,7 +850,7 @@ namespace C3D
         }
         else
         {
-            auto& shader = postPass == 1 ? m_meshPostShader : m_meshShader;
+            auto& shader = postPass >= 1 ? m_meshPostShader : m_meshShader;
 
             shader.Bind(commandBuffer);
 
@@ -979,14 +983,17 @@ namespace C3D
             firstFrame = true;
         }
 
-        m_view    = glm::mat4_cast(m_camera.orientation);
-        m_view[3] = vec4(m_camera.position, 1.0f);
-        m_view    = glm::inverse(m_view);
-        m_view    = glm::scale(glm::identity<glm::mat4>(), vec3(1, 1, -1)) * m_view;
+        auto& camera = Camera.Get(m_activeCamera);
 
-        constexpr f32 zNear = 0.5f;
+        // m_view    = glm::mat4_cast(camera.orientation);
+        // m_view[3] = vec4(camera.position, 1.0f);
+        // m_view    = glm::inverse(m_view);
+        // m_view    = glm::scale(glm::identity<glm::mat4>(), vec3(1, 1, -1)) * m_view;
+        m_view = camera.GetViewMatrix();
 
-        m_projection     = MakePerspectiveProjection(m_camera.fovY, static_cast<f32>(window.width) / static_cast<f32>(window.height), zNear);
+        constexpr f32 zNear = 0.1f;
+
+        m_projection     = MakePerspectiveProjection(camera.GetFovY(), static_cast<f32>(window.width) / static_cast<f32>(window.height), zNear);
         mat4 projectionT = glm::transpose(m_projection);
 
         f32 depthPyramidWidth  = static_cast<f32>(backendState->depthPyramid.GetWidth());
@@ -1122,7 +1129,10 @@ namespace C3D
 
                 m_shadeShader.PushDescriptorSet(commandBuffer, descriptors);
 
+                auto& camera = Camera.Get(m_activeCamera);
+
                 ShadeData shadeData             = {};
+                shadeData.cameraPosition        = camera.GetPosition();
                 shadeData.sunDirection          = m_sunDirection;
                 shadeData.inverseViewProjection = inverse(m_projection * m_view);
                 shadeData.imageSize             = vec2(static_cast<f32>(window.width), static_cast<f32>(window.height));
@@ -1753,7 +1763,7 @@ namespace C3D
         m_scissor         = { offset, extent };
     }
 
-    void VulkanRendererPlugin::SetCamera(const Camera& camera) { m_camera = camera; }
+    void VulkanRendererPlugin::SetActiveCamera(UUID cameraHandle) { m_activeCamera = cameraHandle; }
 
     void VulkanRendererPlugin::SetSunDirection(const vec3& sunDirection) { m_sunDirection = sunDirection; }
 

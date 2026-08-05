@@ -2,8 +2,10 @@
 #pragma once
 #include "assets/types/texture_types.h"
 #include "defines.h"
+#include "identifiers/uuid.h"
 #include "mesh.h"
 #include "types.h"
+
 
 namespace C3D
 {
@@ -147,7 +149,7 @@ namespace C3D
          *
          * @param camera The camera to be used
          */
-        virtual void SetCamera(const Camera& camera) = 0;
+        virtual void SetActiveCamera(UUID cameraHandle) = 0;
 
         /**
          * @brief Sets the Sun Direction to be used by the Renderer.

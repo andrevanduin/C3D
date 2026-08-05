@@ -2,6 +2,7 @@
 #pragma once
 #include "defines.h"
 #include "dynamic_library/dynamic_library.h"
+#include "identifiers/uuid.h"
 #include "mesh.h"
 #include "system/system.h"
 #include "types.h"
@@ -40,7 +41,7 @@ namespace C3D
         void SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth) const;
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) const;
 
-        void SetCamera(const Camera& camera) const;
+        void SetActiveCamera(UUID cameraHandle) const;
         void SetSunDirection(const vec3& sunDirection) const;
 
     private:

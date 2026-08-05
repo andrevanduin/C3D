@@ -4,15 +4,21 @@
 #include "cson/cson_reader.h"
 #include "gltf/gltf_asset_types.h"
 #include "renderer/mesh.h"
-#include "renderer/types.h"
 
 namespace C3D
 {
+    struct SceneCamera
+    {
+        vec3 position;
+        quat orientation;
+        f32 fovY;
+    };
+
     struct SceneAsset final : IAsset
     {
         SceneAsset() : IAsset(AssetType::Scene) {}
 
-        Camera camera;
+        SceneCamera camera;
         vec3 sunDirection;
 
         DynamicArray<MeshAsset> meshes;

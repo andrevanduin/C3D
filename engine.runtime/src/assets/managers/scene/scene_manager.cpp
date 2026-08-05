@@ -303,10 +303,10 @@ namespace C3D
                 // Store the tangents into our vertices
                 for (u32 i = 0; i < tangentAccessor->count; ++i)
                 {
-                    sceneMesh.vertices[i].tx = static_cast<u8>(scratchBuffer[i * 3 + 0] * 127.f + 127.5f);
-                    sceneMesh.vertices[i].ty = static_cast<u8>(scratchBuffer[i * 3 + 1] * 127.f + 127.5f);
-                    sceneMesh.vertices[i].tz = static_cast<u8>(scratchBuffer[i * 3 + 2] * 127.f + 127.5f);
-                    sceneMesh.vertices[i].tw = static_cast<u8>(scratchBuffer[i * 3 + 3] * 127.f + 127.5f);
+                    sceneMesh.vertices[i].tx = static_cast<u8>(scratchBuffer[i * 4 + 0] * 127.f + 127.5f);
+                    sceneMesh.vertices[i].ty = static_cast<u8>(scratchBuffer[i * 4 + 1] * 127.f + 127.5f);
+                    sceneMesh.vertices[i].tz = static_cast<u8>(scratchBuffer[i * 4 + 2] * 127.f + 127.5f);
+                    sceneMesh.vertices[i].tw = static_cast<u8>(scratchBuffer[i * 4 + 3] * 127.f + 127.5f);
                 }
 
                 // Get the texture coordinates
@@ -401,6 +401,11 @@ namespace C3D
                                     draw.specularTexture = pbrExtension.specularGlossinessTexture.index + 1;
                                 }
                             }
+                        }
+
+                        if (material.pbr.baseColorTexture.index != INVALID_ID)
+                        {
+                            draw.albedoTexture = material.pbr.baseColorTexture.index + 1;
                         }
 
                         // Get the normal from the material  (if provided)
@@ -1248,7 +1253,7 @@ namespace C3D
 
         // Optional specularGlossinessTexture
         CSONObject specularGlossinessTextureObj;
-        if (extensionObj.GetPropertyValueByName("diffuseTexture", specularGlossinessTextureObj))
+        if (extensionObj.GetPropertyValueByName("specularGlossinessTexture", specularGlossinessTextureObj))
         {
             if (!ParseTextureInfo(specularGlossinessTextureObj, ext.specularGlossinessTexture))
             {

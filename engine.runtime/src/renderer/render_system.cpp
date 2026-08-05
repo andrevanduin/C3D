@@ -283,7 +283,7 @@ namespace C3D
 
     void RenderSystem::SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) const { m_backendPlugin->SetScissor(offsetX, offsetY, width, height); }
 
-    void RenderSystem::SetCamera(const Camera& camera) const { m_backendPlugin->SetCamera(camera); }
+    void RenderSystem::SetActiveCamera(UUID cameraHandle) const { m_backendPlugin->SetActiveCamera(cameraHandle); }
 
     void RenderSystem::SetSunDirection(const vec3& sunDirection) const { m_backendPlugin->SetSunDirection(sunDirection); }
 

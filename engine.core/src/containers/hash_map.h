@@ -1,5 +1,7 @@
 
 #pragma once
+#include <iostream>
+
 #include "asserts/asserts.h"
 #include "defines.h"
 #include "memory/global_memory_system.h"

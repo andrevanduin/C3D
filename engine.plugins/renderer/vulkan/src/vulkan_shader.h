@@ -126,10 +126,8 @@ namespace C3D
         std::initializer_list<i32> m_constants;
         /** @brief An array of VulkanShaderModules used by this Shader. */
         DynamicArray<VulkanShaderModule*> m_shaderModules;
-        /** @brief An array of FileWatchIds for the VulkanShaderModules used by this Shader. */
-        DynamicArray<FileWatchId> m_shaderModuleFileIds;
-        /** @brief The registerd event callback for changes on watched files. */
-        RegisteredEventCallback m_watchedFilesCallback;
+        /** @brief The registerd event callback for changes on modules. */
+        RegisteredEventCallback m_changedModuleCallback;
         /** @brief A handle to the set layout used by this Shader. */
         VkDescriptorSetLayout m_setLayout = nullptr;
         /** @brief A handle to the array layout used by this Shader (optional). */

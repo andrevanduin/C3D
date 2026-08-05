@@ -8,6 +8,7 @@
 
 #include "asserts/asserts.h"
 #include "defines.h"
+#include "events/types.h"
 #include "logger/logger.h"
 #include "vulkan_context.h"
 #include "vulkan_shader_module.h"
@@ -47,44 +48,21 @@ namespace C3D
             return false;
         }
 
-        // Get the base asset path
-        String shaderBasePath;
-        if (!Config.GetProperty("AssetBasePath", shaderBasePath))
-        {
-            ERROR_LOG("Failed to determine AssetBasePath");
-            return false;
-        }
-
-        // Append the shaders folder
-        shaderBasePath += "/shaders/";
-
         // Take over the modules provided by the user
         m_shaderModules.Reserve(createInfo.modules.size());
         for (auto module : createInfo.modules)
         {
             m_shaderModules.PushBack(module);
-
-            // Watch the file that belongs to the module for changes
-            m_shaderModuleFileIds.EmplaceBack(Platform::WatchFile(shaderBasePath + module->GetName() + ".glsl"));
         }
 
         // Add listeners to automatically update our shader when it's modules change
-        m_watchedFilesCallback = Event.Register(EventCodeWatchedFileChanged, [this](const u16 code, void* sender, const EventContext& context) {
-            FileWatchId id = context.data.u32[0];
-
-            for (u32 i = 0; i < m_shaderModuleFileIds.Size(); ++i)
+        m_changedModuleCallback = Event.Register(EventCodeShaderModuleReloaded, [this](const u16 code, void* sender, const EventContext& context) {
+            VulkanShaderModule* changedModule = static_cast<VulkanShaderModule*>(sender);
+            for (auto module : m_shaderModules)
             {
-                if (m_shaderModuleFileIds[i] == id)
+                if (module == changedModule)
                 {
-                    auto shaderModule = m_shaderModules[i];
-
-                    INFO_LOG("Module '{}' changed. Trying to recreate Shader: '{}'.", shaderModule->GetName(), m_name);
-
-                    if (!shaderModule->Recreate())
-                    {
-                        ERROR_LOG("Failed to recreate Shader: '{}' because ShaderModule: '{}' could not be recreated.", m_name, shaderModule->GetName());
-                        return false;
-                    }
+                    INFO_LOG("Shader Module '{}' was reloaded. Trying to recreate Shader: '{}'.", module->GetName(), m_name);
 
                     if (!Recreate())
                     {
@@ -138,17 +116,11 @@ namespace C3D
         {
             TRACE("Destroying: '{}'.", m_name);
 
-            Event.Unregister(m_watchedFilesCallback);
+            Event.Unregister(m_changedModuleCallback);
 
             DestroyInternal();
 
             m_shaderModules.Destroy();
-
-            for (auto fileId : m_shaderModuleFileIds)
-            {
-                Platform::UnwatchFile(fileId);
-            }
-            m_shaderModuleFileIds.Destroy();
 
             m_name.Destroy();
         }

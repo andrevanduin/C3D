@@ -30,7 +30,7 @@ namespace C3D
         i32 error = fopen_s(&m_pFile, path.Data(), mode);
         if (error != 0 || !m_pFile)
         {
-            ERROR_LOG("Failed to open file: '{}'.", path);
+            ERROR_LOG("Failed to open file: '{}' with error code: {}.", path, error);
             return false;
         }
 

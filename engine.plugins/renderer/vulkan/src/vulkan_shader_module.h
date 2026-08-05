@@ -4,6 +4,10 @@
 #include <string/string.h>
 #include <volk.h>
 
+#include "events/types.h"
+#include "identifiers/uuid.h"
+#include "platform/platform_types.h"
+
 namespace C3D
 {
     struct VulkanContext;
@@ -50,7 +54,9 @@ namespace C3D
         /** @brief Reflect SPIR-V to collect data about the shader. */
         bool ReflectSPIRV(u32* code, u64 numBytes);
 
-        /** @brief The name of the shader module. */
+        /** @brief A unique id for this Shader Module. */
+        UUID m_id;
+        /** @brief The name of the Shader Module. */
         String m_name;
         /** @brief The type of shader stage. */
         VkShaderStageFlagBits m_shaderStage;
@@ -63,6 +69,10 @@ namespace C3D
         bool m_useDescriptorArray = false;
         /** @brief The shader's local size. */
         u32 m_localSizeX = 0, m_localSizeY = 0, m_localSizeZ = 0;
+        /** @brief A file watch handle for this Shader Module's source file. */
+        FileWatchId m_fileWatchId;
+        /** @brief The id for the callback used to watch the underyling source file for this Shader Module. */
+        RegisteredEventCallback m_watchedFileCallback;
         /** @brief A handle to the underlying Vulkan Shader Module. */
         VkShaderModule m_handle = nullptr;
         /** @brief A pointer to our Vulkan context. */

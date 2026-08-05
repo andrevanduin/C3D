@@ -8,6 +8,7 @@
 #define Event C3D::SystemManager::GetSystem<C3D::EventSystem>(C3D::SystemType::EventSystemType)
 #define Renderer C3D::SystemManager::GetSystem<C3D::RenderSystem>(C3D::SystemType::RenderSystemType)
 #define Input C3D::SystemManager::GetSystem<C3D::InputSystem>(C3D::SystemType::InputSystemType)
+#define Camera C3D::SystemManager::GetSystem<C3D::CameraSystem>(C3D::SystemType::CameraSystemType)
 
 namespace C3D
 {
@@ -17,6 +18,7 @@ namespace C3D
         InputSystemType,
         EventSystemType,
         ConfigSystemType,
+        CameraSystemType,
         MaxKnownSystemType
     };
 

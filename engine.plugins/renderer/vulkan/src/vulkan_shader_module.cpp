@@ -2,10 +2,15 @@
 #include "vulkan_shader_module.h"
 
 #include <assets/managers/shader_manager.h>
+#include <config/config_system.h>
+#include <events/event_system.h>
+#include <platform/platform.h>
 #include <shaderc/shaderc.h>
 #include <spirv-headers/spirv.h>
+#include <system/system_manager.h>
 #include <time/scoped_timer.h>
 
+#include "events/types.h"
 #include "vulkan_context.h"
 #include "vulkan_utils.h"
 
@@ -23,6 +28,7 @@ namespace C3D
 
     bool VulkanShaderModule::Create(VulkanContext* context, const char* name)
     {
+        m_id.Generate();
         m_name    = name;
         m_context = context;
 
@@ -36,6 +42,40 @@ namespace C3D
             ERROR_LOG("Failed to create ShaderModule: '{}'.", name)
             return false;
         }
+
+        // Get the base asset path
+        String shaderBasePath;
+        if (!Config.GetProperty("AssetBasePath", shaderBasePath))
+        {
+            ERROR_LOG("Failed to determine AssetBasePath");
+            return false;
+        }
+
+        // Append the shaders folder
+        shaderBasePath += "/shaders/";
+
+        m_fileWatchId = Platform::WatchFile(shaderBasePath + m_name + ".glsl");
+
+        m_watchedFileCallback = Event.Register(EventCodeWatchedFileChanged, [this](const u16 code, void* sender, const EventContext& context) {
+            FileWatchId id = context.data.u32[0];
+            if (m_fileWatchId == id)
+            {
+                // The file for this module changed!
+                INFO_LOG("The source for Shader Module '{}' was changed. Trying to recreate Shader Module.", m_name);
+
+                Platform::SleepMs(10);
+
+                if (!Recreate())
+                {
+                    ERROR_LOG("Failed to recreate Shader Module: '{}'", m_name);
+                    return false;
+                }
+
+                // Our recreate was successful, so now we can notify the Shaders using this module
+                Event.Fire(EventCodeShaderModuleReloaded, this, context);
+            }
+            return false;
+        });
 
         TRACE("ShaderModule: '{}' created successfully.", name);
         return true;
@@ -58,6 +98,12 @@ namespace C3D
 
     void VulkanShaderModule::Destroy()
     {
+        // Unregister our callback
+        Event.Unregister(m_watchedFileCallback);
+
+        // Unwatch our file
+        Platform::UnwatchFile(m_fileWatchId);
+
         if (m_handle)
         {
             TRACE("Destroying ShaderModule: '{}'.", m_name);

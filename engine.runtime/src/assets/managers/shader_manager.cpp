@@ -31,6 +31,8 @@ namespace C3D
         for (auto extension : EXTENSIONS)
         {
             fullPath = String::FromFormat("{}/{}/{}.{}", m_assetPath, m_subFolder, name, extension);
+            std::cout << fullPath << std::endl;
+
             if (Path::Exists(fullPath))
             {
                 correctExtension = extension;
@@ -40,8 +42,7 @@ namespace C3D
 
         if (!correctExtension)
         {
-            ERROR_LOG("Unable to open find file: '{}' with any known shader source extension ({}).", name,
-                      StringUtils::Join(EXTENSIONS, ARRAY_SIZE(EXTENSIONS), ','));
+            ERROR_LOG("Unable to open find file: '{}' with any known shader source extension ({}).", name, StringUtils::Join(EXTENSIONS, ARRAY_SIZE(EXTENSIONS), ','));
             return false;
         }
 

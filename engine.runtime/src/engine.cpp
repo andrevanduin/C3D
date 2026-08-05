@@ -8,6 +8,7 @@
 #include "logger/logger.h"
 #include "metrics/metrics.h"
 #include "platform/platform.h"
+#include "renderer/camera.h"
 #include "renderer/render_system.h"
 #include "string/string.h"
 #include "system/system_manager.h"
@@ -72,8 +73,9 @@ namespace C3D
 
         // Init before boot systems
         SystemManager::RegisterSystem<ConfigSystem>(ConfigSystemType, state.config.systemConfigs["Config"]);  // Configuration system
-        SystemManager::RegisterSystem<EventSystem>(EventSystemType);                                          // Event System
+        SystemManager::RegisterSystem<EventSystem>(EventSystemType);                                          // Event system
         SystemManager::RegisterSystem<InputSystem>(InputSystemType);                                          // Input system
+        SystemManager::RegisterSystem<CameraSystem>(CameraSystemType);                                        // Camera system
 
         // Setup our frame allocator
         u64 frameAllocatorSize = 0;

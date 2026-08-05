@@ -79,6 +79,7 @@ void main()
 
     // TODO: Emissive encoding should support colored & HDR emissive
     gBuffer[0] = vec4(albedo.rgb, emissive.r);
+
     // TODO: specular glossiness encoding is missing; we should encode roughness+metalness somehow in gbuffer1.z and use oct encoding for normal
 	gBuffer[1] = vec4(nrm * 0.5 + 0.5, 0.0);
 
@@ -89,6 +90,6 @@ void main()
 
 #if DEBUG
     uint mhash = hash(drawId);
-    gBuffer[0] = vec4(float(mhash & 255), float((mhash >> 8) & 255), float((mhash >> 16) & 255), 255) / 255.0;
+    gBuffer[0] = vec4(float(mhash & 255), float((mhash >> 8) & 255), float((mhash >> 16) & 255), 0) / 255.0;
 #endif
 }

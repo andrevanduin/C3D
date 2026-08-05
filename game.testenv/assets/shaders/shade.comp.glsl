@@ -6,8 +6,8 @@ layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 struct ShadeData
 {
+	vec3 cameraPosition;
 	vec3 sunDirection;
-	float padding;
 
 	mat4 inverseViewProjection;
 
@@ -49,17 +49,26 @@ void main()
 	vec4 wPosh = shadeData.inverseViewProjection * clip;
 	vec3 wPos = wPosh.xyz / wPosh.w;
 
+	vec3 view = normalize(shadeData.cameraPosition - wPos);
+	vec3 halfV = normalize(view + shadeData.sunDirection);
+	float ndoth = max(dot(normal, halfV), 0.0);
+	float specular = pow(ndoth, 64);
+
+	float shadow = 1;
+
 #if RAYTRACE
 	uint rayflags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsCullNoOpaqueEXT;
+	uint cullMask = 0xff; // 0xff is faster on amdvlk
 
 	rayQueryEXT rq;
-	rayQueryInitializeEXT(rq, tlas, rayflags, /* cullMask= */ 1, wPos, 1e-2, shadeData.sunDirection, 1e3);
+	rayQueryInitializeEXT(rq, tlas, rayflags, cullMask, wPos, 1e-2, shadeData.sunDirection, 1e3);
 	rayQueryProceedEXT(rq);
 
-	ndotl *= (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionNoneEXT) ? 1.0 : 0.05;
+	shadow = (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionNoneEXT) ? 1.0 : 0.0;
 #endif
 
-	vec3 outputColor = albedo.rgb * sqrt(ndotl + 0.05) + emissive;
+	vec3 outputColor = albedo.rgb * sqrt(ndotl * shadow + 0.05) + vec3(specular * shadow) + emissive;
+	//outputColor = albedo;
 
 	imageStore(outImage, ivec2(pos), vec4(outputColor, 1.0));
 }

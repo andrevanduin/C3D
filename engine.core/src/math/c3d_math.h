@@ -2,7 +2,6 @@
 #pragma once
 #include <algorithm>
 
-#include "asserts/asserts.h"
 #include "defines.h"
 #include "math_types.h"
 
@@ -350,8 +349,8 @@ namespace C3D
     namespace
     {
         union FloatBits {
-            float f;
-            unsigned int ui;
+            f32 f;
+            u32 ui;
         };
     }  // namespace
 

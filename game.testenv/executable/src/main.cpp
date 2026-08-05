@@ -6,11 +6,6 @@
 #include <exceptions.h>
 #include <system/system_manager.h>
 
-namespace C3D
-{
-    class Camera;
-}
-
 C3D::FileWatchId applicationLibraryFile;
 
 C3D::GameLibrary applicationLib;

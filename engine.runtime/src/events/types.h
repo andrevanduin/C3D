@@ -1,7 +1,9 @@
 
 #pragma once
+#include <functional>
+
 #include "defines.h"
-#include "functions/function.h"
+
 
 namespace C3D
 {
@@ -68,6 +70,8 @@ namespace C3D
         EventCodeDefaultRenderTargetRefreshRequired,
         EventCodeWatchedFileChanged,
         EventCodeWatchedFileRemoved,
+
+        EventCodeShaderModuleReloaded,
 
         EventCodeMaxCode = 0xFF
     };

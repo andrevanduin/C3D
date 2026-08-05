@@ -120,8 +120,8 @@ void main()
         Vertex v = vertices[vi];
 
         vec3 position = vec3(v.vx, v.vy, v.vz);
-        vec3 normal = vec3(v.nx, v.ny, v.nz) / 127.0 - 1.0;
-        vec4 tangent = vec4(v.tx, v.ty, v.tz, v.tw) / 127.0 - 1.0;
+        vec3 normal = vec3(int(v.nx), int(v.ny), int(v.nz)) / 127.0 - 1.0;
+        vec4 tangent = vec4(int(v.tx), int(v.ty), int(v.tz), int(v.tw)) / 127.0 - 1.0;
         vec2 texCoord = vec2(v.tu, v.tv);
 
         normal = RotateVecByQuat(normal, meshDraw.orientation);
