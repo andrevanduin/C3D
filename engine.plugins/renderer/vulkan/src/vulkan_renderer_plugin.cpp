@@ -141,91 +141,61 @@ namespace C3D
         // Create our buffers
         INFO_LOG("Creating buffers...");
 
-        if (!m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(128), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
-        {
-            ERROR_LOG("Failed to create staging buffer.");
-            return false;
-        }
+        CREATE_RESOURCE(m_context.stagingBuffer.Create(&m_context, "STAGING", MebiBytes(128), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+                        "Staging Buffer");
 
-        if (!m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | rayTracingBufferFlags,
-                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-        {
-            ERROR_LOG("Failed to create vertex buffer.");
-            return false;
-        }
+        CREATE_RESOURCE(m_vertexBuffer.Create(&m_context, "VERTEX", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | rayTracingBufferFlags,
+                                              VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                        "Vertex Buffer");
 
-        if (!m_indexBuffer.Create(&m_context, "INDEX", MebiBytes(64), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | rayTracingBufferFlags,
-                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-        {
-            ERROR_LOG("Failed to create index buffer.");
-            return false;
-        }
+        CREATE_RESOURCE(m_indexBuffer.Create(&m_context, "INDEX", MebiBytes(64), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | rayTracingBufferFlags,
+                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                        "Index Buffer");
 
-        if (!m_meshBuffer.Create(&m_context, "MESH", MebiBytes(32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-        {
-            ERROR_LOG("Failed to create mesh buffer.");
-            return false;
-        }
+        CREATE_RESOURCE(
+            m_meshBuffer.Create(&m_context, "MESH", MebiBytes(4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+            "Mesh Buffer");
 
-        if (!m_drawBuffer.Create(&m_context, "DRAW", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-        {
-            ERROR_LOG("Failed to create draw buffer.");
-            return false;
-        }
+        CREATE_RESOURCE(m_materialBuffer.Create(&m_context, "MATERIAL", MebiBytes(4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                        "Material Buffer");
 
-        if (!m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", TASK_WGLIMIT * sizeof(MeshTaskCommand),
-                                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-        {
-            ERROR_LOG("Failed to create draw command buffer.");
-            return false;
-        }
+        CREATE_RESOURCE(
+            m_drawBuffer.Create(&m_context, "DRAW", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+            "Draw Buffer");
 
-        if (!m_drawCommandCountBuffer.Create(&m_context, "DRAW_COMMAND_COUNT", 16,
-                                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-        {
-            ERROR_LOG("Failed to create draw command count buffer.");
-            return false;
-        }
+        CREATE_RESOURCE(m_drawCommandBuffer.Create(&m_context, "DRAW_COMMAND", TASK_WGLIMIT * sizeof(MeshTaskCommand),
+                                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                        "Draw Command Buffer");
 
-        if (!m_drawVisibilityBuffer.Create(&m_context, "DRAW_VISIBILITY", MebiBytes(8), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-        {
-            ERROR_LOG("Failed to create draw visibility buffer.");
-            return false;
-        }
+        CREATE_RESOURCE(m_drawCommandCountBuffer.Create(&m_context, "DRAW_COMMAND_COUNT", 16,
+                                                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                        "Draw Command Count Buffer");
+
+        CREATE_RESOURCE(m_drawVisibilityBuffer.Create(&m_context, "DRAW_VISIBILITY", MebiBytes(8), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                        "Draw Visibility Buffer");
 
         if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING))
         {
-            if (!m_meshletBuffer.Create(&m_context, "MESHLET", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-            {
-                ERROR_LOG("Failed to create mesh buffer.");
-                return false;
-            }
+            CREATE_RESOURCE(m_meshletBuffer.Create(&m_context, "MESHLET", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                            "Meshlet Buffer");
 
-            if (!m_meshletDataBuffer.Create(&m_context, "MESHLET_DATA", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-            {
-                ERROR_LOG("Failed to create mesh buffer.");
-                return false;
-            }
+            CREATE_RESOURCE(m_meshletDataBuffer.Create(&m_context, "MESHLET_DATA", MebiBytes(64), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                            "Meshlet Data Buffer");
 
-            if (!m_clusterIndexBuffer.Create(&m_context, "CLUSTER_INDEX_BUFFER", CLUSTER_LIMIT * sizeof(u32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-            {
-                ERROR_LOG("Failed to create cluster index buffer.");
-                return false;
-            }
+            CREATE_RESOURCE(m_clusterIndexBuffer.Create(&m_context, "CLUSTER_INDEX_BUFFER", CLUSTER_LIMIT * sizeof(u32), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                            "Cluster Index Buffer");
 
-            if (!m_clusterCountBuffer.Create(&m_context, "CLUSTER_COUNT_BUFFER", 16,
-                                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-            {
-                ERROR_LOG("Failed to create cluster count buffer.");
-                return false;
-            }
+            CREATE_RESOURCE(m_clusterCountBuffer.Create(&m_context, "CLUSTER_COUNT_BUFFER", 16,
+                                                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                            "Cluster Count Buffer");
         }
 
         INFO_LOG("Creating descriptors...");
@@ -305,16 +275,6 @@ namespace C3D
                         WARN_LOG("Ray tracing is not supported by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
                     }
                     break;
-                case C3D::KeyS:
-                    if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING))
-                    {
-                        m_shadingEnabled ^= true;
-                    }
-                    else
-                    {
-                        WARN_LOG("Ray Tracing is not supported by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
-                    }
-                    break;
                 case C3D::KeyC:
                     m_cullingEnabled ^= true;
                     break;
@@ -330,6 +290,16 @@ namespace C3D
                     break;
                 case C3D::KeyT:
                     m_taskShadingEnabled ^= true;
+                    break;
+                case C3D::KeyF:
+                    if (m_context.device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_EXTENDED_DYNAMIC_STATE_3))
+                    {
+                        m_wireFrameEnabled ^= true;
+                    }
+                    else
+                    {
+                        WARN_LOG("Dynamically switching to Wireframe mode is not supported by the current GPU: '{}'.", m_context.device.GetProperties().deviceName);
+                    }
                     break;
             }
 
@@ -350,6 +320,9 @@ namespace C3D
         defaultCamera.SetPosition(vec3(0));
         defaultCamera.SetRotation(quat(1, 0, 0, 0));
         defaultCamera.SetFovY(glm::radians(70.0f));
+
+        // Set material index 0 to our "dummy" material to be used when no material is specified
+        m_materials.Resize(1);
 
         INFO_LOG("Initialized successfully.");
         return true;
@@ -395,6 +368,7 @@ namespace C3D
         m_vertexBuffer.Destroy();
         m_indexBuffer.Destroy();
         m_meshBuffer.Destroy();
+        m_materialBuffer.Destroy();
         m_drawBuffer.Destroy();
         m_drawCommandBuffer.Destroy();
         m_drawCommandCountBuffer.Destroy();
@@ -706,8 +680,9 @@ namespace C3D
         VkUtils::PipelineBarrier(commandBuffer, 0, ARRAY_SIZE(fillBarriers), fillBarriers, 1, &pyramidBarrier);
 
         {
-            CullData passData = cullData;
-            passData.postPass = postPass;
+            CullData passData               = cullData;
+            passData.clusterBackfaceEnabled = postPass == 0;
+            passData.postPass               = postPass;
 
             shader.Bind(commandBuffer);
             DescriptorInfo descriptors[] = {
@@ -813,9 +788,12 @@ namespace C3D
 
         BeginRendering(commandBuffer, gBufferTargets, depthTarget, clearColor, clearDepthStencil, window.width, window.height, late);
 
-        // First commands are to set the viewport and scissor
+        // Set the viewport, scissor, cull mode and polygon mode
         vkCmdSetViewport(commandBuffer, 0, 1, &m_viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &m_scissor);
+
+        vkCmdSetCullMode(commandBuffer, postPass == 0 ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE);
+        vkCmdSetPolygonModeEXT(commandBuffer, m_wireFrameEnabled ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL);
 
         Globals passGlobals           = globals;
         passGlobals.cullData.postPass = postPass;
@@ -826,8 +804,9 @@ namespace C3D
 
             shader.Bind(commandBuffer);
 
-            DescriptorInfo descriptors[] = { m_drawCommandBuffer, m_drawBuffer,         m_meshletBuffer,  m_meshletDataBuffer,
-                                             m_vertexBuffer,      m_clusterIndexBuffer, DescriptorInfo(), m_textureSampler };
+            DescriptorInfo descriptors[] = {
+                m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_clusterIndexBuffer, DescriptorInfo(), m_textureSampler, m_materialBuffer,
+            };
             shader.PushDescriptorSet(commandBuffer, descriptors);
             shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
             shader.PushConstants(commandBuffer, &passGlobals, sizeof(globals));
@@ -840,8 +819,9 @@ namespace C3D
             shader.Bind(commandBuffer);
 
             DescriptorInfo pyramidDesc(m_depthSampler, depthPyramid.GetView(), VK_IMAGE_LAYOUT_GENERAL);
-            DescriptorInfo descriptors[] = { m_drawCommandBuffer,       m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer,
-                                             m_meshletVisibilityBuffer, pyramidDesc,  m_textureSampler };
+            DescriptorInfo descriptors[] = {
+                m_drawCommandBuffer, m_drawBuffer, m_meshletBuffer, m_meshletDataBuffer, m_vertexBuffer, m_meshletVisibilityBuffer, pyramidDesc, m_textureSampler, m_materialBuffer,
+            };
             shader.PushDescriptorSet(commandBuffer, descriptors);
             shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
             shader.PushConstants(commandBuffer, &passGlobals, sizeof(globals));
@@ -854,8 +834,9 @@ namespace C3D
 
             shader.Bind(commandBuffer);
 
-            DescriptorInfo descriptors[] = { m_drawCommandBuffer, m_drawBuffer,     m_vertexBuffer,   DescriptorInfo(),
-                                             DescriptorInfo(),    DescriptorInfo(), DescriptorInfo(), m_textureSampler };
+            DescriptorInfo descriptors[] = {
+                m_drawCommandBuffer, m_drawBuffer, m_vertexBuffer, DescriptorInfo(), DescriptorInfo(), DescriptorInfo(), DescriptorInfo(), m_textureSampler, m_materialBuffer,
+            };
             shader.PushDescriptorSet(commandBuffer, descriptors);
             shader.BindDescriptorSet(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 1, 1, &m_textureDescriptorSet);
 
@@ -874,9 +855,9 @@ namespace C3D
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, timeStamp + 1);
     }
 
-    void VulkanRendererPlugin::DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const
+    void VulkanRendererPlugin::DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid, u32 timeStamp) const
     {
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, 4);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, timeStamp + 0);
 
         // Wait for all depth data to be written to the depth target before we start reading
         VkImageMemoryBarrier2 depthBarriers[] = {
@@ -924,7 +905,7 @@ namespace C3D
 
         VkUtils::PipelineBarrier(commandBuffer, 0, 0, nullptr, 1, &depthWriteBarrier);
 
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, 5);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, timeStamp + 1);
     }
 
     bool VulkanRendererPlugin::Begin(Window& window)
@@ -1017,7 +998,6 @@ namespace C3D
 
         cullData.cullingEnabled                 = m_cullingEnabled;
         cullData.occlusionCullingEnabled        = m_occlusionCullingEnabled;
-        cullData.meshShadingEnabled             = m_meshShadingEnabled;
         cullData.clusterOcclusionCullingEnabled = m_occlusionCullingEnabled && m_clusterOcclusionCullingEnabled && m_meshShadingEnabled;
         cullData.lodEnabled                     = m_lodEnabled;
         cullData.lodTarget                      = (2 / cullData.p11) * (1.f / static_cast<f32>(window.height)) * (1 << m_debugLodStep);  // 1px
@@ -1058,13 +1038,13 @@ namespace C3D
         CullStep(commandBuffer, taskSubmit ? m_taskCullShader : m_drawCullShader, depthPyramid, cullData, 2, taskSubmit, /* late = */ false);
 
         // Early render: render objects that were visible last frame
-        RenderStep(commandBuffer, gBufferTargets, depthTarget, depthPyramid, globals, window, 0, 8, taskSubmit, clusterSubmit, /* late = */ false);
+        RenderStep(commandBuffer, gBufferTargets, depthTarget, depthPyramid, globals, window, 0, 4, taskSubmit, clusterSubmit, /* late = */ false);
 
         // Depth pyramid generation
-        DepthPyramidStep(commandBuffer, depthTarget, depthPyramid);
+        DepthPyramidStep(commandBuffer, depthTarget, depthPyramid, 6);
 
         // Late cull: frustum + occlusion cull & fill object that were *not* visible last frame
-        CullStep(commandBuffer, taskSubmit ? m_taskCullLateShader : m_drawCullLateShader, depthPyramid, cullData, 6, taskSubmit, /* late = */ true);
+        CullStep(commandBuffer, taskSubmit ? m_taskCullLateShader : m_drawCullLateShader, depthPyramid, cullData, 8, taskSubmit, /* late = */ true);
 
         // Late render: Render opaque objects that are visible this frame but weren't drawn in the early pass
         RenderStep(commandBuffer, gBufferTargets, depthTarget, depthPyramid, globals, window, 1, 10, taskSubmit, clusterSubmit, /* late = */ true);
@@ -1115,7 +1095,7 @@ namespace C3D
             u32 timeStamp = 16;
             vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, m_queryPoolTimestamps, timeStamp + 0);
 
-            if (m_shadingEnabled)
+            if (m_rayTracingEnabled)
             {
                 m_shadeShader.Bind(commandBuffer);
 
@@ -1231,13 +1211,13 @@ namespace C3D
 
         auto props = m_context.device.GetProperties();
 
-        f64 frameGpuBegin   = static_cast<f64>(timestampResults[0]) * props.limits.timestampPeriod * 1e-6;
-        f64 frameGpuEnd     = static_cast<f64>(timestampResults[1]) * props.limits.timestampPeriod * 1e-6;
-        f64 cullGpuTime     = static_cast<f64>(timestampResults[3] - timestampResults[2]) * props.limits.timestampPeriod * 1e-6;
-        f64 pyramidGpuTime  = static_cast<f64>(timestampResults[5] - timestampResults[4]) * props.limits.timestampPeriod * 1e-6;
-        f64 cullLateGpuTime = static_cast<f64>(timestampResults[7] - timestampResults[6]) * props.limits.timestampPeriod * 1e-6;
+        f64 frameGpuBegin = static_cast<f64>(timestampResults[0]) * props.limits.timestampPeriod * 1e-6;
+        f64 frameGpuEnd   = static_cast<f64>(timestampResults[1]) * props.limits.timestampPeriod * 1e-6;
 
-        f64 renderGpuTime     = static_cast<f64>(timestampResults[9] - timestampResults[8]) * props.limits.timestampPeriod * 1e-6;
+        f64 cullGpuTime       = static_cast<f64>(timestampResults[3] - timestampResults[2]) * props.limits.timestampPeriod * 1e-6;
+        f64 renderGpuTime     = static_cast<f64>(timestampResults[5] - timestampResults[4]) * props.limits.timestampPeriod * 1e-6;
+        f64 pyramidGpuTime    = static_cast<f64>(timestampResults[7] - timestampResults[6]) * props.limits.timestampPeriod * 1e-6;
+        f64 cullLateGpuTime   = static_cast<f64>(timestampResults[9] - timestampResults[8]) * props.limits.timestampPeriod * 1e-6;
         f64 renderLateGpuTime = static_cast<f64>(timestampResults[11] - timestampResults[10]) * props.limits.timestampPeriod * 1e-6;
 
         f64 cullPostGpuTime   = static_cast<f64>(timestampResults[13] - timestampResults[12]) * props.limits.timestampPeriod * 1e-6;
@@ -1752,6 +1732,16 @@ namespace C3D
         }
 
         return m_drawBuffer.Upload(m_context.commandBuffer, m_context.commandPool, m_draws.GetData(), sizeof(MeshDraw) * m_draws.Size());
+    }
+
+    bool VulkanRendererPlugin::UploadMaterials(const DynamicArray<Material>& materials)
+    {
+        if (!m_materialBuffer.Upload(m_context.commandBuffer, m_context.commandPool, materials.GetData(), sizeof(Material) * materials.Size()))
+        {
+            ERROR_LOG("Failed to upload materials to Material Buffer.");
+            return false;
+        }
+        return true;
     }
 
     void VulkanRendererPlugin::SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth) { m_viewport = { x, y, width, height, minDepth, maxDepth }; }

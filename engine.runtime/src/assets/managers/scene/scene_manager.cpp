@@ -11,6 +11,7 @@
 #include "logger/logger.h"
 #include "math/c3d_math.h"
 #include "platform/path.h"
+#include "renderer/mesh.h"
 #include "time/clock.h"
 #include "time/scoped_timer.h"
 
@@ -212,7 +213,7 @@ namespace C3D
         rotation[qc ^ 3] = qs * (r12 + qs3 * r21);
     }
 
-    bool SceneManager::CreateSceneAsset(GLTFAsset& asset, SceneAsset& scene)
+    bool SceneManager::CreateSceneAsset(const GLTFAsset& asset, SceneAsset& scene) const
     {
         INFO_LOG("Creating Scene Asset: '{}'.", scene.name);
 
@@ -223,9 +224,39 @@ namespace C3D
             asset.LoadAllBuffers();
         }
 
-        DynamicArray<f32> scratchBuffer;
+        if (!ParseSceneMeshes(asset, scene))
+        {
+            ERROR_LOG("Failed to parse scene meshes.");
+            return false;
+        }
 
+        if (!ParseSceneNodes(asset, scene))
+        {
+            ERROR_LOG("Failed to parse scene nodes.");
+            return false;
+        }
+
+        if (!ParseSceneTextures(asset, scene))
+        {
+            ERROR_LOG("Failed to parse scene textures.");
+            return false;
+        }
+
+        if (!ParseSceneMaterials(asset, scene))
+        {
+            ERROR_LOG("failed to parse scene materials.");
+            return false;
+        }
+
+        return true;
+    }
+
+    bool SceneManager::ParseSceneMeshes(const GLTFAsset& asset, SceneAsset& scene) const
+    {
+        // Reserve enough space for all meshes in the GLTF asset
         scene.meshes.Reserve(asset.meshes.Size());
+
+        // Parse the meshes one-by-one
         for (const auto& mesh : asset.meshes)
         {
             C3D_ASSERT_MSG(mesh.primitives.Size() == 1, "We only support meshes with a single primitive.");
@@ -238,263 +269,414 @@ namespace C3D
             MeshAsset sceneMesh = {};
             sceneMesh.name      = mesh.name;
 
-            const u8* data  = nullptr;
-            u64 size        = 0;
-            u64 elementSize = 0;
-
+            if (!ParseSceneMeshIndices(asset, primitive, sceneMesh))
             {
-                // Determinate how many indices we have
-                const auto& indexAccessor = asset.accessors[primitive.indices];
-                // Resize indices array for enough space
-                sceneMesh.indices.Resize(indexAccessor.count);
-                // Unpack Indices
-                asset.UnpackIndexData(sceneMesh.indices.GetData(), sizeof(u32), indexAccessor);
+                ERROR_LOG("Failed to parse indices for: '{}'.", mesh.name);
+                return false;
             }
 
+            if (!ParseSceneMeshVertices(asset, primitive, sceneMesh))
             {
-                // Get the positions
-                auto posAccessor = asset.FindAccessor(primitive, "POSITION");
-                C3D_ASSERT(posAccessor);
-                C3D_ASSERT(posAccessor->type == GLTFAccessorType::Vec3);
-                C3D_ASSERT(posAccessor->componentType == GLTF_FLOAT);
+                ERROR_LOG("Failed to parse vertices for: '{}'.", mesh.name);
+                return false;
+            }
 
-                // Ensure our scratch buffer has enough space
-                if (scratchBuffer.Size() < posAccessor->count * 4)
+            RemapVertexAndIndexBuffer(sceneMesh);
+
+            OptimizeVertexFetchAndCache(sceneMesh);
+
+            scene.meshes.PushBack(sceneMesh);
+        }
+
+        return true;
+    }
+
+    bool SceneManager::ParseSceneMeshIndices(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, MeshAsset& mesh) const
+    {
+        // Determinate how many indices we have
+        const auto& indexAccessor = asset.accessors[primitive.indices];
+        // Resize indices array for enough space
+        mesh.indices.Resize(indexAccessor.count);
+        // Unpack Indices
+        asset.UnpackIndexData(mesh.indices.GetData(), sizeof(u32), indexAccessor);
+
+        return true;
+    }
+
+    bool SceneManager::ParseSceneMeshVertices(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, MeshAsset& mesh) const
+    {
+        // Create a scratch buffer to temporarily store date while unpacking
+        DynamicArray<f32> scratchBuffer;
+
+        // Get the positions
+        ParseVertexPosition(asset, primitive, scratchBuffer, mesh);
+
+        // Get the normals
+        ParseVertexNormals(asset, primitive, scratchBuffer, mesh);
+
+        // Get the tangents
+        ParseVertexTangents(asset, primitive, scratchBuffer, mesh);
+
+        // Get the texture coordinates
+        ParseVertexTexCoords(asset, primitive, scratchBuffer, mesh);
+
+        return true;
+    }
+
+    bool SceneManager::ParseVertexPosition(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, DynamicArray<f32>& scratchBuffer, MeshAsset& mesh) const
+    {
+        auto posAccessor = asset.FindAccessor(primitive, "POSITION");
+        if (!posAccessor)
+        {
+            ERROR_LOG("Invalid position accessor in scene.");
+            return false;
+        }
+        if (posAccessor->type != GLTFAccessorType::Vec3)
+        {
+            ERROR_LOG("Only vec3 position accessor is supported but found type {} in scene.", static_cast<u32>(posAccessor->type));
+            return false;
+        }
+        if (posAccessor->componentType != GLTF_FLOAT)
+        {
+            ERROR_LOG("Only float component type position accessor is supported but found component type {} in scene.", static_cast<u32>(posAccessor->componentType));
+            return false;
+        }
+
+        // Ensure our scratch buffer has enough space
+        if (scratchBuffer.Size() < posAccessor->count * 4)
+        {
+            scratchBuffer.Resize(posAccessor->count * 4);
+        }
+
+        // Resize our vertices array to have enough space
+        mesh.vertices.Resize(posAccessor->count);
+
+        // Unpack positions into our scratchBuffer
+        asset.UnpackFloats(scratchBuffer.GetData(), posAccessor);
+
+        // Store the positions into our vertices
+        for (u32 i = 0; i < posAccessor->count; ++i)
+        {
+            mesh.vertices[i].vx = QuantizeHalf(scratchBuffer[i * 3 + 0]);
+            mesh.vertices[i].vy = QuantizeHalf(scratchBuffer[i * 3 + 1]);
+            mesh.vertices[i].vz = QuantizeHalf(scratchBuffer[i * 3 + 2]);
+        }
+
+        return true;
+    }
+
+    bool SceneManager::ParseVertexNormals(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, DynamicArray<f32>& scratchBuffer, MeshAsset& mesh) const
+    {
+        auto normalAccessor = asset.FindAccessor(primitive, "NORMAL");
+        if (!normalAccessor)
+        {
+            ERROR_LOG("Invalid normal accessor in scene.");
+            return false;
+        }
+        if (normalAccessor->type != GLTFAccessorType::Vec3)
+        {
+            ERROR_LOG("Only vec3 normal accessor is supported but found type {} in scene.", static_cast<u32>(normalAccessor->type));
+            return false;
+        }
+        if (normalAccessor->componentType != GLTF_FLOAT)
+        {
+            ERROR_LOG("Only float component type normal accessor is supported but found component type {} in scene.", static_cast<u32>(normalAccessor->componentType));
+            return false;
+        }
+
+        // Unpack normals into our scratchBuffer
+        asset.UnpackFloats(scratchBuffer.GetData(), normalAccessor);
+
+        // Store the normals into our vertices
+        for (u32 i = 0; i < normalAccessor->count; ++i)
+        {
+            mesh.vertices[i].nx = static_cast<u8>(scratchBuffer[i * 3 + 0] * 127.f + 127.5f);
+            mesh.vertices[i].ny = static_cast<u8>(scratchBuffer[i * 3 + 1] * 127.f + 127.5f);
+            mesh.vertices[i].nz = static_cast<u8>(scratchBuffer[i * 3 + 2] * 127.f + 127.5f);
+        }
+
+        return true;
+    }
+
+    bool SceneManager::ParseVertexTangents(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, DynamicArray<f32>& scratchBuffer, MeshAsset& mesh) const
+    {
+        auto tangentAccessor = asset.FindAccessor(primitive, "TANGENT");
+        if (!tangentAccessor)
+        {
+            ERROR_LOG("Invalid tangent accessor in scene.");
+            return false;
+        }
+        if (tangentAccessor->type != GLTFAccessorType::Vec4)
+        {
+            ERROR_LOG("Only vec4 tangent accessor is supported but found type {} in scene.", static_cast<u32>(tangentAccessor->type));
+            return false;
+        }
+        if (tangentAccessor->componentType != GLTF_FLOAT)
+        {
+            ERROR_LOG("Only float component type tangent accessor is supported but found component type {} in scene.", static_cast<u32>(tangentAccessor->componentType));
+            return false;
+        }
+
+        // Unpack tangents into our scratchBuffer
+        asset.UnpackFloats(scratchBuffer.GetData(), tangentAccessor);
+
+        // Store the tangents into our vertices
+        for (u32 i = 0; i < tangentAccessor->count; ++i)
+        {
+            mesh.vertices[i].tx = static_cast<u8>(scratchBuffer[i * 4 + 0] * 127.f + 127.5f);
+            mesh.vertices[i].ty = static_cast<u8>(scratchBuffer[i * 4 + 1] * 127.f + 127.5f);
+            mesh.vertices[i].tz = static_cast<u8>(scratchBuffer[i * 4 + 2] * 127.f + 127.5f);
+            mesh.vertices[i].tw = static_cast<u8>(scratchBuffer[i * 4 + 3] * 127.f + 127.5f);
+        }
+
+        return true;
+    }
+
+    bool SceneManager::ParseVertexTexCoords(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, DynamicArray<f32>& scratchBuffer, MeshAsset& mesh) const
+    {
+        auto texAccessor = asset.FindAccessor(primitive, "TEXCOORD_0");
+        if (!texAccessor)
+        {
+            ERROR_LOG("Invalid texCoords accessor in scene.");
+            return false;
+        }
+
+        if (texAccessor->type != GLTFAccessorType::Vec2)
+        {
+            ERROR_LOG("Only vec2 texCoords accessor is supported but found type {} in scene.", static_cast<u32>(texAccessor->type));
+            return false;
+        }
+
+        if (texAccessor->componentType != GLTF_FLOAT)
+        {
+            ERROR_LOG("Only float component type texCoords accessor is supported but found component type {} in scene.", static_cast<u32>(texAccessor->componentType));
+            return false;
+        }
+
+        // Unpack texCoords into our scratchBuffer
+        asset.UnpackFloats(scratchBuffer.GetData(), texAccessor);
+        // Store the texCoords into our vertices
+        for (u32 i = 0; i < texAccessor->count; ++i)
+        {
+            mesh.vertices[i].tu = QuantizeHalf(scratchBuffer[i * 2 + 0]);
+            mesh.vertices[i].tv = QuantizeHalf(scratchBuffer[i * 2 + 1]);
+        }
+
+        return true;
+    }
+
+    void SceneManager::RemapVertexAndIndexBuffer(MeshAsset& mesh) const
+    {
+        ScopedTimer timer(String::FromFormat("Remapping vertex and index buffers of: '{}'.", mesh.name));
+
+        DynamicArray<u32> remap(mesh.indices.Size());
+        u64 uniqueVertices =
+            meshopt_generateVertexRemap(remap.GetData(), mesh.indices.GetData(), mesh.indices.Size(), mesh.vertices.GetData(), mesh.vertices.Size(), sizeof(Vertex));
+
+        meshopt_remapVertexBuffer(mesh.vertices.GetData(), mesh.vertices.GetData(), mesh.vertices.Size(), sizeof(Vertex), remap.GetData());
+        meshopt_remapIndexBuffer(mesh.indices.GetData(), mesh.indices.GetData(), mesh.indices.Size(), remap.GetData());
+
+        TRACE("Went from {} vertices to {} vertices.", mesh.vertices.Size(), uniqueVertices);
+
+        mesh.vertices.Resize(uniqueVertices);
+    }
+
+    void SceneManager::OptimizeVertexFetchAndCache(MeshAsset& mesh) const
+    {
+        ScopedTimer timer(String::FromFormat("Optimization for Vertex Cache and Fetch of: '{}'.", mesh.name));
+
+        u32 indexCount  = mesh.indices.Size();
+        u32 vertexCount = mesh.vertices.Size();
+
+        meshopt_optimizeVertexCache(mesh.indices.GetData(), mesh.indices.GetData(), indexCount, vertexCount);
+        meshopt_optimizeVertexFetch(mesh.vertices.GetData(), mesh.indices.GetData(), indexCount, mesh.vertices.GetData(), vertexCount, sizeof(Vertex));
+    }
+
+    bool SceneManager::ParseSceneNodes(const GLTFAsset& asset, SceneAsset& scene) const
+    {
+        u32 materialOffset = 1;  // Index 0 == the dummy material
+
+        // Parse the nodes
+        for (const auto& node : asset.nodes)
+        {
+            if (node.mesh != INVALID_ID)
+            {
+                ParseSceneMeshNode(asset, node, scene);
+            }
+
+            if (node.camera != INVALID_ID)
+            {
+                ParseSceneCameraNode(asset, node, scene);
+            }
+
+            if (!node.extensions.Empty())
+            {
+                for (const auto& ext : node.extensions)
                 {
-                    scratchBuffer.Resize(posAccessor->count * 4);
+                    if (ext.type == GLTFExtensionType::NodeLightsPunctual)
+                    {
+                        const auto& lightsPunctual = ext.Get<GLTFNodeLightsPunctualExtension>();
+                        if (lightsPunctual.light != INVALID_ID)
+                        {
+                            f32 matrix[16];
+                            node.TransformWorld(matrix);
+
+                            scene.sunDirection = vec3(matrix[8], matrix[9], matrix[10]);
+                        }
+                    }
                 }
-
-                // Resize our vertices array to have enough space
-                sceneMesh.vertices.Resize(posAccessor->count);
-                // Unpack positions into our scratchBuffer
-                asset.UnpackFloats(scratchBuffer.GetData(), posAccessor);
-                // Store the positions into our vertices
-                for (u32 i = 0; i < posAccessor->count; ++i)
-                {
-                    sceneMesh.vertices[i].vx = QuantizeHalf(scratchBuffer[i * 3 + 0]);
-                    sceneMesh.vertices[i].vy = QuantizeHalf(scratchBuffer[i * 3 + 1]);
-                    sceneMesh.vertices[i].vz = QuantizeHalf(scratchBuffer[i * 3 + 2]);
-                }
-
-                // Get the normals
-                auto normalAccessor = asset.FindAccessor(primitive, "NORMAL");
-                C3D_ASSERT(normalAccessor);
-                C3D_ASSERT(normalAccessor->type == GLTFAccessorType::Vec3);
-                C3D_ASSERT(normalAccessor->componentType == GLTF_FLOAT);
-
-                // Unpack normals into our scratchBuffer
-                asset.UnpackFloats(scratchBuffer.GetData(), normalAccessor);
-                // Store the normals into our vertices
-                for (u32 i = 0; i < normalAccessor->count; ++i)
-                {
-                    sceneMesh.vertices[i].nx = static_cast<u8>(scratchBuffer[i * 3 + 0] * 127.f + 127.5f);
-                    sceneMesh.vertices[i].ny = static_cast<u8>(scratchBuffer[i * 3 + 1] * 127.f + 127.5f);
-                    sceneMesh.vertices[i].nz = static_cast<u8>(scratchBuffer[i * 3 + 2] * 127.f + 127.5f);
-                }
-
-                // Get the tangents
-                auto tangentAccessor = asset.FindAccessor(primitive, "TANGENT");
-                C3D_ASSERT(tangentAccessor);
-                C3D_ASSERT(tangentAccessor->type == GLTFAccessorType::Vec4);
-                C3D_ASSERT(tangentAccessor->componentType == GLTF_FLOAT);
-
-                // Unpack tangents into our scratchBuffer
-                asset.UnpackFloats(scratchBuffer.GetData(), tangentAccessor);
-                // Store the tangents into our vertices
-                for (u32 i = 0; i < tangentAccessor->count; ++i)
-                {
-                    sceneMesh.vertices[i].tx = static_cast<u8>(scratchBuffer[i * 4 + 0] * 127.f + 127.5f);
-                    sceneMesh.vertices[i].ty = static_cast<u8>(scratchBuffer[i * 4 + 1] * 127.f + 127.5f);
-                    sceneMesh.vertices[i].tz = static_cast<u8>(scratchBuffer[i * 4 + 2] * 127.f + 127.5f);
-                    sceneMesh.vertices[i].tw = static_cast<u8>(scratchBuffer[i * 4 + 3] * 127.f + 127.5f);
-                }
-
-                // Get the texture coordinates
-                auto texAccessor = asset.FindAccessor(primitive, "TEXCOORD_0");
-                C3D_ASSERT(texAccessor);
-                C3D_ASSERT(texAccessor->type == GLTFAccessorType::Vec2);
-                C3D_ASSERT(texAccessor->componentType == GLTF_FLOAT);
-
-                // Unpack texCoords into our scratchBuffer
-                asset.UnpackFloats(scratchBuffer.GetData(), texAccessor);
-                // Store the texCoords into our vertices
-                for (u32 i = 0; i < texAccessor->count; ++i)
-                {
-                    sceneMesh.vertices[i].tu = QuantizeHalf(scratchBuffer[i * 2 + 0]);
-                    sceneMesh.vertices[i].tv = QuantizeHalf(scratchBuffer[i * 2 + 1]);
-                }
-
-                {
-                    ScopedTimer timer(String::FromFormat("Remapping vertex and index buffers of: '{}'.", sceneMesh.name));
-
-                    DynamicArray<u32> remap(sceneMesh.indices.Size());
-                    u64 uniqueVertices = meshopt_generateVertexRemap(remap.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(), sceneMesh.vertices.GetData(),
-                                                                     sceneMesh.vertices.Size(), sizeof(Vertex));
-
-                    meshopt_remapVertexBuffer(sceneMesh.vertices.GetData(), sceneMesh.vertices.GetData(), sceneMesh.vertices.Size(), sizeof(Vertex), remap.GetData());
-                    meshopt_remapIndexBuffer(sceneMesh.indices.GetData(), sceneMesh.indices.GetData(), sceneMesh.indices.Size(), remap.GetData());
-
-                    TRACE("Went from {} vertices to {} vertices.", sceneMesh.vertices.Size(), uniqueVertices);
-
-                    sceneMesh.vertices.Resize(uniqueVertices);
-                }
-
-                {
-                    ScopedTimer timer(String::FromFormat("Optimization for Vertex Cache and Fetch of: '{}'.", sceneMesh.name));
-
-                    u32 indexCount  = sceneMesh.indices.Size();
-                    u32 vertexCount = sceneMesh.vertices.Size();
-
-                    meshopt_optimizeVertexCache(sceneMesh.indices.GetData(), sceneMesh.indices.GetData(), indexCount, vertexCount);
-                    meshopt_optimizeVertexFetch(sceneMesh.vertices.GetData(), sceneMesh.indices.GetData(), indexCount, sceneMesh.vertices.GetData(), vertexCount, sizeof(Vertex));
-                }
-
-                {
-                    ScopedTimer timer(String::FromFormat("Parsing materials for: '{}'.", sceneMesh.name));
-                }
-
-                scene.meshes.PushBack(sceneMesh);
             }
         }
 
+        INFO_LOG("Loaded {} meshes and {} draws.", scene.meshes.Size(), scene.draws.Size());
+        return true;
+    }
+
+    void SceneManager::ParseSceneMeshNode(const GLTFAsset& asset, const GLTFNode& node, SceneAsset& scene) const
+    {
+        f32 matrix[16];
+        node.TransformWorld(matrix);
+
+        f32 translation[3];
+        f32 rotation[4];
+        f32 scale[3];
+        DecomposeTransform(translation, rotation, scale, matrix);
+
+        MeshDraw draw = {};
+
+        draw.position    = vec3(translation[0], translation[1], translation[2]);
+        draw.scale       = Max(scale[0], Max(scale[1], scale[2]));
+        draw.orientation = quat(rotation[3], rotation[0], rotation[1], rotation[2]);
+        draw.meshIndex   = node.mesh;
+
+        // Get the material for this node
+        auto materialIndex = asset.meshes[node.mesh].primitives[0].material;
+
+        if (materialIndex != INVALID_ID)
         {
-            // Parse the nodes
-            for (const auto& node : asset.nodes)
+            draw.materialIndex = materialIndex;
+
+            // Determine if our object is fully opaque
+            const auto& material = asset.materials[materialIndex];
+            if (material.alphaMode != GLTFMaterialAlphaMode::Opaque)
             {
-                if (node.mesh != INVALID_ID)
-                {
-                    f32 matrix[16];
-                    node.TransformWorld(matrix);
-
-                    f32 translation[3];
-                    f32 rotation[4];
-                    f32 scale[3];
-                    DecomposeTransform(translation, rotation, scale, matrix);
-
-                    MeshDraw draw = {};
-
-                    draw.position    = vec3(translation[0], translation[1], translation[2]);
-                    draw.scale       = Max(scale[0], Max(scale[1], scale[2]));
-                    draw.orientation = quat(rotation[3], rotation[0], rotation[1], rotation[2]);
-                    draw.meshIndex   = node.mesh;
-
-                    // Get the material for this node
-                    auto materialIndex = asset.meshes[node.mesh].primitives[0].material;
-                    if (materialIndex != INVALID_ID)
-                    {
-                        // Get the material by the material index
-                        auto material = asset.materials[materialIndex];
-
-                        // Get the diffuse texture from the pbr material extension if it exists
-                        if (!material.extensions.Empty())
-                        {
-                            auto extension = asset.materials[materialIndex].extensions[0];
-                            if (extension.type == GLTFExtensionType::PBRSpecularGlossiness)
-                            {
-                                auto pbrExtension = extension.Get<GLTFPBRSpecularGlossinessExtension>();
-                                if (pbrExtension.diffuseTexture.index != INVALID_ID)
-                                {
-                                    draw.albedoTexture = pbrExtension.diffuseTexture.index + 1;
-                                }
-                                if (pbrExtension.specularGlossinessTexture.index != INVALID_ID)
-                                {
-                                    draw.specularTexture = pbrExtension.specularGlossinessTexture.index + 1;
-                                }
-                            }
-                        }
-
-                        if (material.pbr.baseColorTexture.index != INVALID_ID)
-                        {
-                            draw.albedoTexture = material.pbr.baseColorTexture.index + 1;
-                        }
-
-                        // Get the normal from the material  (if provided)
-                        if (material.normalTexture.info.index != INVALID_ID)
-                        {
-                            draw.normalTexture = material.normalTexture.info.index + 1;
-                        }
-
-                        // Get the emissive texture from the material (if provided)
-                        if (material.emissiveTexture.index != INVALID_ID)
-                        {
-                            draw.emissiveTexture = material.emissiveTexture.index + 1;
-                        }
-
-                        // Determine if our object is fully opaque
-                        if (material.alphaMode != GLTFMaterialAlphaMode::Opaque)
-                        {
-                            // If not then we mark this to be rendered in the post pass
-                            draw.postPass = 1;
-                        }
-                    }
-
-                    scene.draws.PushBack(draw);
-                }
-
-                if (node.camera != INVALID_ID)
-                {
-                    f32 matrix[16];
-                    node.TransformWorld(matrix);
-
-                    f32 translation[3];
-                    f32 rotation[4];
-                    f32 scale[3];
-                    DecomposeTransform(translation, rotation, scale, matrix);
-
-                    const auto& nodeCam = asset.cameras[node.camera];
-                    C3D_ASSERT(nodeCam.type == GLTFCameraType::Perspective);
-
-                    scene.camera.position    = vec3(translation[0], translation[1], translation[2]);
-                    scene.camera.orientation = quat(rotation[3], rotation[0], rotation[1], rotation[2]);
-                    scene.camera.fovY        = nodeCam.perspective.yFov;
-                }
-
-                if (!node.extensions.Empty())
-                {
-                    for (const auto& ext : node.extensions)
-                    {
-                        if (ext.type == GLTFExtensionType::NodeLightsPunctual)
-                        {
-                            const auto& lightsPunctual = ext.Get<GLTFNodeLightsPunctualExtension>();
-                            if (lightsPunctual.light != INVALID_ID)
-                            {
-                                f32 matrix[16];
-                                node.TransformWorld(matrix);
-
-                                scene.sunDirection = vec3(matrix[8], matrix[9], matrix[10]);
-                            }
-                        }
-                    }
-                }
+                // If not then we mark this to be rendered in the post pass
+                draw.postPass = 1;
             }
-
-            INFO_LOG("Loaded {} meshes and {} draws.", scene.meshes.Size(), scene.draws.Size());
+        }
+        else
+        {
+            draw.materialIndex = 0;
         }
 
+        scene.draws.PushBack(draw);
+    }
+
+    bool SceneManager::ParseSceneCameraNode(const GLTFAsset& asset, const GLTFNode& node, SceneAsset& scene) const
+    {
+        f32 matrix[16];
+        node.TransformWorld(matrix);
+
+        f32 translation[3];
+        f32 rotation[4];
+        f32 scale[3];
+        DecomposeTransform(translation, rotation, scale, matrix);
+
+        const auto& nodeCam = asset.cameras[node.camera];
+        C3D_ASSERT(nodeCam.type == GLTFCameraType::Perspective);
+
+        scene.camera.position    = vec3(translation[0], translation[1], translation[2]);
+        scene.camera.orientation = quat(rotation[3], rotation[0], rotation[1], rotation[2]);
+        scene.camera.fovY        = nodeCam.perspective.yFov;
+
+        return true;
+    }
+
+    bool SceneManager::ParseSceneTextures(const GLTFAsset& asset, SceneAsset& scene) const
+    {
+        // Parse textures
+        for (const auto& texture : asset.textures)
         {
-            // Parse textures
-            for (const auto& texture : asset.textures)
+            u32 source = 0;
+
+            if (texture.extensions.Empty())
             {
-                u32 source = 0;
-
-                if (texture.extensions.Empty())
-                {
-                    // No extensions, parse normally
-                    source = texture.source;
-                }
-                else
-                {
-                    C3D_ASSERT(texture.extensions.Size() == 1);
-
-                    auto& extension = texture.extensions[0];
-                    C3D_ASSERT(extension.type == GLTFExtensionType::TextureDDS);
-
-                    const auto& ddsExtension = extension.Get<GLTFTextureDDSExtension>();
-                    source                   = ddsExtension.source;
-                }
-
-                scene.textures.PushBack(String::FromFormat("{}/{}/{}/{}", m_assetPath, m_subFolder, scene.name, asset.images[source].uri));
+                // No extensions, parse normally
+                source = texture.source;
             }
+            else
+            {
+                C3D_ASSERT(texture.extensions.Size() == 1);
+
+                auto& extension = texture.extensions[0];
+                C3D_ASSERT(extension.type == GLTFExtensionType::TextureDDS);
+
+                const auto& ddsExtension = extension.Get<GLTFTextureDDSExtension>();
+                source                   = ddsExtension.source;
+            }
+
+            scene.textures.PushBack(String::FromFormat("{}/{}/{}/{}", m_assetPath, m_subFolder, scene.name, asset.images[source].uri));
+        }
+
+        return true;
+    }
+
+    bool SceneManager::ParseSceneMaterials(const GLTFAsset& asset, SceneAsset& scene) const
+    {
+        for (const auto& material : asset.materials)
+        {
+            Material mat;
+
+            if (material.hasPBRMetallicRoughness)
+            {
+                if (material.pbr.baseColorTexture.index != INVALID_ID)
+                {
+                    mat.albedoIndex = 1 + material.pbr.baseColorTexture.index;
+                }
+
+                mat.diffuseFactor = vec4(material.pbr.baseColorFactor[0], material.pbr.baseColorFactor[1], material.pbr.baseColorFactor[2], material.pbr.baseColorFactor[3]);
+            }
+            else if (material.hasPBRSpecularGlossiness)
+            {
+                // Get the diffuse texture from the pbr material extension if it exists
+                if (!material.extensions.Empty())
+                {
+                    auto extension = material.extensions[0];
+                    if (extension.type == GLTFExtensionType::PBRSpecularGlossiness)
+                    {
+                        auto pbrExtension = extension.Get<GLTFPBRSpecularGlossinessExtension>();
+                        if (pbrExtension.diffuseTexture.index != INVALID_ID)
+                        {
+                            mat.albedoIndex = 1 + pbrExtension.diffuseTexture.index;
+                        }
+
+                        mat.diffuseFactor = vec4(pbrExtension.diffuseFactor[0], pbrExtension.diffuseFactor[1], pbrExtension.diffuseFactor[2], pbrExtension.diffuseFactor[3]);
+
+                        if (pbrExtension.specularGlossinessTexture.index != INVALID_ID)
+                        {
+                            mat.specularIndex = 1 + pbrExtension.specularGlossinessTexture.index;
+                        }
+
+                        mat.specularFactor = vec4(pbrExtension.specularFactor[0], pbrExtension.specularFactor[1], pbrExtension.specularFactor[2], pbrExtension.glossinessFactor);
+                    }
+                }
+            }
+
+            // Get the normal texture from the material (if provided)
+            if (material.normalTexture.info.index != INVALID_ID)
+            {
+                mat.normalIndex = 1 + material.normalTexture.info.index;
+            }
+
+            // Get the emissive texture from the material (if provided)
+            if (material.emissiveTexture.index != INVALID_ID)
+            {
+                mat.emissiveIndex = 1 + material.emissiveTexture.index;
+            }
+
+            mat.emissiveFactor = vec3(material.emissiveFactor[0], material.emissiveFactor[1], material.emissiveFactor[2]);
+
+            scene.materials.PushBack(mat);
         }
 
         return true;
@@ -1143,7 +1325,7 @@ namespace C3D
         CSONObject extensionsObj;
         if (materialObj.GetPropertyValueByName("extensions", extensionsObj))
         {
-            if (!ParseMaterialExtensions(extensionsObj, material.extensions))
+            if (!ParseMaterialExtensions(extensionsObj, material.extensions, material))
             {
                 return false;
             }
@@ -1153,6 +1335,8 @@ namespace C3D
         CSONObject pbrMetallicRoughnessObj;
         if (materialObj.GetPropertyValueByName("pbrMetallicRoughness", pbrMetallicRoughnessObj))
         {
+            material.hasPBRMetallicRoughness = true;
+
             if (!ParsePBR(pbrMetallicRoughnessObj, material.pbr))
             {
                 return false;
@@ -1285,7 +1469,7 @@ namespace C3D
         return true;
     }
 
-    bool SceneManager::ParseMaterialExtensions(const CSONObject& extensionsObj, DynamicArray<GLTFExtension>& materialExtensions) const
+    bool SceneManager::ParseMaterialExtensions(const CSONObject& extensionsObj, DynamicArray<GLTFExtension>& materialExtensions, GLTFMaterial& material) const
     {
         for (const auto& extensionProp : extensionsObj.properties)
         {
@@ -1301,6 +1485,9 @@ namespace C3D
             if (extensionProp.name == KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS)
             {
                 extension.type = GLTFExtensionType::PBRSpecularGlossiness;
+
+                material.hasPBRSpecularGlossiness = true;
+
                 if (!ParsePBRSpecularGlossinessExtension(extensionObj, extension))
                 {
                     return false;

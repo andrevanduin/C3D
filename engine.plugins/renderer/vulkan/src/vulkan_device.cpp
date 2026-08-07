@@ -40,6 +40,12 @@ namespace C3D
             requiredExtensions.PushBack(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
         }
 
+        // Enable extended dynamic state 3 if it's supported
+        if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_EXTENDED_DYNAMIC_STATE_3))
+        {
+            requiredExtensions.PushBack(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+        }
+
         float queuePriorities[] = { 1.0f };
 
         VkDeviceQueueCreateInfo queueInfo = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
@@ -55,13 +61,25 @@ namespace C3D
         createInfo.enabledExtensionCount   = requiredExtensions.Size();
         createInfo.ppEnabledExtensionNames = requiredExtensions.GetData();
 
-        // Fill in all the structures for our extensions
+        // Enable Device2 features
         VkPhysicalDeviceFeatures2 deviceFeatures2        = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
         deviceFeatures2.features.multiDrawIndirect       = VK_TRUE;
         deviceFeatures2.features.pipelineStatisticsQuery = VK_TRUE;
         deviceFeatures2.features.samplerAnisotropy       = VK_TRUE;
 
-        createInfo.pNext = &deviceFeatures2;
+        // Enable extended dyanmic state for switching polygon mode
+        VkPhysicalDeviceExtendedDynamicState3FeaturesEXT dynamicState3Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT };
+        dynamicState3Features.extendedDynamicState3PolygonMode                 = VK_TRUE;
+
+        if (IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_EXTENDED_DYNAMIC_STATE_3))
+        {
+            createInfo.pNext            = &dynamicState3Features;
+            dynamicState3Features.pNext = &deviceFeatures2;
+        }
+        else
+        {
+            createInfo.pNext = &deviceFeatures2;
+        }
 
         // 16-Bit storage
         VkPhysicalDeviceVulkan11Features device11Features = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
@@ -427,10 +445,11 @@ namespace C3D
             INFO_LOG("Driver Version - {}.{}.{}", VK_VERSION_MAJOR(props.driverVersion), VK_VERSION_MINOR(props.driverVersion), VK_VERSION_PATCH(props.driverVersion));
             INFO_LOG("API Version    - {}.{}.{}", VK_API_VERSION_MAJOR(props.apiVersion), VK_API_VERSION_MINOR(props.apiVersion), VK_API_VERSION_PATCH(props.apiVersion));
             INFO_LOG("Features:");
-            INFO_LOG("Mesh Shading      :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) ? " Not" : "");
-            INFO_LOG("Ray Tracing       :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING) ? " Not" : "");
-            INFO_LOG("Push Descriptors  :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PUSH_DESCRIPTORS) ? " Not" : "");
-            INFO_LOG("Performance Query :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PERFORMANCE_QUERY) ? " Not" : "");
+            INFO_LOG("Mesh Shading              :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_MESH_SHADING) ? " Not" : "");
+            INFO_LOG("Ray Tracing               :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_RAY_TRACING) ? " Not" : "");
+            INFO_LOG("Push Descriptors          :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PUSH_DESCRIPTORS) ? " Not" : "");
+            INFO_LOG("Performance Query         :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_PERFORMANCE_QUERY) ? " Not" : "");
+            INFO_LOG("Exteneded Dynamic State 3 :{} Supported", !IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_EXTENDED_DYNAMIC_STATE_3) ? " Not" : "");
             INFO_LOG("Limits:");
             INFO_LOG("Max PushConstants size: {} Bytes", props.limits.maxPushConstantsSize);
             INFO_LOG("Max DrawIndirect count: {}", props.limits.maxDrawIndirectCount);

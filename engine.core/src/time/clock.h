@@ -13,7 +13,7 @@ namespace C3D
     class C3D_API Clock
     {
     public:
-        Clock(ClockFlags flags = ClockFlags::None);
+        Clock(ClockFlags flags = ClockFlags::StartOnCreate);
 
         /** @brief Begin the measured time frame. */
         void Begin();

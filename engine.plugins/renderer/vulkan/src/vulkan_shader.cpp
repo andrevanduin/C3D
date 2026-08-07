@@ -11,6 +11,7 @@
 #include "events/types.h"
 #include "logger/logger.h"
 #include "vulkan_context.h"
+#include "vulkan_device.h"
 #include "vulkan_shader_module.h"
 #include "vulkan_types.h"
 #include "vulkan_utils.h"
@@ -424,11 +425,15 @@ namespace C3D
         colorBlendState.pAttachments                        = colorAttachmentStates;
         createInfo.pColorBlendState                         = &colorBlendState;
 
-        VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        DynamicArray<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_CULL_MODE };
+        if (m_context->device.IsFeatureSupported(PHYSICAL_DEVICE_SUPPORT_FLAG_EXTENDED_DYNAMIC_STATE_3))
+        {
+            dynamicStates.PushBack(VK_DYNAMIC_STATE_POLYGON_MODE_EXT);
+        }
 
         VkPipelineDynamicStateCreateInfo dynamicState = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-        dynamicState.dynamicStateCount                = 2;
-        dynamicState.pDynamicStates                   = dynamicStates;
+        dynamicState.dynamicStateCount                = dynamicStates.Size();
+        dynamicState.pDynamicStates                   = dynamicStates.GetData();
         createInfo.pDynamicState                      = &dynamicState;
 
         // NOTE: Because we are using dynamic rendering this can be set to VK_NULL_HANDLE

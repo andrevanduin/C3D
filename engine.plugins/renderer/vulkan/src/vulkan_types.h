@@ -102,11 +102,12 @@ namespace C3D
 
         u32 drawCount = 0;
 
-        i32 cullingEnabled                 = 0;
+        i32 cullingEnabled = 0;
+        i32 lodEnabled     = 0;
+
         i32 occlusionCullingEnabled        = 0;
         i32 clusterOcclusionCullingEnabled = 0;
-        i32 meshShadingEnabled             = 0;
-        i32 lodEnabled                     = 0;
+        i32 clusterBackfaceEnabled         = 0;
 
         u32 postPass = 0;
     };

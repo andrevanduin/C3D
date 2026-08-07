@@ -32,3 +32,32 @@ bool ProjectSphere(vec3 center, float radius, float zNear, float p00, float p11,
 
     return true;
 }
+
+// A Survey of Efficient Representations for Independent Unit Vectors
+vec2 EncodeOct(vec3 v)
+{
+    vec2 p = v.xy * (1.0 / (abs(v.x) + abs(v.y) + abs(v.z)));
+    vec2 s = vec2((v.x >= 0.0) ? +1.0 : -1.0, (v.y >= 0.0) ? +1.0 : -1.0);
+    vec2 r = (v.z <= 0.0) ? ((1.0 - abs(p.yx)) * s) : p;
+    return r;
+}
+
+vec3 DecodeOct(vec2 e)
+{
+    vec3 v = vec3(e.xy, 1.0 - abs(e.x) - abs(e.y));
+    vec2 s = vec2((v.x >= 0.0) ? +1.0 : -1.0, (v.y >= 0.0) ? +1.0 : -1.0);
+    v.xy   = v.z < 0 ? (1.0 - abs(v.yx)) * s : v.xy;
+    return normalize(v);
+}
+
+vec3 ToSRGB(vec3 c) { return pow(c.xyz, vec3(1.0 / 2.2)); }
+
+vec4 ToSRGB(vec4 c) { return vec4(pow(c.xyz, vec3(1.0 / 2.2)), c.w); }
+
+vec3 FromSRGB(vec3 c) { return pow(c.xyz, vec3(2.2)); }
+
+vec4 FromSRGB(vec4 c) { return vec4(pow(c.xyz, vec3(2.2)), c.w); }
+
+// Gradient noise from Jorge Jimenez's presentation:
+// http://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare
+float GradientNoise(vec2 uv) { return fract(52.9829189 * fract(dot(uv, vec2(0.06711056, 0.00583715)))); }

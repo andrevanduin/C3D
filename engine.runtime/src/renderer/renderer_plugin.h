@@ -1,8 +1,10 @@
 
 #pragma once
 #include "assets/types/texture_types.h"
+#include "containers/dynamic_array.h"
 #include "defines.h"
 #include "identifiers/uuid.h"
+#include "material.h"
 #include "mesh.h"
 #include "types.h"
 
@@ -121,6 +123,14 @@ namespace C3D
          * @return True if successful; false otherwise
          */
         virtual bool UploadDrawCommands(const Geometry& geometry, const DynamicArray<MeshDraw>& draws) = 0;
+
+        /**
+         * @brief Method to upload a set of materials which the renderer can use during rendering.
+         *
+         * @param materials An array of Material objects that will be used for rendering
+         * @return True if successful; false otherwise
+         */
+        virtual bool UploadMaterials(const DynamicArray<Material>& materials) = 0;
 
         /**
          * @brief Sets the viewport.

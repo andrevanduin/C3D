@@ -5,6 +5,7 @@
 #extension GL_EXT_nonuniform_qualifier: require
 
 #include "definitions.h"
+#include "math.h"
 
 #define DEBUG 0
 
@@ -30,6 +31,11 @@ layout (location = 4) in vec3 wpos;
 
 layout (binding = 7) uniform sampler textureSampler;
 
+layout (binding = 8) readonly buffer Materials
+{
+    Material materials[];
+};
+
 layout (binding = 0, set = 1) uniform texture2D textures[];
 
 #define SAMP(id) sampler2D(textures[nonuniformEXT(id)], textureSampler)
@@ -48,40 +54,41 @@ uint hash(uint a)
 void main()
 {
     MeshDraw meshDraw = draws[drawId];
+    Material material = materials[meshDraw.materialIndex];
 
-    vec4 albedo = vec4(0.5f, 0.5f, 0.5f, 1);
-    if (meshDraw.albedoTexture > 0)
+    vec4 albedo = material.diffuseFactor;
+    if (material.albedoIndex > 0)
     {
-        albedo = texture(SAMP(meshDraw.albedoTexture), uv);
+        albedo *= FromSRGB(texture(SAMP(material.albedoIndex), uv));
     }
 
     vec3 normalMap = vec3(0, 0, 1);
-    if (meshDraw.normalTexture > 0)
+    if (material.normalIndex > 0)
     {
-        normalMap = texture(SAMP(meshDraw.normalTexture), uv).rgb * 2 - 1;
+        normalMap = texture(SAMP(material.normalIndex), uv).rgb * 2 - 1;
     }
 
-    vec4 specGloss = vec4(0);
-    if (meshDraw.specularTexture > 0)
+    vec4 specGloss = material.specularFactor;
+    if (material.specularIndex > 0)
     {
-        specGloss = texture(SAMP(meshDraw.specularTexture), uv);
+        specGloss *= FromSRGB(texture(SAMP(material.specularIndex), uv));
     }
 
-    vec3 emissive = vec3(0.0f);
-    if (meshDraw.emissiveTexture > 0)
+    vec3 emissive = material.emissiveFactor;
+    if (material.emissiveIndex > 0)
     {
-        emissive = texture(SAMP(meshDraw.emissiveTexture), uv).rgb;
+        emissive *= FromSRGB(texture(SAMP(material.emissiveIndex), uv).rgb);
     }
 
     vec3 biTangent = cross(normal, tangent.xyz) * tangent.w;
     
     vec3 nrm = normalize(normalMap.r * tangent.xyz + normalMap.g * biTangent + normalMap.b * normal);
 
-    // TODO: Emissive encoding should support colored & HDR emissive
-    gBuffer[0] = vec4(albedo.rgb, emissive.r);
+    float emissiveF = dot(emissive, vec3(0.3, 0.6, 0.1)) / (dot(albedo.rgb, vec3(0.3, 0.6, 0.1)) + 1e-3);
 
-    // TODO: specular glossiness encoding is missing; we should encode roughness+metalness somehow in gbuffer1.z and use oct encoding for normal
-	gBuffer[1] = vec4(nrm * 0.5 + 0.5, 0.0);
+    // TODO: reconstruct metalness from specular texture
+    gBuffer[0] = vec4(ToSRGB(albedo).rgb, log2(1 + emissiveF) / 5);
+	gBuffer[1] = vec4(EncodeOct(nrm) * 0.5 + 0.5, specGloss.a, 0.0);
 
     if (POST > 0 && albedo.a < 0.5)
     {

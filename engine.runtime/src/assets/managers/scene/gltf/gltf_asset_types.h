@@ -226,7 +226,9 @@ namespace C3D
         f32 emissiveFactor[3] = { 0, 0, 0 };
         f32 alphaCutoff       = 0.5f;
 
-        bool doubleSided = false;
+        bool doubleSided              = false;
+        bool hasPBRMetallicRoughness  = false;
+        bool hasPBRSpecularGlossiness = false;
     };
 
     struct GLTFMeshPrimitive
@@ -347,7 +349,7 @@ namespace C3D
         const GLTFAccessor* FindAccessor(const GLTFMeshPrimitive& primitive, const String& name) const;
 
         /** @brief Loads all buffers associated with this GLTF file. */
-        bool LoadAllBuffers();
+        bool LoadAllBuffers() const;
 
         /** @brief Unpacks the provided data and stores it in the destination.
          *

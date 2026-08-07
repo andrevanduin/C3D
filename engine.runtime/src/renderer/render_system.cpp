@@ -4,6 +4,7 @@
 #include <meshoptimizer/src/meshoptimizer.h>
 
 #include "assets/managers/texture_manager.h"
+#include "camera.h"
 #include "containers/dynamic_array.h"
 #include "cson/cson_types.h"
 #include "defines.h"
@@ -11,8 +12,8 @@
 #include "math/c3d_math.h"
 #include "mesh.h"
 #include "renderer_plugin.h"
+#include "system/system_manager.h"
 #include "time/clock.h"
-#include "time/scoped_timer.h"
 
 namespace C3D
 {
@@ -89,13 +90,106 @@ namespace C3D
 
     bool RenderSystem::OnRun() const { return m_backendPlugin->OnRun(m_geometry); }
 
-    bool RenderSystem::UploadMeshes(const DynamicArray<MeshAsset>& meshAssets)
+    bool RenderSystem::UploadScene(const SceneAsset& scene)
     {
-        ScopedTimer timer("UploadMeshes");
-        Clock centerRadiusClock;
-        Clock meshletGenerationClock;
+        Clock total;
 
-        for (const auto& asset : meshAssets)
+        if (!UploadMeshes(scene.meshes))
+        {
+            ERROR_LOG("Failed to upload meshes.");
+            return false;
+        }
+
+        {
+            Clock clock;
+
+            TextureManager textureManager;
+            TextureAsset texture;
+
+            // Use the staging buffer directly to write the texture data to temporarily before uploading to GPU memory
+            texture.buffer     = m_backendPlugin->GetStagingBuffer();
+            texture.bufferSize = m_backendPlugin->GetStagingBufferSize();
+
+            u64 totalTextureSize = 0;
+
+            for (const auto& texturePath : scene.textures)
+            {
+                if (!textureManager.Read(texturePath, texture))
+                {
+                    ERROR_LOG("Failed to parse texture: '{}'.", texturePath);
+                    return false;
+                }
+
+                if (!m_backendPlugin->UploadTexture(texture))
+                {
+                    ERROR_LOG("Failed to upload texture: '{}'.", texturePath);
+                    return false;
+                }
+
+                totalTextureSize += texture.size;
+            }
+
+            clock.End();
+
+            INFO_LOG("Finished parsing and uploading {} textures, with a total size of {:.2f} MB (took {:.2f} ms).", scene.textures.Size(), BytesToMebiBytes(totalTextureSize),
+                     clock.GetElapsedMs());
+        }
+
+        {
+            Clock clock;
+
+            clock.End();
+            INFO_LOG("Finished uploading materials (took {:.2f} ms).", clock.GetElapsedMs());
+        }
+
+        {
+            Clock clock;
+
+            if (!m_backendPlugin->UploadDrawCommands(m_geometry, scene.draws))
+            {
+                ERROR_LOG("Failed to upload draw commands.");
+                return false;
+            }
+
+            clock.End();
+            INFO_LOG("Finished uploading draw commands (took {:.2f} ms).", clock.GetElapsedMs());
+        }
+
+        {
+            Clock clock;
+
+            if (!m_backendPlugin->UploadMaterials(scene.materials))
+            {
+                ERROR_LOG("Failed to upload materials to Renderer backend.");
+                return false;
+            }
+
+            clock.End();
+            INFO_LOG("Finished uploading materials (took {:.2f} ms).", clock.GetElapsedMs());
+        }
+
+        // Get our default camera and apply the scene's camera settings to it
+        auto& camera = Camera.GetDefaultCamera();
+
+        camera.SetPosition(scene.camera.position);
+        camera.SetRotation(scene.camera.orientation);
+        camera.SetFovY(scene.camera.fovY);
+
+        // Finally set out camera and sun direction
+        SetActiveCamera(camera.GetHandle());
+        SetSunDirection(scene.sunDirection);
+
+        total.End();
+        INFO_LOG("Finished uploading scene (took {:.2f} ms in total).", total.GetTotalElapsedMs());
+
+        return true;
+    }
+
+    bool RenderSystem::UploadMeshes(const DynamicArray<C3D::MeshAsset>& meshes)
+    {
+        Clock clock;
+
+        for (const auto& asset : meshes)
         {
             u64 vertexCount = asset.vertices.Size();
 
@@ -120,8 +214,6 @@ namespace C3D
             f32 radius  = 0.f;
 
             {
-                centerRadiusClock.Begin();
-
                 for (const auto& v : positions)
                 {
                     center += v;
@@ -132,8 +224,6 @@ namespace C3D
                 {
                     radius = Max(radius, glm::distance(center, v));
                 }
-
-                centerRadiusClock.End();
             }
 
             mesh.center = center;
@@ -159,9 +249,7 @@ namespace C3D
 
                 lod.meshletOffset = static_cast<u32>(m_geometry.meshlets.Size());
 
-                meshletGenerationClock.Begin();
                 lod.meshletCount = buildMeshlets ? GenerateMeshlets(lodIndices, positions, mesh.vertexOffset) : 0;
-                meshletGenerationClock.End();
 
                 if (mesh.lodCount < ARRAY_SIZE(mesh.lods))
                 {
@@ -197,53 +285,19 @@ namespace C3D
             }
         }
 
-        TRACE("Center + radius took: {:.2f} ms", centerRadiusClock.GetTotalElapsedMs());
-        INFO_LOG("Finished Meshlet generation (took: {:.2f} ms).", meshletGenerationClock.GetTotalElapsedMs());
-
-        return m_backendPlugin->UploadGeometry(m_geometry);
-    }
-
-    bool RenderSystem::UploadTextures(const DynamicArray<String>& texturePaths)
-    {
-        Clock clock(ClockFlags::StartOnCreate);
-
-        TextureManager textureManager;
-        TextureAsset texture;
-
-        // Use the staging buffer directly to write the texture data to temporarily before uploading to GPU memory
-        texture.buffer     = m_backendPlugin->GetStagingBuffer();
-        texture.bufferSize = m_backendPlugin->GetStagingBufferSize();
-
-        u64 totalTextureSize = 0;
-
-        for (const auto& texturePath : texturePaths)
+        if (!m_backendPlugin->UploadGeometry(m_geometry))
         {
-            if (!textureManager.Read(texturePath, texture))
-            {
-                ERROR_LOG("Failed to parse texture: '{}'.", texturePath);
-                return false;
-            }
-
-            if (!m_backendPlugin->UploadTexture(texture))
-            {
-                ERROR_LOG("Failed to upload texture: '{}'.", texturePath);
-                return false;
-            }
-
-            totalTextureSize += texture.size;
+            ERROR_LOG("Failed to upload geometry.");
+            return false;
         }
 
         clock.End();
-
-        INFO_LOG("Finished parsing and uploading {} textures, with a total size of {:.2f} MB (took {:.2f} ms).", texturePaths.Size(), BytesToMebiBytes(totalTextureSize),
-                 clock.GetElapsedMs());
+        INFO_LOG("Finished Meshlet generation, optimization and upload (took: {:.2f} ms).", clock.GetElapsedMs());
 
         return true;
     }
 
     bool RenderSystem::GenerateDrawCommands() const { return m_backendPlugin->GenerateDrawCommands(m_geometry); }
-
-    bool RenderSystem::UploadDrawCommands(const DynamicArray<MeshDraw>& draws) const { return m_backendPlugin->UploadDrawCommands(m_geometry, draws); }
 
     bool RenderSystem::Begin(Window& window) const { return m_backendPlugin->Begin(window); }
 

@@ -1,8 +1,11 @@
 
 #pragma once
+#include "assets/managers/scene/scene_manager.h"
+#include "containers/dynamic_array.h"
 #include "defines.h"
 #include "dynamic_library/dynamic_library.h"
 #include "identifiers/uuid.h"
+#include "material.h"
 #include "mesh.h"
 #include "system/system.h"
 #include "types.h"
@@ -22,11 +25,10 @@ namespace C3D
 
         bool OnRun() const;
 
-        bool UploadMeshes(const DynamicArray<MeshAsset>& meshes);
-        bool UploadTextures(const DynamicArray<String>& texturePaths);
+        bool UploadScene(const SceneAsset& scene);
 
+        bool UploadMeshes(const DynamicArray<C3D::MeshAsset>& meshes);
         bool GenerateDrawCommands() const;
-        bool UploadDrawCommands(const DynamicArray<MeshDraw>& draws) const;
 
         bool Begin(Window& window) const;
         bool End(Window& window) const;
@@ -53,6 +55,8 @@ namespace C3D
         DynamicLibrary m_backendDynamicLibrary;
         /** @brief The configuration for our render system. */
         RenderSystemConfig m_config;
+        /** @brief An array containing all materials to be used for rendering. */
+        DynamicArray<Material> m_materials;
         /** @brief A structure holding all the geometry ready for rendering. */
         Geometry m_geometry;
     };

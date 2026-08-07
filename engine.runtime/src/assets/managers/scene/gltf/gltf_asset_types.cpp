@@ -137,7 +137,7 @@ namespace C3D
         return &accessors[index];
     }
 
-    bool GLTFAsset::LoadAllBuffers()
+    bool GLTFAsset::LoadAllBuffers() const
     {
         for (auto& buffer : buffers)
         {

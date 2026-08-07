@@ -49,10 +49,11 @@ struct CullData
     uint drawCount;
 
     int cullingEnabled;
+    int lodEnabled;
+
     int occlusionCullingEnabled;
     int clusterOcclusionCullingEnabled;
-    int meshShadingEnabled;
-    int lodEnabled;
+    int clusterBackfaceEnabled;
 
     uint postPass;
 };
@@ -86,6 +87,18 @@ struct Mesh
     MeshLod lods[8];
 };
 
+struct Material
+{
+    uint albedoIndex;
+    uint normalIndex;
+    uint specularIndex;
+    uint emissiveIndex;
+
+    vec4 diffuseFactor;
+    vec4 specularFactor;
+    vec3 emissiveFactor;
+};
+
 struct MeshDraw
 {
     vec3 position;
@@ -95,12 +108,7 @@ struct MeshDraw
     uint meshIndex;
     uint meshletVisibilityOffset;
     uint postPass;
-    uint flags;
-
-    uint albedoTexture;
-    uint normalTexture;
-    uint specularTexture;
-    uint emissiveTexture;
+    uint materialIndex;
 };
 
 struct MeshDrawCommand

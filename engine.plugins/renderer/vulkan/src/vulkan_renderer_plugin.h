@@ -1,5 +1,6 @@
 
 #pragma once
+#include <renderer/material.h>
 #include <renderer/mesh.h>
 #include <renderer/renderer_plugin.h>
 
@@ -47,6 +48,7 @@ namespace C3D
 
         bool GenerateDrawCommands(const Geometry& geometry) override;
         bool UploadDrawCommands(const Geometry& geometry, const DynamicArray<MeshDraw>& draws) override;
+        bool UploadMaterials(const DynamicArray<Material>& materials) override;
 
         void SetViewport(f32 x, f32 y, f32 width, f32 height, f32 minDepth, f32 maxDepth) override;
         void SetScissor(i32 offsetX, i32 offsetY, u32 width, u32 height) override;
@@ -66,7 +68,7 @@ namespace C3D
                       u32 postPass = 0) const;
         void RenderStep(VkCommandBuffer commandBuffer, VulkanTexture* gBufferTargets, const VulkanTexture& depthTarget, const VulkanTexture& depthPyramid, const Globals& globals,
                         const Window& window, u32 query, u32 timeStamp, bool taskSubmit, bool clusterSubmit, bool late, u32 postPass = 0) const;
-        void DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid) const;
+        void DepthPyramidStep(VkCommandBuffer commandBuffer, VulkanTexture& depthTarget, VulkanTexture& depthPyramid, u32 timeStamp) const;
 
         /** @brief A boolean indicating if we are using mesh shading. */
         bool m_meshShadingEnabled = true;
@@ -85,6 +87,8 @@ namespace C3D
         bool m_lodEnabled = true;
         /** @brief A boolean indicating if shadows are enabled (with Ray Tracing). */
         bool m_shadingEnabled = true;
+        /** @brief A boolean indicating if wireframe mode is enabled. */
+        bool m_wireFrameEnabled = false;
         /** @brief A boolean indicating if we are rendering debug lods. */
         bool m_debugLods = false;
         /** @brief The lod level we are displaying as part of our lod debugging. */
@@ -122,6 +126,7 @@ namespace C3D
 
         DynamicArray<MeshDraw> m_draws;
         DynamicArray<VulkanTexture> m_textures;
+        DynamicArray<Material> m_materials;
 
         DynamicArray<VkAccelerationStructureKHR> m_blas;
         VkAccelerationStructureKHR m_tlas;
@@ -145,6 +150,7 @@ namespace C3D
 
         VulkanBuffer m_vertexBuffer;
         VulkanBuffer m_indexBuffer;
+        VulkanBuffer m_materialBuffer;
         VulkanBuffer m_meshBuffer;
         VulkanBuffer m_meshletBuffer;
         VulkanBuffer m_meshletDataBuffer;

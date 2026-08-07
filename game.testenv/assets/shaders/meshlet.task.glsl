@@ -102,7 +102,7 @@ void main()
     }
 
     // Backface cone culling
-    visible = visible && !ConeCull(center, radius, coneAxis, coneCutoff, vec3(0, 0, 0));
+    visible = visible && (cullData.clusterBackfaceEnabled == 0 || !ConeCull(center, radius, coneAxis, coneCutoff, vec3(0, 0, 0)));
     // The left/top/right/bottom plane culling utilizes frustum symmetry to cull against two planes at the same time
     visible = visible && center.z * cullData.frustum[1] - abs(center.x) * cullData.frustum[0] > -radius;
     visible = visible && center.z * cullData.frustum[3] - abs(center.y) * cullData.frustum[2] > -radius;
@@ -117,7 +117,10 @@ void main()
             float width = (aabb.z - aabb.x) * cullData.pyramidWidth;
             float height = (aabb.w - aabb.y) * cullData.pyramidHeight;
 
-            float level = floor(log2(max(width, height)));
+            // Because we only consider 2x2 pixels, we need to make sure we are sampling from a mip that reduces the rectangle to 1x1 texel or smaller.
+			// Due to the rectangle being arbitrarily offset, a 1x1 rectangle may cover 2x2 texel area. Using floor() here would require sampling 4 corners
+			// of AABB (using bilinear fetch), which is a little slower.
+			float level = ceil(log2(max(width, height)));
 
             // Sampler is set up to do min reduction, so this computes the minimum depth of a 2x2 texel quad
 			float depth = textureLod(depthPyramid, (aabb.xy + aabb.zw) * 0.5, level).x;

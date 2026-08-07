@@ -90,35 +90,12 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
             return false;
         }
 
-        // Upload our mesh assets to the renderer
-        if (!Renderer.UploadMeshes(sceneAsset.meshes))
+        // Upload our scene to the renderer
+        if (!Renderer.UploadScene(sceneAsset))
         {
-            ERROR_LOG("Failed to upload meshes.");
+            ERROR_LOG("Failed to upload scene: '{}'.", sceneName);
             return false;
         }
-
-        if (!Renderer.UploadTextures(sceneAsset.textures))
-        {
-            ERROR_LOG("Failed to upload textures.");
-            return false;
-        }
-
-        if (!Renderer.UploadDrawCommands(sceneAsset.draws))
-        {
-            ERROR_LOG("Failed to generate draw commands.");
-            return false;
-        }
-
-        // Get the default camera and copy over the scene camera settings
-        auto& camera = Camera.GetDefaultCamera();
-
-        camera.SetPosition(sceneAsset.camera.position);
-        camera.SetRotation(sceneAsset.camera.orientation);
-        camera.SetFovY(sceneAsset.camera.fovY);
-
-        // Finally set out camera and sun direction
-        Renderer.SetActiveCamera(camera.GetHandle());
-        Renderer.SetSunDirection(sceneAsset.sunDirection);
 
         // Cleanup our scene asset since we are done with it
         sceneManager.Cleanup(sceneAsset);
@@ -129,7 +106,7 @@ bool TestEnv::OnRun(C3D::FrameData& frameData)
 
 void TestEnv::OnUpdate(C3D::FrameData& frameData)
 {
-    constexpr static C3D::Keys KEYS[]         = { C3D::KeyM, C3D::KeyC, C3D::KeyK, C3D::KeyR, C3D::KeyO, C3D::KeyL, C3D::KeyP, C3D::KeyT };
+    constexpr static C3D::Keys KEYS[]         = { C3D::KeyM, C3D::KeyC, C3D::KeyK, C3D::KeyR, C3D::KeyO, C3D::KeyL, C3D::KeyP, C3D::KeyT, C3D::KeyF };
     constexpr static f32 DEFAULT_MOVE_SPEED   = 0.02f;
     constexpr static f32 DEFAULT_ROTATE_SPEED = glm::radians(0.1f);
     constexpr static f32 BOOST_MOVE_SPEED     = 0.2f;

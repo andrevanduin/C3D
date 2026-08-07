@@ -4,6 +4,8 @@
 
 layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
+#include "math.h"
+
 struct ShadeData
 {
 	vec3 cameraPosition;
@@ -39,9 +41,9 @@ void main()
 	vec4 gBuffer1 = texture(gBufferImage1, uv);
 	float depth = texture(depthImage, uv).r;
 
-	vec3 albedo = gBuffer0.rgb;
-	vec3 emissive = vec3(gBuffer0.a);
-	vec3 normal = gBuffer1.rgb * 2 - 1;
+	vec3 albedo = FromSRGB(gBuffer0.rgb);
+	vec3 emissive = albedo * (exp2(gBuffer0.a * 5) - 1);
+	vec3 normal = DecodeOct(gBuffer1.rg * 2 - 1);
 
 	float ndotl = max(dot(normal, shadeData.sunDirection), 0.0);
 
@@ -52,23 +54,25 @@ void main()
 	vec3 view = normalize(shadeData.cameraPosition - wPos);
 	vec3 halfV = normalize(view + shadeData.sunDirection);
 	float ndoth = max(dot(normal, halfV), 0.0);
-	float specular = pow(ndoth, 64);
+	float gloss = gBuffer1.b;
+
+	// TODO: This is not the BRDF we want
+	float specular = pow(ndoth, mix(1, 64, gloss)) * gloss;
 
 	float shadow = 1;
 
 #if RAYTRACE
 	uint rayflags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsCullNoOpaqueEXT;
-	uint cullMask = 0xff; // 0xff is faster on amdvlk
 
 	rayQueryEXT rq;
-	rayQueryInitializeEXT(rq, tlas, rayflags, cullMask, wPos, 1e-2, shadeData.sunDirection, 1e3);
+	rayQueryInitializeEXT(rq, tlas, rayflags, 0xff, wPos, 1e-2, shadeData.sunDirection, 1e3);
 	rayQueryProceedEXT(rq);
 
 	shadow = (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionNoneEXT) ? 1.0 : 0.0;
 #endif
 
-	vec3 outputColor = albedo.rgb * sqrt(ndotl * shadow + 0.05) + vec3(specular * shadow) + emissive;
-	//outputColor = albedo;
+	vec3 outputColor = albedo.rgb * (ndotl * shadow + 0.05) + vec3(specular * shadow) + emissive;
 
-	imageStore(outImage, ivec2(pos), vec4(outputColor, 1.0));
+	float deband = GradientNoise(vec2(pos));
+	imageStore(outImage, ivec2(pos), vec4(ToSRGB(outputColor) + (deband * 2 - 1) / 256, 1.0));
 }

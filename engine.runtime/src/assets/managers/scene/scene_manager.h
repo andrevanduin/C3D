@@ -1,8 +1,10 @@
 
 #pragma once
 #include "assets/managers/asset_manager.h"
+#include "containers/dynamic_array.h"
 #include "cson/cson_reader.h"
 #include "gltf/gltf_asset_types.h"
+#include "renderer/material.h"
 #include "renderer/mesh.h"
 
 namespace C3D
@@ -24,6 +26,7 @@ namespace C3D
         DynamicArray<MeshAsset> meshes;
         DynamicArray<MeshDraw> draws;
         DynamicArray<String> textures;
+        DynamicArray<Material> materials;
     };
 
     class C3D_API SceneManager final : public IAssetManager
@@ -35,7 +38,26 @@ namespace C3D
         static void Cleanup(SceneAsset& asset);
 
     private:
-        bool CreateSceneAsset(GLTFAsset& asset, SceneAsset& scene);
+        bool CreateSceneAsset(const GLTFAsset& asset, SceneAsset& scene) const;
+
+        bool ParseSceneMeshes(const GLTFAsset& asset, SceneAsset& scene) const;
+        bool ParseSceneMeshIndices(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, MeshAsset& mesh) const;
+        bool ParseSceneMeshVertices(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, MeshAsset& mesh) const;
+        bool ParseVertexPosition(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, DynamicArray<f32>& scratchBuffer, MeshAsset& mesh) const;
+        bool ParseVertexNormals(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, DynamicArray<f32>& scratchBuffer, MeshAsset& mesh) const;
+        bool ParseVertexTangents(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, DynamicArray<f32>& scratchBuffer, MeshAsset& mesh) const;
+        bool ParseVertexTexCoords(const GLTFAsset& asset, const GLTFMeshPrimitive& primitive, DynamicArray<f32>& scratchBuffer, MeshAsset& mesh) const;
+
+        void RemapVertexAndIndexBuffer(MeshAsset& mesh) const;
+        void OptimizeVertexFetchAndCache(MeshAsset& mesh) const;
+
+        bool ParseSceneNodes(const GLTFAsset& asset, SceneAsset& scene) const;
+        void ParseSceneMeshNode(const GLTFAsset& asset, const GLTFNode& node, SceneAsset& scene) const;
+        bool ParseSceneCameraNode(const GLTFAsset& asset, const GLTFNode& node, SceneAsset& scene) const;
+
+        bool ParseSceneTextures(const GLTFAsset& asset, SceneAsset& scene) const;
+
+        bool ParseSceneMaterials(const GLTFAsset& asset, SceneAsset& scene) const;
 
         bool ImportGltfFile(const String& rootPath, SceneAsset& scene);
 
@@ -52,7 +74,7 @@ namespace C3D
         bool ParseMaterial(const CSONObject& materialObj, GLTFAsset& asset) const;
         bool ParsePBRSpecularGlossinessExtension(const CSONObject& extensionObj, GLTFExtension& extension) const;
         bool ParseTransmissionExtension(const CSONObject& extensionObj, GLTFExtension& extension) const;
-        bool ParseMaterialExtensions(const CSONObject& extensionsObj, DynamicArray<GLTFExtension>& materialExtensions) const;
+        bool ParseMaterialExtensions(const CSONObject& extensionsObj, DynamicArray<GLTFExtension>& materialExtensions, GLTFMaterial& material) const;
         bool ParsePBR(const CSONObject& pbrObj, GLTFPBR& pbr) const;
         bool ParseNormalTexture(const CSONObject& normalTextureOjb, GLTFNormalTexture& normalTexture) const;
         bool ParseOcclusionTexture(const CSONObject& occlusionTextureOjb, GLTFOcclusionTexture& occlusionTexture) const;

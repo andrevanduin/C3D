@@ -8,7 +8,6 @@
 #include "definitions.h"
 #include "math.h"
 
-#define DEBUG 0
 #define CULL MESH_CULL
 
 layout (constant_id = 1) const bool TASK = false;
@@ -65,15 +64,6 @@ layout(location = 1) out vec2 outUv[];
 layout(location = 2) out vec3 outNormal[];
 layout(location = 3) out vec4 outTangent[];
 layout(location = 4) out vec3 outWpos[];
-
-#if DEBUG
-uint pcg_hash(uint a)
-{
-    uint state = a * 747796405u + 2891336453u;
-    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    return (word >> 22u) ^ word;
-}
-#endif
 
 #if CULL
 shared vec3 vertexClip[MESHLET_MAX_VERTICES];
@@ -139,10 +129,6 @@ void main()
 
     #if CULL
         vertexClip[i] = vec3((clip.xy / clip.w * 0.5 + vec2(0.5)) * screen, clip.w);
-    #endif
-
-    #if DEBUG
-        color[i] = vec4(meshletColor, 1.0);
     #endif
 
     #if MESH_MAX_VERTICES <= MESH_WGSIZE

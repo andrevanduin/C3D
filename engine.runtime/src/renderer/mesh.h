@@ -101,12 +101,7 @@ namespace C3D
         u32 meshIndex;
         u32 meshletVisibilityOffset;
         u32 postPass;
-        u32 flags;
-
-        u32 albedoTexture   = 0;
-        u32 normalTexture   = 0;
-        u32 specularTexture = 0;
-        u32 emissiveTexture = 0;
+        u32 materialIndex;
     };
 
     /** @brief A collection of vertices and indices for all meshes that we can render. */
